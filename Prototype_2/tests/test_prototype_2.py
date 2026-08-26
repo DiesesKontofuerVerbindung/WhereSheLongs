@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import config
 from block_manager import BlockManager
 from checklist_mapper import ChecklistMapper
-from hand_tracker import valid_finger_mode
+from hand_tracker import map_normalized_y_to_screen, valid_finger_mode
 from swipe_detector import Point, SwipeDetector
 from swipe_state import SwipeState
 from test_logger import TestLogger, calculate_metrics
@@ -28,6 +28,22 @@ def arm(detector: SwipeDetector, blocks: BlockManager, block_id: str, now: float
 
 
 class Prototype2Tests(unittest.TestCase):
+    def test_vertical_cursor_calibration_reaches_the_block_row(self) -> None:
+        blocks = BlockManager()
+        block = blocks.get("block_1")
+        assert block is not None
+        mapped_y = map_normalized_y_to_screen(0.51)
+        self.assertLessEqual(abs(mapped_y - block.center_y), config.BLOCK_HEIGHT / 2 + config.BLOCK_HITBOX_MARGIN)
+        self.assertEqual(
+            map_normalized_y_to_screen(config.CURSOR_Y_INPUT_MAX),
+            int(config.CURSOR_Y_OUTPUT_MAX_RATIO * config.WINDOW_HEIGHT),
+        )
+
+    def test_blocks_are_contiguous(self) -> None:
+        blocks = BlockManager()
+        centers = [block.center_x for block in blocks.blocks]
+        self.assertTrue(all(second - first == config.BLOCK_WIDTH for first, second in zip(centers, centers[1:])))
+
     def test_two_finger_mode_requires_both_fingertips_extended(self) -> None:
         landmarks = [type("Landmark", (), {"x": 0.0, "y": 0.5})() for _ in range(21)]
         landmarks[8].y, landmarks[6].y = 0.20, 0.40

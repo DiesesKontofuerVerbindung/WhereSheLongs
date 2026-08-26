@@ -153,11 +153,11 @@ class PrototypeApp:
         )
 
     def render(self) -> np.ndarray:
-        canvas = np.full((config.WINDOW_HEIGHT, config.WINDOW_WIDTH, 3), (24, 28, 38), dtype=np.uint8)
+        canvas = np.full((config.WINDOW_HEIGHT, config.WINDOW_WIDTH, 3), (0, 0, 0), dtype=np.uint8)
         for section in range(1, config.SECTION_COUNT):
             y = int(section * config.SECTION_HEIGHT)
-            cv2.line(canvas, (0, y), (config.WINDOW_WIDTH, y), (60, 65, 78), 1)
-            cv2.putText(canvas, str(section), (8, y - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (105, 110, 125), 1, cv2.LINE_AA)
+            cv2.line(canvas, (0, y), (config.WINDOW_WIDTH, y), (42, 42, 42), 1)
+            cv2.putText(canvas, str(section), (8, y - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (100, 100, 100), 1, cv2.LINE_AA)
         cv2.line(canvas, (0, int(config.INTERACTION_BOTTOM_Y)), (config.WINDOW_WIDTH, int(config.INTERACTION_BOTTOM_Y)), (0, 150, 220), 2)
         cv2.putText(canvas, "interaction bottom", (config.WINDOW_WIDTH - 190, int(config.INTERACTION_BOTTOM_Y) - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 180, 235), 1, cv2.LINE_AA)
         cv2.line(canvas, (0, int(config.REMOVE_THRESHOLD_Y)), (config.WINDOW_WIDTH, int(config.REMOVE_THRESHOLD_Y)), (0, 190, 120), 2)

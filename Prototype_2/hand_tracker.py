@@ -52,6 +52,23 @@ def valid_finger_mode(landmarks: list[object], finger_mode: str) -> tuple[bool, 
     return index_extended, middle_extended
 
 
+def map_normalized_y_to_screen(
+    normalized_y: float,
+    window_height: int = config.WINDOW_HEIGHT,
+) -> int:
+    """Map the reachable camera Y band into the full playable screen height."""
+
+    input_span = config.CURSOR_Y_INPUT_MAX - config.CURSOR_Y_INPUT_MIN
+    if input_span <= 0:
+        raise ValueError("CURSOR_Y_INPUT_MAX must be greater than CURSOR_Y_INPUT_MIN")
+    input_progress = (normalized_y - config.CURSOR_Y_INPUT_MIN) / input_span
+    input_progress = max(0.0, min(1.0, input_progress))
+    output_ratio = config.CURSOR_Y_OUTPUT_MIN_RATIO + input_progress * (
+        config.CURSOR_Y_OUTPUT_MAX_RATIO - config.CURSOR_Y_OUTPUT_MIN_RATIO
+    )
+    return min(window_height - 1, int(output_ratio * window_height))
+
+
 class HandTracker:
     def __init__(
         self,
@@ -149,7 +166,7 @@ class HandTracker:
                 normalized_x=normalized_x,
                 normalized_y=normalized_y,
                 screen_x=min(config.WINDOW_WIDTH - 1, int(normalized_x * config.WINDOW_WIDTH)),
-                screen_y=min(config.WINDOW_HEIGHT - 1, int(normalized_y * config.WINDOW_HEIGHT)),
+                screen_y=map_normalized_y_to_screen(normalized_y),
             )
             return TrackingFrame(True, finger_mode, cursor, index_extended, middle_extended)
         except Exception as exc:

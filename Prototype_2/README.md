@@ -100,6 +100,8 @@ results/run_YYYYMMDD_HHMMSS_xxxxxx/
 
 所有交互阈值在 `config.py`：窗口六等分、方块尺寸/间距、`INTERACTION_BOTTOM_RATIO`、`BLOCK_ARM_TIME`、`BLOCK_HITBOX_MARGIN`、`MIN_SWIPE_START_DISTANCE`、`MIN_SWIPE_UP_DISTANCE`、`MAX_HORIZONTAL_DRIFT`、`MAX_SWIPE_TIME`、`REMOVE_THRESHOLD_Y`、`SMOOTHING_FACTOR`、`MAX_MISSING_HAND_TIME` 等。不要把门槛写回 `main.py`，否则调参会变成考古。
 
+如果光点实际只能下到屏幕中部，调整 `CURSOR_Y_INPUT_MAX`。默认把 MediaPipe 的 `y=0.00–0.62` 拉伸到可交互区 `0.00–5.5/6`，因此玩家无需把手伸到摄像头画面最下方也能触及第五区方块。
+
 ## 验收顺序
 
 自动测试覆盖状态机、候选拒绝、两指 extension 判断、一次性完成、Checklist 映射和日志字段。真实摄像头还需要人工验证：
