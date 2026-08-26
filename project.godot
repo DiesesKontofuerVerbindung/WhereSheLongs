@@ -1,0 +1,29 @@
+; Engine configuration file.
+config_version=5
+
+[application]
+
+config/name="Blink Trigger Scene Switch Demo"
+config/description="One-shot blink triggered scene switch MVP"
+run/main_scene="res://scenes/room_a.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
+
+[autoload]
+
+BlinkSystem="*res://addons/blink_trigger_scene_switch/blink_system.gd"
+
+[display]
+
+window/size/viewport_width=960
+window/size/viewport_height=540
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[editor_plugins]
+
+enabled=PackedStringArray("blink_trigger_scene_switch")
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

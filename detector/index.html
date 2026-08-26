@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>Blink Detector</title>
+  <style>
+    body { font-family: sans-serif; margin: 16px; }
+    canvas { width: 100%; max-width: 480px; background: #111; border-radius: 8px; }
+    video { position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px; }
+  </style>
+</head>
+<body>
+  <h1>Blink Detector</h1>
+  <p>本页只负责摄像头与眨眼识别，并把 BlinkEvent 发给游戏逻辑。画面不上传。</p>
+  <button id="start">开启摄像头</button>
+  <div id="log">Camera: DISCONNECTED</div>
+  <video id="video" playsinline autoplay muted></video>
+  <canvas id="canvas"></canvas>
+  <script type="module">
+    import { WebcamBlinkDetector } from "./webcam-blink-detector.js";
+
+    const log = document.getElementById("log");
+    const ws = new WebSocket("ws://" + location.host);
+    ws.addEventListener("open", () => {
+      log.textContent = "Hub: CONNECTED, Camera: DISCONNECTED";
+    });
+
+    function push(msg) {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+    }
+
+    const detector = new WebcamBlinkDetector({
+      video: document.getElementById("video"),
+      canvas: document.getElementById("canvas"),
+      onFrame: (frame) => {
+        log.textContent =
+          "Camera: " + (frame.cameraConnected ? "CONNECTED" : "DISCONNECTED") +
+          " | Face: " + (frame.faceDetected ? "YES" : "NO") +
+          " | L: " + frame.leftEye +
+          " | R: " + frame.rightEye;
+        push({ type: "frame", ...frame });
+      },
+      onBlink: (evt) => {
+        push({ type: "blink", durationMs: evt.durationMs, confidence: evt.confidence });
+      },
+    });
+
+    document.getElementById("start").addEventListener("click", async () => {
+      try {
+        await detector.start();
+      } catch (err) {
+        log.textContent = "无法开启摄像头: " + err.message;
+      }
+    });
+  </script>
+</body>
+</html>
