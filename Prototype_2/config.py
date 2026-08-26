@@ -29,7 +29,7 @@ BLOCK_SECTION = 5
 BLOCK_CENTER_Y = SECTION_HEIGHT * (BLOCK_SECTION - 0.5)
 
 # Interaction and swipe geometry.
-INTERACTION_BOTTOM_RATIO = 1.0
+INTERACTION_BOTTOM_RATIO = 1.25
 INTERACTION_BOTTOM_Y = WINDOW_HEIGHT * INTERACTION_BOTTOM_RATIO
 REMOVE_THRESHOLD_Y = WINDOW_HEIGHT * 2 / 6
 
@@ -40,6 +40,14 @@ CURSOR_Y_INPUT_MIN = 0.0
 CURSOR_Y_INPUT_MAX = 0.62
 CURSOR_Y_OUTPUT_MIN_RATIO = 0.0
 CURSOR_Y_OUTPUT_MAX_RATIO = INTERACTION_BOTTOM_RATIO
+
+# Completed blocks visibly leave the top of the window instead of vanishing
+# the instant their success threshold is crossed.
+BLOCK_FLY_OUT_DURATION = 0.28
+BLOCK_FLY_OUT_TARGET_Y = -BLOCK_HEIGHT
+
+# Calibration evidence is sampled independently from formal swipe trajectories.
+COORDINATE_MONITOR_HZ = 10.0
 
 BLOCK_ARM_TIME = 0.22
 BLOCK_HITBOX_MARGIN = 22

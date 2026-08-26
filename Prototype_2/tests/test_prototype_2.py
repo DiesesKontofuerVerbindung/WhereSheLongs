@@ -33,11 +33,16 @@ class Prototype2Tests(unittest.TestCase):
         blocks = BlockManager()
         block = blocks.get("block_1")
         assert block is not None
-        mapped_y = map_normalized_y_to_screen(0.51)
+        raw_y_for_block_center = (
+            block.center_y / (config.CURSOR_Y_OUTPUT_MAX_RATIO * config.WINDOW_HEIGHT)
+            * (config.CURSOR_Y_INPUT_MAX - config.CURSOR_Y_INPUT_MIN)
+            + config.CURSOR_Y_INPUT_MIN
+        )
+        mapped_y = map_normalized_y_to_screen(raw_y_for_block_center)
         self.assertLessEqual(abs(mapped_y - block.center_y), config.BLOCK_HEIGHT / 2 + config.BLOCK_HITBOX_MARGIN)
         self.assertEqual(
             map_normalized_y_to_screen(config.CURSOR_Y_INPUT_MAX),
-            config.WINDOW_HEIGHT - 1,
+            int(config.CURSOR_Y_OUTPUT_MAX_RATIO * config.WINDOW_HEIGHT),
         )
 
     def test_blocks_are_contiguous(self) -> None:

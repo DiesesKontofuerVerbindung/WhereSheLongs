@@ -16,6 +16,8 @@ class SwipeBlock:
     initial_x: float
     initial_y: float
     completed: bool = False
+    removal_started_at: float | None = None
+    removal_start_y: float | None = None
 
     def contains(self, x: float, y: float, margin: float = 0.0) -> bool:
         return (
@@ -71,6 +73,22 @@ class BlockManager:
         block.completed = True
         return True
 
+    def start_removal_animation(self, block_id: str, now: float) -> None:
+        block = self.get(block_id)
+        if block is not None and block.completed:
+            block.removal_started_at = now
+            block.removal_start_y = block.center_y
+
+    def update_removal_animations(self, now: float) -> None:
+        for block in self.blocks:
+            if block.removal_started_at is None or block.removal_start_y is None:
+                continue
+            progress = min(1.0, max(0.0, (now - block.removal_started_at) / config.BLOCK_FLY_OUT_DURATION))
+            block.center_y = block.removal_start_y + progress * (config.BLOCK_FLY_OUT_TARGET_Y - block.removal_start_y)
+            if progress >= 1.0:
+                block.removal_started_at = None
+                block.removal_start_y = None
+
     def restore(self, block_id: str | None) -> None:
         block = self.get(block_id)
         if block is not None and not block.completed:
@@ -86,3 +104,5 @@ class BlockManager:
             block.completed = False
             block.center_x = block.initial_x
             block.center_y = block.initial_y
+            block.removal_started_at = None
+            block.removal_start_y = None

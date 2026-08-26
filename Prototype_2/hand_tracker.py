@@ -68,7 +68,7 @@ def map_normalized_y_to_screen(
     output_ratio = config.CURSOR_Y_OUTPUT_MIN_RATIO + input_progress * (
         config.CURSOR_Y_OUTPUT_MAX_RATIO - config.CURSOR_Y_OUTPUT_MIN_RATIO
     )
-    return min(window_height - 1, int(output_ratio * window_height))
+    return int(output_ratio * window_height)
 
 
 class HandTracker:
