@@ -73,6 +73,15 @@ class TestLogger:
         if self.active is not None:
             self.active.samples.append(sample)
 
+    def discard_active_trial(self) -> None:
+        """Forget a pre-gesture candidate; it must not become experimental data."""
+
+        if self.active is None:
+            return
+        if self.active.trial_id == self._next_trial_id - 1:
+            self._next_trial_id -= 1
+        self.active = None
+
     def finish_trial(self, result: TrialResult, fail_reason: str, now: float) -> dict[str, object] | None:
         if self.active is None:
             return None

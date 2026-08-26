@@ -1,4 +1,4 @@
-"""Runnable v0.2 UI: online phases plus reproducible experiment logging."""
+"""Runnable v0.3 UI: armed gesture segmentation plus experiment logging."""
 
 from __future__ import annotations
 
@@ -74,6 +74,11 @@ class PrototypeApp:
             result = self.detector.update(point, now)
             if result.started:
                 self.logger.start_trial(self.expected_type, now)
+                for initial_sample in result.initial_samples:
+                    self.logger.append_sample(initial_sample)
+            if result.candidate_rejected:
+                self.logger.discard_active_trial()
+                self.state.status_message = f"candidate rejected: {result.fail_reason}"
             if result.sample is not None:
                 self.logger.append_sample(result.sample)
             if result.terminal:
@@ -95,7 +100,15 @@ class PrototypeApp:
             "Air check: P positive | N negative | R next/reset | Mouse fallback | Q quit",
             (24, 36), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (190, 190, 190), 1, cv2.LINE_AA,
         )
-        circle_color = (60, 210, 120) if self.state.checked else (220, 220, 220)
+        circle_colors = {
+            "TRACKING": (180, 180, 180),
+            "ARMING": (0, 140, 255),
+            "ARMED": (0, 220, 255),
+            "DRAWING": (255, 160, 60),
+            "FAILED": (70, 70, 255),
+            "CHECKED": (60, 210, 120),
+        }
+        circle_color = circle_colors.get(self.detector.state.value, (220, 220, 220))
         cv2.circle(canvas, center, config.CHECK_RADIUS, circle_color, 3, cv2.LINE_AA)
         for first, second in zip(self.detector.trail, self.detector.trail[1:]):
             cv2.line(canvas, (int(first.x), int(first.y)), (int(second.x), int(second.y)), (90, 150, 255), 3, cv2.LINE_AA)
@@ -115,21 +128,27 @@ class PrototypeApp:
         finger_text = "-- / --"
         if self.state.last_finger is not None:
             finger_text = f"{self.state.last_finger.normalized_x:.2f} / {self.state.last_finger.normalized_y:.2f}"
+        now = time.perf_counter()
         debug_lines = [
             f"FPS: {self.fps:5.1f}",
             f"Hand detected: {'YES' if self.state.last_finger else 'NO'}",
             f"Finger: x/y={finger_text}",
             f"State: {self.detector.state.value}",
             f"Gesture phase: {self.detector.phase.value}",
+            f"Ready to draw: {'YES' if self.detector.ready_to_draw else 'NO'}",
+            f"Candidate points: {self.detector.candidate_points}",
+            f"Candidate reject: {self.detector.last_candidate_reject_reason or '--'}",
             f"Progress: {self.detector.progress} / 3",
             f"Path points: {len(self.detector.points)}",
-            f"Draw time: {self.detector.draw_time(time.perf_counter()):.2f}s",
+            f"Draw time: {self.detector.draw_time(now):.2f}s",
             f"Checked: {'TRUE' if self.state.checked else 'FALSE'}",
             f"Expected trial: {self.expected_type.upper()}",
             f"Completed: {self.logger.completed_trials} / {self.logger.target_total}",
         ]
+        if config.SHOW_ARMING_PROGRESS:
+            debug_lines.insert(5, f"Arming: {self.detector.arming_progress(now) * 100:.0f}%")
         for index, line in enumerate(debug_lines):
-            cv2.putText(canvas, line, (24, config.WINDOW_HEIGHT - 245 + index * 21), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (170, 210, 230), 1, cv2.LINE_AA)
+            cv2.putText(canvas, line, (24, config.WINDOW_HEIGHT - 335 + index * 21), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (170, 210, 230), 1, cv2.LINE_AA)
 
         if self.tracker.error:
             cv2.putText(canvas, self.tracker.error[:120], (24, 76), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (80, 120, 255), 1, cv2.LINE_AA)
