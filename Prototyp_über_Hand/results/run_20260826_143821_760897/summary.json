@@ -1,0 +1,20 @@
+{
+  "run_directory": "D:\\PEKING26082026\\Prototyp_über_Hand\\results\\run_20260826_143821_760897",
+  "target_positive_trials": 20,
+  "target_negative_trials": 20,
+  "completed_trials": 0,
+  "aborted_trials": 0,
+  "positive_trials": 0,
+  "negative_trials": 0,
+  "tp": 0,
+  "tn": 0,
+  "fp": 0,
+  "fn": 0,
+  "metrics": {
+    "positive_success_rate": null,
+    "false_positive_rate": null,
+    "precision": null,
+    "recall": null,
+    "accuracy": null
+  }
+}

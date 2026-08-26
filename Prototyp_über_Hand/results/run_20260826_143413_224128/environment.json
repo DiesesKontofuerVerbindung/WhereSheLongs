@@ -1,0 +1,27 @@
+{
+  "hardware": {
+    "device": "Einbaum",
+    "cpu": "AMD64 Family 26 Model 68 Stepping 0, AuthenticAMD",
+    "gpu": "unknown",
+    "webcam": "unknown",
+    "camera_resolution": "1280x720",
+    "camera_fps": "unknown"
+  },
+  "operating_system": {
+    "os": "Windows",
+    "windows_version": "10.0.26200",
+    "release": "11",
+    "architecture": "AMD64"
+  },
+  "software": {
+    "python": "3.13.9",
+    "opencv": "5.0.0.93",
+    "mediapipe": "0.10.35",
+    "numpy": "2.5.2"
+  },
+  "git": {
+    "git_commit": "2697f256f35448f77b23dd85efaa999c8bb59b5c",
+    "git_branch": "main",
+    "git_dirty": true
+  }
+}

@@ -1,0 +1,2 @@
+trial_id,expected_type,result,classification,fail_reason,duration,path_points,timestamp
+1,positive,fail,FN,left_tracking_zone,1.001,10,2026-08-26T14:34:20

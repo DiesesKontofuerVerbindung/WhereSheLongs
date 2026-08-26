@@ -1,0 +1,13 @@
+trial_id,expected_type,result,classification,fail_reason,duration,path_points,timestamp
+1,positive,fail,FN,invalid_downstroke,0.609,7,2026-08-26T14:35:50
+2,positive,fail,FN,invalid_downstroke,0.8,9,2026-08-26T14:36:00
+3,positive,fail,FN,invalid_downstroke,0.947,10,2026-08-26T14:36:03
+4,positive,fail,FN,invalid_downstroke,0.337,4,2026-08-26T14:36:04
+5,positive,fail,FN,invalid_downstroke,0.191,3,2026-08-26T14:36:04
+6,positive,fail,FN,invalid_upstroke,2.221,23,2026-08-26T14:36:07
+7,positive,fail,FN,invalid_downstroke,1.795,19,2026-08-26T14:36:10
+8,positive,fail,FN,invalid_downstroke,0.834,9,2026-08-26T14:36:11
+9,positive,aborted,,reset,0.8,8,2026-08-26T14:36:12
+10,positive,fail,FN,invalid_downstroke,1.039,11,2026-08-26T14:36:13
+11,positive,fail,FN,invalid_downstroke,1.605,17,2026-08-26T14:36:16
+12,positive,fail,FN,invalid_downstroke,1.809,19,2026-08-26T14:36:19
