@@ -48,6 +48,7 @@ class SwipeDetector:
         self.hover_started_at: float | None = None
         self.armed_anchor: Point | None = None
         self.start_point: Point | None = None
+        self.peak_swipe_y: float | None = None
         self.last_point: Point | None = None
         self.last_raw_point: Point | None = None
         self.last_seen_at: float | None = None
@@ -65,9 +66,9 @@ class SwipeDetector:
 
     @property
     def vertical_distance(self) -> float:
-        if self.start_point is None or self.last_point is None:
+        if self.start_point is None or self.peak_swipe_y is None:
             return 0.0
-        return self.start_point.y - self.last_point.y
+        return self.start_point.y - self.peak_swipe_y
 
     @property
     def horizontal_distance(self) -> float:
@@ -83,6 +84,7 @@ class SwipeDetector:
         self.hover_started_at = None
         self.armed_anchor = None
         self.start_point = None
+        self.peak_swipe_y = None
         self.last_point = None
         self.last_raw_point = None
         self.last_seen_at = None
@@ -176,6 +178,7 @@ class SwipeDetector:
                 return SwipeEvent(SwipeState.TRACKING)
             self.state = SwipeState.SWIPING
             self.start_point = point
+            self.peak_swipe_y = point.y
             self.swipe_started_at = now
             self.block_offset_y = block.center_y - point.y
             self.samples.append(self._sample(now, point, finger_mode, blocks))
@@ -194,10 +197,12 @@ class SwipeDetector:
         block = blocks.get(self.target_block)
         if block is None or block.completed:
             return self._fail(blocks, "target_unavailable", now, finger_mode)
-        blocks.move_vertical(self.target_block, point.y + self.block_offset_y)
+        if self.peak_swipe_y is None or point.y < self.peak_swipe_y:
+            self.peak_swipe_y = point.y
+            blocks.move_vertical(self.target_block, self.peak_swipe_y + self.block_offset_y)
         sample = self._sample(now, point, finger_mode, blocks)
         self.samples.append(sample)
-        vertical = self.start_point.y - point.y
+        vertical = self.start_point.y - self.peak_swipe_y
         horizontal = abs(point.x - self.start_point.x)
         if horizontal > config.MAX_HORIZONTAL_DRIFT:
             return self._fail(blocks, "horizontal_drift", now, finger_mode, sample)
@@ -289,6 +294,7 @@ class SwipeDetector:
         self.hover_started_at = None
         self.armed_anchor = None
         self.start_point = None
+        self.peak_swipe_y = None
         self.last_point = None
         self.last_raw_point = None
         self.swipe_started_at = None

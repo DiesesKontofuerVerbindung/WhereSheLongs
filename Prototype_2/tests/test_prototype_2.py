@@ -113,6 +113,20 @@ class Prototype2Tests(unittest.TestCase):
             self.assertEqual(event.fail_reason, reason)
             self.assertEqual(detector.state, SwipeState.TRACKING)
 
+    def test_downward_motion_during_swipe_does_not_pull_locked_wood_down(self) -> None:
+        blocks = BlockManager()
+        detector = SwipeDetector()
+        now = arm(detector, blocks, "wood_5")
+        block = blocks.get("wood_5")
+        assert block is not None
+        detector.update(Point(AUTO_SWIPE_START_X, 450), now, blocks, config.ONE_FINGER)
+        detector.update(Point(AUTO_SWIPE_START_X, 350), now + 0.08, blocks, config.ONE_FINGER)
+        detector.update(Point(AUTO_SWIPE_START_X, 150), now + 0.16, blocks, config.ONE_FINGER)
+        held_y = block.center_y
+        event = detector.update(Point(AUTO_SWIPE_START_X, 450), now + 0.24, blocks, config.ONE_FINGER)
+        self.assertEqual(event.state, SwipeState.SWIPING)
+        self.assertEqual(block.center_y, held_y)
+
     def test_checklist_mapping_is_separate_and_idempotent(self) -> None:
         checklist = ChecklistMapper()
         self.assertTrue(checklist.complete_for_block("wood_1"))
