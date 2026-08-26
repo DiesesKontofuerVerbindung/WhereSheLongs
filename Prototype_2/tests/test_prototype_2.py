@@ -17,10 +17,14 @@ from swipe_state import SwipeState
 from test_logger import TestLogger, calculate_metrics
 
 
+AUTO_SWIPE_START_X = 80
+AUTO_SWIPE_START_Y = 500
+
+
 def arm(detector: SwipeDetector, blocks: BlockManager, block_id: str, now: float = 0.0) -> float:
     block = blocks.get(block_id)
     assert block is not None
-    x, y = block.center_x, block.center_y
+    x, y = AUTO_SWIPE_START_X, AUTO_SWIPE_START_Y
     detector.update(Point(x, y), now, blocks, config.ONE_FINGER)
     detector.update(Point(x, y), now + 0.10, blocks, config.ONE_FINGER)
     event = detector.update(Point(x, y), now + config.BLOCK_ARM_TIME + 0.02, blocks, config.ONE_FINGER)
@@ -45,15 +49,15 @@ class Prototype2Tests(unittest.TestCase):
             int(config.CURSOR_Y_OUTPUT_MAX_RATIO * config.WINDOW_HEIGHT),
         )
 
-    def test_only_the_top_wood_is_locked_and_interactable(self) -> None:
+    def test_top_wood_is_auto_locked_without_pointing_at_it(self) -> None:
         blocks = BlockManager()
         top = blocks.top_block
         assert top is not None
         self.assertEqual(top.block_id, "wood_5")
-        self.assertEqual(blocks.hit_test(top.center_x, top.center_y).block_id, "wood_5")
-        lower = blocks.get("wood_4")
-        assert lower is not None
-        self.assertIsNone(blocks.hit_test(lower.center_x, lower.center_y + lower.height / 2 - 2))
+        detector = SwipeDetector()
+        event = detector.update(Point(60, 250), 0.0, blocks, config.ONE_FINGER)
+        self.assertEqual(event.target_block, "wood_5")
+        self.assertEqual(event.state, SwipeState.BLOCK_HOVER)
         self.assertTrue(blocks.mark_completed("wood_5"))
         self.assertEqual(blocks.top_block.block_id, "wood_4")
 
@@ -71,7 +75,7 @@ class Prototype2Tests(unittest.TestCase):
         block = blocks.get("wood_5")
         assert block is not None
         original_y = block.center_y
-        event = detector.update(Point(block.center_x, block.center_y), 0.0, blocks, config.ONE_FINGER)
+        event = detector.update(Point(60, 250), 0.0, blocks, config.ONE_FINGER)
         self.assertEqual(event.state, SwipeState.BLOCK_HOVER)
         self.assertEqual(block.center_y, original_y)
         self.assertFalse(event.started)
@@ -84,8 +88,8 @@ class Prototype2Tests(unittest.TestCase):
         block = blocks.get(block_id)
         assert block is not None
         events = []
-        for index, y in enumerate((block.center_y - 40, block.center_y - 140, block.center_y - 250, block.center_y - 320, block.center_y - 430, block.center_y - 540)):
-            events.append(detector.update(Point(block.center_x, y), now + index * 0.08, blocks, config.ONE_FINGER))
+        for index, y in enumerate((460, 350, 240, 130, 20, -90)):
+            events.append(detector.update(Point(AUTO_SWIPE_START_X, y), now + index * 0.08, blocks, config.ONE_FINGER))
         success = next(event for event in events if event.success)
         self.assertEqual(success.state, SwipeState.BLOCK_REMOVED)
         self.assertTrue(blocks.mark_completed(block_id))
@@ -101,9 +105,9 @@ class Prototype2Tests(unittest.TestCase):
             now = arm(detector, blocks, "wood_5")
             block = blocks.get("wood_5")
             assert block is not None
-            detector.update(Point(block.center_x + points[0], block.center_y + points[1]), now, blocks, config.ONE_FINGER)
-            detector.update(Point(block.center_x + points[0], block.center_y + points[1]), now + 0.08, blocks, config.ONE_FINGER)
-            event = detector.update(Point(block.center_x + points[0], block.center_y + points[1]), now + 0.16, blocks, config.ONE_FINGER)
+            detector.update(Point(AUTO_SWIPE_START_X + points[0], AUTO_SWIPE_START_Y + points[1]), now, blocks, config.ONE_FINGER)
+            detector.update(Point(AUTO_SWIPE_START_X + points[0], AUTO_SWIPE_START_Y + points[1]), now + 0.08, blocks, config.ONE_FINGER)
+            event = detector.update(Point(AUTO_SWIPE_START_X + points[0], AUTO_SWIPE_START_Y + points[1]), now + 0.16, blocks, config.ONE_FINGER)
             self.assertTrue(event.candidate_rejected)
             self.assertFalse(event.terminal)
             self.assertEqual(event.fail_reason, reason)

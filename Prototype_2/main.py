@@ -118,7 +118,7 @@ class PrototypeApp:
                     self.logger.finish_trial("fail", event.fail_reason, now, event.vertical_distance, event.horizontal_distance)
                     self.state.status_message = f"FAIL: {event.fail_reason}"
             elif event.state == SwipeState.BLOCK_ARMED:
-                self.state.status_message = "BLOCK_ARMED：保持目标后向上划"
+                self.state.status_message = "BLOCK_ARMED：已自动锁定，直接向上划"
             elif event.state == SwipeState.SWIPING:
                 self.state.status_message = "SWIPING：方块跟随手指"
         self.coordinate_monitor.record(frame, self.detector, now)
@@ -127,7 +127,7 @@ class PrototypeApp:
     def mouse_callback(self, event: int, x: int, y: int, _flags: int, _param) -> None:
         now = time.perf_counter()
         if event == cv2.EVENT_LBUTTONDOWN:
-            block = self.blocks.hit_test(x, y)
+            block = self.blocks.top_block
             if block is None or self.state.mouse_drag is not None:
                 return
             self.state.mouse_drag = MouseDrag(block.block_id, now, x, y, block.center_y - y)
@@ -171,7 +171,7 @@ class PrototypeApp:
 
     def render(self) -> np.ndarray:
         canvas = np.full((config.WINDOW_HEIGHT, config.WINDOW_WIDTH, 3), (0, 0, 0), dtype=np.uint8)
-        cv2.putText(canvas, "WOOD STACK — swipe the locked top log upward", (24, 36), cv2.FONT_HERSHEY_SIMPLEX, 0.72, (220, 220, 220), 2, cv2.LINE_AA)
+        cv2.putText(canvas, "WOOD STACK — top log auto-locked; swipe anywhere upward", (24, 36), cv2.FONT_HERSHEY_SIMPLEX, 0.72, (220, 220, 220), 2, cv2.LINE_AA)
         for section in range(1, config.SECTION_COUNT):
             y = int(section * config.SECTION_HEIGHT)
             cv2.line(canvas, (0, y), (config.WINDOW_WIDTH, y), (42, 42, 42), 1)

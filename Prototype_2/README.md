@@ -1,6 +1,6 @@
 # Prototype 2 — Swipe-up Checklist Interaction v0.1
 
-独立技术验证：二维木头堆场景。程序始终锁定最上层木头；只有该木头能进入 Hover/Armed/Swipe，成功划走后自动锁定下一层。
+独立技术验证：二维木头堆场景。程序始终锁定最上层木头；玩家不需要把光点对准木头，只需在交互区稳定一下后直接向上划，成功后自动锁定下一层。
 
 ```text
 Webcam -> MediaPipe Hand Tracking -> 1/2 finger cursor
@@ -46,8 +46,8 @@ cd D:\PEKING26082026
 
 ```text
 TRACKING
-  -> BLOCK_HOVER       指尖进入一个方块 Hitbox
-  -> BLOCK_ARMED       在 Hitbox 内稳定 BLOCK_ARM_TIME
+  -> BLOCK_HOVER       程序自动选择最上层木头
+  -> BLOCK_ARMED       光点稳定 BLOCK_ARM_TIME
   -> SWIPING           向上位移达到 MIN_SWIPE_START_DISTANCE
   -> BLOCK_REMOVED     方块中心越过 REMOVE_THRESHOLD_Y，成功一次
 ```
@@ -74,7 +74,7 @@ Swipe 只跟随 Y 方向，X 方向保持方块原位。每个 block 有独立 `
 
 ## Trial 与日志
 
-默认目标是 20 个 Positive + 20 个 Negative。P/N 只设置下一次 Trial 标签；Trial 在手势真正从 `BLOCK_ARMED` 进入 `SWIPING` 时开始，或者鼠标按下方块时开始。每次正式 Trial 包含：
+默认目标是 20 个 Positive + 20 个 Negative。P/N 只设置下一次 Trial 标签；Trial 在手势真正从 `BLOCK_ARMED` 进入 `SWIPING` 时开始，或者鼠标在任意位置按下时开始。每次正式 Trial 包含：
 
 ```text
 trial_id, expected_type, finger_mode, target_block, result, classification,

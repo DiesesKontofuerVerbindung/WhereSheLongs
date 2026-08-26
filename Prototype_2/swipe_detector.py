@@ -135,12 +135,12 @@ class SwipeDetector:
         return SwipeEvent(self.state, self.target_block)
 
     def _update_hover(self, point: Point, now: float, blocks: BlockManager, finger_mode: str) -> SwipeEvent:
-        hit = blocks.hit_test(point.x, point.y)
-        if hit is None:
+        locked = blocks.top_block
+        if locked is None:
             self._clear_candidate()
             return SwipeEvent(SwipeState.TRACKING)
-        if hit.block_id != self.target_block:
-            self.target_block = hit.block_id
+        if locked.block_id != self.target_block:
+            self.target_block = locked.block_id
             self.hover_started_at = now
             self.armed_anchor = point
             self.path = [point]
