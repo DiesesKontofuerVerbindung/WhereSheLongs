@@ -6,6 +6,8 @@ from enum import Enum
 class GestureState(str, Enum):
     IDLE = "IDLE"
     TRACKING = "TRACKING"
+    ARMING = "ARMING"
+    ARMED = "ARMED"
     DRAWING = "DRAWING"
     CHECKED = "CHECKED"
     FAILED = "FAILED"
@@ -14,6 +16,8 @@ class GestureState(str, Enum):
 class GesturePhase(str, Enum):
     IDLE = "IDLE"
     TRACKING = "TRACKING"
+    ARMING = "ARMING"
+    ARMED = "ARMED"
     STARTED = "STARTED"
     DOWNSTROKE_OK = "DOWNSTROKE_OK"
     TURN_OK = "TURN_OK"
