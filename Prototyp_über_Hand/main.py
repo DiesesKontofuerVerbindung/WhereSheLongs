@@ -114,7 +114,11 @@ class PrototypeApp:
             cv2.line(canvas, (int(first.x), int(first.y)), (int(second.x), int(second.y)), (90, 150, 255), 3, cv2.LINE_AA)
 
         if self.state.checked:
-            check_points = [(center[0] - 52, center[1] - 2), (center[0] - 12, center[1] + 40), (center[0] + 62, center[1] - 48)]
+            check_points = [
+                (center[0] - int(config.CHECK_RADIUS * 0.47), center[1] - int(config.CHECK_RADIUS * 0.02)),
+                (center[0] - int(config.CHECK_RADIUS * 0.11), center[1] + int(config.CHECK_RADIUS * 0.36)),
+                (center[0] + int(config.CHECK_RADIUS * 0.56), center[1] - int(config.CHECK_RADIUS * 0.44)),
+            ]
             cv2.line(canvas, check_points[0], check_points[1], (60, 220, 120), 8, cv2.LINE_AA)
             cv2.line(canvas, check_points[1], check_points[2], (60, 220, 120), 8, cv2.LINE_AA)
             cv2.putText(canvas, "CHECKED", (center[0] - 68, center[1] + config.CHECK_RADIUS + 58), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (60, 220, 120), 2, cv2.LINE_AA)
@@ -138,6 +142,7 @@ class PrototypeApp:
             f"Ready to draw: {'YES' if self.detector.ready_to_draw else 'NO'}",
             f"Candidate points: {self.detector.candidate_points}",
             f"Candidate reject: {self.detector.last_candidate_reject_reason or '--'}",
+            f"Matched ✓ family: {self.detector.last_match_profile or '--'}",
             f"Progress: {self.detector.progress} / 3",
             f"Path points: {len(self.detector.points)}",
             f"Draw time: {self.detector.draw_time(now):.2f}s",

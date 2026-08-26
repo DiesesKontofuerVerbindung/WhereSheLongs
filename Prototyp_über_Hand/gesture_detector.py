@@ -69,6 +69,7 @@ class GestureDetector:
         self._candidate_buffer: deque[_CandidateSample] = deque()
         self._last_candidate_reject_at: Optional[float] = None
         self.last_candidate_reject_reason = ""
+        self.last_match_profile = ""
         self._last_smoothed: Optional[Point] = None
         self._terminal_reason = ""
         self._failed_at: Optional[float] = None
@@ -120,6 +121,7 @@ class GestureDetector:
         self._arming_last_time = None
         self._last_candidate_reject_at = None
         self.last_candidate_reject_reason = ""
+        self.last_match_profile = ""
         self._terminal_reason = ""
         self._failed_at = None
 
@@ -302,14 +304,14 @@ class GestureDetector:
             if self._turn_valid():
                 self.phase = GesturePhase.TURN_OK
             elif self._clearly_invalid_turn_direction():
-                return self._fail("invalid_upstroke", now)
+                return self._reject_if_early_or_fail("invalid_upstroke", now)
             return None
 
         if self.phase == GesturePhase.TURN_OK:
             if self._upstroke_valid():
                 self.phase = GesturePhase.UPSTROKE_OK
             elif self._clearly_invalid_upstroke():
-                return self._fail("invalid_upstroke", now)
+                return self._reject_if_early_or_fail("invalid_upstroke", now)
             return None
 
         if self.phase == GesturePhase.UPSTROKE_OK and self._is_check_mark(self.points):
@@ -324,6 +326,11 @@ class GestureDetector:
         self.phase = GesturePhase.ARMED
         self._last_candidate_reject_at = now
         return GestureResult(self.state, self.phase, candidate_rejected=True, fail_reason=reason)
+
+    def _reject_if_early_or_fail(self, reason: str, now: float) -> GestureResult:
+        if len(self.points) < config.MIN_POINTS:
+            return self._reject_candidate(reason, now)
+        return self._fail(reason, now)
 
     def _fail(self, reason: str, now: float) -> GestureResult:
         self.state = GestureState.FAILED
@@ -355,8 +362,8 @@ class GestureDetector:
             return False
         start, current = self.points[0], self.points[-1]
         return (
-            current.y - start.y >= config.MIN_DOWN_DISTANCE
-            and current.x - start.x >= config.MIN_HORIZONTAL_DISTANCE
+            current.y - start.y >= _profile_floor("min_down_distance")
+            and current.x - start.x >= _profile_floor("min_down_right")
             and _trend_ratio(self.points, "down") >= config.MIN_TREND_RATIO
         )
 
@@ -368,8 +375,8 @@ class GestureDetector:
             return False
         start, turn, current = self.points[0], self.points[turn_index], self.points[-1]
         return (
-            turn.y - start.y >= config.MIN_DOWN_DISTANCE
-            and turn.x - start.x >= config.MIN_HORIZONTAL_DISTANCE
+            turn.y - start.y >= _profile_floor("min_down_distance")
+            and turn.x - start.x >= _profile_floor("min_down_right")
             and turn.y - current.y >= config.TURN_TOLERANCE
             and current.x >= turn.x - config.DIRECTION_TOLERANCE
         )
@@ -378,8 +385,8 @@ class GestureDetector:
         turn_index = _lowest_index(self.points)
         turn, current = self.points[turn_index], self.points[-1]
         return (
-            turn.y - current.y >= config.MIN_UP_DISTANCE
-            and current.x - turn.x >= config.MIN_HORIZONTAL_DISTANCE
+            turn.y - current.y >= _profile_floor("min_up_distance")
+            and current.x - turn.x >= _profile_floor("min_up_right")
             and _trend_ratio(self.points[turn_index:], "up") >= config.MIN_TREND_RATIO
         )
 
@@ -416,23 +423,35 @@ class GestureDetector:
             previous.y + alpha * (point.y - previous.y),
         )
 
-    @staticmethod
-    def _is_check_mark(points: list[Point]) -> bool:
-        if len(points) < config.MIN_POINTS or _path_length(points) < config.MIN_PATH_LENGTH:
+    def _is_check_mark(self, points: list[Point]) -> bool:
+        if len(points) < config.MIN_POINTS:
             return False
         turn_index = _lowest_index(points)
         turn_fraction = turn_index / (len(points) - 1)
-        if not config.MIN_TURN_FRACTION <= turn_fraction <= config.MAX_TURN_FRACTION:
-            return False
         start, turn, end = points[0], points[turn_index], points[-1]
-        if turn.y - start.y < config.MIN_DOWN_DISTANCE or turn.y - end.y < config.MIN_UP_DISTANCE:
-            return False
-        if turn.x - start.x < config.MIN_HORIZONTAL_DISTANCE or end.x - turn.x < config.MIN_HORIZONTAL_DISTANCE:
-            return False
-        return (
-            _trend_ratio(points[: turn_index + 1], "down") >= config.MIN_TREND_RATIO
-            and _trend_ratio(points[turn_index:], "up") >= config.MIN_TREND_RATIO
-        )
+        path_length = _path_length(points)
+        down_points = points[: turn_index + 1]
+        up_points = points[turn_index:]
+        for profile in config.CHECK_MARK_PROFILES:
+            if path_length < profile["min_path_length"]:
+                continue
+            if not profile["min_turn_fraction"] <= turn_fraction <= profile["max_turn_fraction"]:
+                continue
+            if turn.y - start.y < profile["min_down_distance"]:
+                continue
+            if turn.y - end.y < profile["min_up_distance"]:
+                continue
+            if turn.x - start.x < profile["min_down_right"]:
+                continue
+            if end.x - turn.x < profile["min_up_right"]:
+                continue
+            if (
+                _trend_ratio(down_points, "down") >= config.MIN_TREND_RATIO
+                and _trend_ratio(up_points, "up") >= config.MIN_TREND_RATIO
+            ):
+                self.last_match_profile = str(profile["name"])
+                return True
+        return False
 
     def _clear_drawing(self) -> None:
         self.points.clear()
@@ -506,3 +525,8 @@ def _rightward_trend_ratio(points: list[Point]) -> float:
         for previous, current in zip(points, points[1:])
     )
     return good / (len(points) - 1)
+
+
+def _profile_floor(key: str) -> float:
+    """Smallest directional requirement across every accepted ✓ family."""
+    return min(float(profile[key]) for profile in config.CHECK_MARK_PROFILES)

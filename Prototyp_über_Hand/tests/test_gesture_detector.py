@@ -31,6 +31,34 @@ def check_points(variation: int = 0) -> list[Point]:
     return points
 
 
+def large_check_points() -> list[Point]:
+    """A broad ✓ whose first and second strokes are both much larger than standard."""
+    points = []
+    for index in range(15):
+        points.append(Point(385 + index * 7, 285 + index * 5))
+    for index in range(1, 22):
+        points.append(Point(483 + index * 7, 355 - index * 6))
+    return points
+
+
+def wide_tail_check_points() -> list[Point]:
+    points = []
+    for index in range(13):
+        points.append(Point(440 + index * 5, 300 + index * 5))
+    for index in range(1, 29):
+        points.append(Point(500 + index * 6, 360 - index))
+    return points
+
+
+def steep_tail_check_points() -> list[Point]:
+    points = []
+    for index in range(13):
+        points.append(Point(440 + index * 5, 300 + index * 5))
+    for index in range(1, 16):
+        points.append(Point(500 + index, 360 - index * 5))
+    return points
+
+
 def feed(detector: GestureDetector, points: list[Point], start_time: float = 0.4):
     results = []
     for index, point in enumerate(points):
@@ -104,6 +132,17 @@ class GestureDetectorTests(unittest.TestCase):
             feed(detector, check_points(variation), start_time)
             successes += detector.state == GestureState.CHECKED
         self.assertEqual(successes, 20)
+
+    def test_large_checks_and_tail_shape_families_are_detected(self) -> None:
+        for expected_profile, points in (("wide_tail", wide_tail_check_points()), ("steep_tail", steep_tail_check_points())):
+            detector = GestureDetector()
+            feed(detector, points, arm(detector))
+            self.assertEqual(detector.state, GestureState.CHECKED)
+            self.assertEqual(detector.last_match_profile, expected_profile)
+
+        detector = GestureDetector()
+        feed(detector, large_check_points(), arm(detector))
+        self.assertEqual(detector.state, GestureState.CHECKED)
 
     def test_actual_failed_trial_auto_rearms(self) -> None:
         detector = GestureDetector()

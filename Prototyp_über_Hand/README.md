@@ -35,7 +35,7 @@ py -3.13 -m venv .venv
 - 鼠标点击圆圈：完成 Checkbox；若中断正在画的手势，当前 Trial 记为 `aborted`。
 - `Q` / `Esc`：退出并落盘当前 summary。
 
-指尖进入圆圈只会进入 `ARMING`，稳定约 300 ms 后才 `ARMED`。只有随后检测到真实的向右下起笔 candidate，才自动建立 Trial。默认目标是 20 个 positive + 20 个 negative；目标数在 `config.py` 中配置。程序终端会打印实时 Trial 与混淆矩阵摘要。
+指尖进入更大的圆圈附近区域只会进入 `ARMING`，稳定约 300 ms 后才 `ARMED`。只有随后检测到真实的向右下起笔 candidate，才自动建立 Trial。默认目标是 20 个 positive + 20 个 negative；目标数在 `config.py` 中配置。程序终端会打印实时 Trial 与混淆矩阵摘要。
 
 v0.3 先解决 Gesture Segmentation。negative trial 的严格人工边界协议会在下一版本单独设计；当前不要把 hover、误入圆圈或 candidate reject 当成 negative/positive 样本。
 
@@ -56,13 +56,13 @@ STARTED -> DOWNSTROKE_OK -> TURN_OK -> UPSTROKE_OK -> SUCCESS
 
 检测器使用屏幕坐标进行几何判断：
 
-1. 从 Checkbox 附近开始；
+1. 从放大的 Checkbox 附近开始；
 2. 先有足够的向右下位移与趋势；
 3. 最低点后必须出现有效上升，作为转折；
 4. 再有足够的向右上位移、趋势、总路径长度与转折比例；
 5. 满足整体条件才进入 `SUCCESS`。
 
-它是可解释的启发式，不是神经网络手写识别。参数不靠“把门槛砍成地板”刷 20/20；FP 也会在 negative Trials 里暴露。
+它接受 `balanced`、`wide_tail`、`steep_tail` 三个几何 ✓ 家族：均衡的勾、横向较宽的尾巴、以及近乎竖直上挑的尾巴。大勾不是单独一个模板：只要还在放大的 `TRACKING_RADIUS` 内并在 `MAX_DRAW_TIME` 内完成，尺寸会自然通过。调试栏会显示命中的家族；每种仍强制要求“右下 -> 最低转折 -> 右上”。它是可解释的启发式，不是神经网络手写识别。参数不靠“把门槛砍成地板”刷 20/20；FP 也会在 negative Trials 里暴露。
 
 ## 结果目录
 
@@ -85,7 +85,7 @@ results/run_YYYYMMDD_HHMMSS_xxxxxx/
 
 所有判定阈值都在 `config.py`：
 
-- `CHECK_RADIUS`、`START_ZONE_RADIUS`、`TRACKING_RADIUS`
+- `CHECK_RADIUS`、`START_ZONE_RADIUS`、`TRACKING_RADIUS`、`ARM_RADIUS`
 - `MIN_PATH_LENGTH`、`MIN_DOWN_DISTANCE`、`MIN_UP_DISTANCE`
 - `MIN_HORIZONTAL_DISTANCE`、`MAX_DRAW_TIME`
 - `SMOOTHING_FACTOR`、`TURN_TOLERANCE`、`DIRECTION_TOLERANCE`
@@ -93,6 +93,7 @@ results/run_YYYYMMDD_HHMMSS_xxxxxx/
 - `ARM_RADIUS`、`ARM_HOLD_TIME`、`ARM_MAX_SPEED`
 - `CANDIDATE_BUFFER_SECONDS`、`START_DOWN_DISTANCE`、`START_RIGHT_DISTANCE`
 - `START_MIN_POINTS`、`CANDIDATE_REARM_DELAY`、`FAIL_AUTO_REARM_TIME`
+- `CHECK_MARK_PROFILES`：三类 ✓ 的长度、左右段位移与转折比例
 
 调参顺序：先确认镜像方向和光点跟手，再看 `trajectories/` 里失败卡在哪个 phase；最后只改一个参数并运行同样的正/负 Trial 集。否则实验不可比，数据会像烂掉的 Kartoffelsalat。
 
