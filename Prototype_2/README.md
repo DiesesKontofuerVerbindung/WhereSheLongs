@@ -1,4 +1,4 @@
-# Prototype 2 — Swipe-up Checklist Interaction v0.1
+# Prototype 2 — Swipe-up Checklist Interaction v0.2
 
 独立技术验证：二维木头堆场景。程序始终锁定最上层木头；玩家不需要把光点对准木头，只需在交互区稳定一下后直接向上划，成功后自动锁定下一层。
 
@@ -39,6 +39,10 @@ cd D:\PEKING26082026
 - `N`：下一次正式 Trial 期望为 Negative。
 - `R`：重置当前交互和未完成方块；已完成 Checklist 项保留。
 - `T`：重置全部五个方块和全部 Checklist 项，开始新一轮。
+- `B`：`BASELINE`，原始 peak-only 跟随。
+- `A`：`ACCEL`，按向上手速施加 1.0–2.0 的增益。
+- `M`：`MOMENTUM`，弹簧/阻尼/惯性，并支持 fling。
+- `E`：`MOMENTUM_1EURO`，Momentum 前先对虚拟 Y 坐标做 One Euro Filter。
 - `Q` / `Esc`：退出并落盘。
 - 鼠标按住方块向上拖过 `REMOVE_THRESHOLD_Y`：永久可用的 fallback。
 
@@ -55,6 +59,20 @@ TRACKING
 Hitbox、稳定等待和 Swipe 启动是三个独立门槛。进入方块不会移动方块，也不会建立 Trial。候选阶段明显向下或横向移动会 `Candidate Reject`，回到 `TRACKING`；它不会写 Trial，也不会增加 FN/TN。只有进入 `SWIPING` 后，超时、丢手或横向漂移才会形成正式失败 Trial。
 
 Swipe 只跟随 Y 方向，X 方向保持方块原位。每个 block 有独立 `block_id` 和 `completed`，`complete_block(block_id, source)` 是手势和鼠标共用的唯一成功入口，因此一个方块不能重复计数。
+
+## Motion Profile Evaluation
+
+`SwipeDetector` 继续负责 arm、Swipe 起点、漂移、超时和成功判定；`motion_profiles.py` 只决定 `SWIPING` 时木头的位置与速度。这样比较的是 Motion Response，不是把手势识别也顺手换掉——实验变量不能像宿舍插线板一样什么都往上插。
+
+- `BASELINE`：仅当手指达到新的最高点时，木头才向上；手回落，木头保持。
+- `ACCEL`：仅对向上 cursor delta 乘速度相关 gain；向下输入不会拉回木头。
+- `MOMENTUM`：`acceleration = SPRING_K * (target_y - block_y) - SPRING_DAMPING * block_velocity_y`，手速作为受限 assist；木头不会被轻微回落立即拉下。
+- `MOMENTUM_1EURO`：在既有 Camera Calibration 后，对虚拟 Y 信号执行 One Euro Filter，再进入 Momentum。
+- `MOMENTUM` 和 `MOMENTUM_1EURO`：当 `up_speed >= FLING_VELOCITY_THRESHOLD` 且最小上移达到 `FLING_MIN_DISTANCE`，木头进入 fling，自行带着负 Y velocity 上飞。
+
+Camera Calibration 保持固定：`normalized y=0.00–0.62` 映射到虚拟 `0–1.25 * WINDOW_HEIGHT`。Motion Profile 是校准之后的第二层，不会改动这条约 2× 的可达范围放大。
+
+推荐实验量：每种模式 `20 Positive + 20 Negative`，四种共 160 个 Trial。时间不够时，先做每种 `10 Positive + 10 Negative`，先淘汰明显手感差的方案。第一阶段固定 `SPRING_K`、damping、gain 与 fling 参数，不自动调参。
 
 ## 两层 Checklist 映射
 
@@ -79,7 +97,8 @@ Swipe 只跟随 Y 方向，X 方向保持方块原位。每个 block 有独立 `
 ```text
 trial_id, expected_type, finger_mode, target_block, result, classification,
 fail_reason, duration, path_points, start/end x/y, vertical/horizontal distance,
-timestamp, source
+timestamp, source, motion_profile, finger/block velocity, gain, target/block y,
+cursor/block travel, fling metrics
 ```
 
 Positive 成功是 TP，Positive 失败是 FN；Negative 成功是 FP，Negative 失败是 TN。Candidate Reject 不算 Trial，避免把“只是路过”伪装成数据。
@@ -96,9 +115,9 @@ results/run_YYYYMMDD_HHMMSS_xxxxxx/
 └─ trajectories/trial_XXX.csv
 ```
 
-轨迹 CSV 保存时间、raw/smoothed 坐标、finger mode、state、target block、block x/y。`summary.json` 保存 TP/TN/FP/FN、precision、recall、accuracy、false positive rate、blocks completed、one/two finger trials。
+轨迹 CSV 每帧保存 raw、virtual、motion 坐标，finger velocity、gain、block y/velocity、target y、profile、flinging 与 state。`summary.json` 额外按 `BASELINE`、`ACCEL`、`MOMENTUM`、`MOMENTUM_1EURO` 分开保存 trials、TP/TN/FP/FN、accuracy、时长、cursor travel、time-to-remove 与 fling 次数。
 
-`coordinate_monitor.csv` 每秒记录 10 次独立校准样本：原始 MediaPipe 坐标、允许超出窗口的虚拟坐标、是否在窗口/交互区内、是否暂时 HOLD，以及两根手指的伸展状态。它用于定位“相机没看见手”还是“坐标映射不对”，不参与 TP/TN/FP/FN。
+`coordinate_monitor.csv` 每秒记录 10 次独立校准样本：原始 MediaPipe 坐标、允许超出窗口的虚拟坐标、当前 Motion Profile、是否在窗口/交互区内、是否暂时 HOLD，以及两根手指的伸展状态。它用于定位“相机没看见手”还是“坐标映射不对”，不参与 TP/TN/FP/FN。
 
 ## 参数
 

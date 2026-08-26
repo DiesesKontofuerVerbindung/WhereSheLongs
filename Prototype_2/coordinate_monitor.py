@@ -14,7 +14,7 @@ class CoordinateMonitor:
     fields = (
         "timestamp", "hand_detected", "cursor_held", "finger_mode", "index_extended",
         "middle_extended", "raw_x", "raw_y", "virtual_x", "virtual_y",
-        "inside_window", "inside_interaction", "state", "target_block",
+        "inside_window", "inside_interaction", "motion_profile", "state", "target_block",
     )
 
     def __init__(self, run_dir: Path) -> None:
@@ -44,6 +44,7 @@ class CoordinateMonitor:
             "virtual_y": "" if virtual_y is None else virtual_y,
             "inside_window": cursor is not None and 0 <= virtual_x < config.WINDOW_WIDTH and 0 <= virtual_y < config.WINDOW_HEIGHT,
             "inside_interaction": cursor is not None and 0 <= virtual_y <= config.INTERACTION_BOTTOM_Y,
+            "motion_profile": detector.motion_profile_name,
             "state": detector.state.value,
             "target_block": detector.target_block or "",
         })

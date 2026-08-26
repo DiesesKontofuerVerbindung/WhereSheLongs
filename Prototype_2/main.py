@@ -47,6 +47,7 @@ class PrototypeApp:
         self.detector = SwipeDetector()
         self.tracker = HandTracker()
         self.logger = TestLogger(results_root or config.RESULTS_DIR)
+        self.logger.set_motion_profile(self.detector.motion_profile_name)
         self.coordinate_monitor = CoordinateMonitor(self.logger.run_dir)
         self.fps = 0.0
         self._last_frame_time = time.perf_counter()
@@ -85,6 +86,14 @@ class PrototypeApp:
         self.state.last_horizontal_distance = 0.0
         self.state.status_message = "五个方块与 Checklist 已全部重置"
 
+    def set_motion_profile(self, name: str) -> None:
+        """Switch profile only between trials so one trajectory has one model."""
+
+        self.reset_current_interaction()
+        self.detector.set_motion_profile(name, self.blocks)
+        self.logger.set_motion_profile(name)
+        self.state.status_message = f"Motion Profile = {name}"
+
     def update_fps(self) -> None:
         now = time.perf_counter()
         delta = max(1e-6, now - self._last_frame_time)
@@ -101,7 +110,10 @@ class PrototypeApp:
             point = None if frame.cursor is None else Point(frame.cursor.screen_x, frame.cursor.screen_y)
             event = self.detector.update(point, now, self.blocks, self.state.finger_mode)
             if event.started:
-                self.logger.start_trial(self.state.expected_type, self.state.finger_mode, event.target_block or "", "gesture", now)
+                self.logger.start_trial(
+                    self.state.expected_type, self.state.finger_mode, event.target_block or "", "gesture", now,
+                    motion_profile=event.motion_profile,
+                )
                 for sample in event.initial_samples:
                     self.logger.append_sample(sample)
             if event.sample is not None and self.logger.active is not None:
@@ -113,14 +125,20 @@ class PrototypeApp:
             elif event.terminal:
                 if event.success and event.target_block is not None:
                     self.complete_block(event.target_block, "gesture", now)
-                    self.logger.finish_trial("success", "", now, event.vertical_distance, event.horizontal_distance)
+                    self.logger.finish_trial(
+                        "success", "", now, event.vertical_distance, event.horizontal_distance,
+                        self._motion_metrics(event),
+                    )
                 else:
-                    self.logger.finish_trial("fail", event.fail_reason, now, event.vertical_distance, event.horizontal_distance)
+                    self.logger.finish_trial(
+                        "fail", event.fail_reason, now, event.vertical_distance, event.horizontal_distance,
+                        self._motion_metrics(event),
+                    )
                     self.state.status_message = f"FAIL: {event.fail_reason}"
             elif event.state == SwipeState.BLOCK_ARMED:
                 self.state.status_message = "BLOCK_ARMED：已自动锁定，直接向上划"
             elif event.state == SwipeState.SWIPING:
-                self.state.status_message = "SWIPING：方块跟随手指"
+                self.state.status_message = "FLINGING：木头惯性上飞" if event.flinging else "SWIPING：Motion Profile 正在驱动木头"
         self.coordinate_monitor.record(frame, self.detector, now)
         self.update_fps()
 
@@ -131,7 +149,10 @@ class PrototypeApp:
             if block is None or self.state.mouse_drag is not None:
                 return
             self.state.mouse_drag = MouseDrag(block.block_id, now, x, y, block.center_y - y)
-            self.logger.start_trial(self.state.expected_type, config.MOUSE_FINGER, block.block_id, "mouse", now)
+            self.logger.start_trial(
+                self.state.expected_type, config.MOUSE_FINGER, block.block_id, "mouse", now,
+                motion_profile="MOUSE_DIRECT",
+            )
             self.logger.append_sample(self._mouse_sample(now, x, y, block.block_id))
             self.state.status_message = f"Mouse SWIPING: {block.block_id}"
         elif event == cv2.EVENT_MOUSEMOVE and self.state.mouse_drag is not None:
@@ -168,6 +189,25 @@ class PrototypeApp:
             block_x=None if block is None else block.center_x,
             block_y=None if block is None else block.center_y,
         )
+
+    @staticmethod
+    def _motion_metrics(event) -> dict[str, object]:
+        return {
+            "swipe_duration": event.time_to_remove,
+            "finger_velocity_y": event.finger_velocity_y,
+            "finger_up_speed": event.finger_up_speed,
+            "motion_gain": event.motion_gain,
+            "block_velocity_y": event.block_velocity_y,
+            "block_y": event.block_y,
+            "target_y": event.target_y,
+            "flinging": event.flinging,
+            "cursor_travel_distance": event.cursor_travel_distance,
+            "virtual_block_distance": event.virtual_block_distance,
+            "peak_finger_up_speed": event.peak_finger_up_speed,
+            "peak_block_up_speed": event.peak_block_up_speed,
+            "time_to_remove": event.time_to_remove,
+            "fling_triggered": event.fling_triggered,
+        }
 
     def render(self) -> np.ndarray:
         canvas = np.full((config.WINDOW_HEIGHT, config.WINDOW_WIDTH, 3), (0, 0, 0), dtype=np.uint8)
@@ -214,10 +254,11 @@ class PrototypeApp:
         accuracy = metrics["accuracy"]
         accuracy_text = "n/a" if accuracy is None else f"{float(accuracy) * 100:.1f}%"
         debug_lines = [
-            "P positive | N negative | 1 one finger | 2 two fingers | R current reset | T all reset | Q quit",
+            "B baseline | A accel | M momentum | E momentum+1euro | 1 one finger | 2 two fingers | R reset | T all reset | Q quit",
             f"FPS: {self.fps:5.1f}    Hand: {hand_status}    Mode: {self.state.finger_mode.replace('_FINGER', '')}    {extensions}",
             f"Raw x/y: {finger_xy}    Virtual x/y: {mapped_xy} ({virtual_status})    State: {self.detector.state.value}    Locked: {locked.block_id if locked else '--'}",
             f"Swipe dy/dx: {self.state.last_vertical_distance:6.1f} / {self.state.last_horizontal_distance:6.1f}    Checklist: {self.blocks.completed_count} / {config.BLOCK_COUNT}",
+            self._motion_debug_line(),
             f"Expected: {self.state.expected_type.upper()}    Trials: {self.logger.completed_trials} / {self.logger.target_total}    TP/TN/FP/FN: {metrics['tp']}/{metrics['tn']}/{metrics['fp']}/{metrics['fn']}    Acc: {accuracy_text}",
             f"Camera: {self.tracker.error or 'ready'}    Status: {self.state.status_message}",
         ]
@@ -231,6 +272,17 @@ class PrototypeApp:
             mark = "[x]" if item["completed"] else "[ ]"
             cv2.putText(canvas, f"{mark} {item['label']}", (24, checklist_y + index * 24), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (120, 230, 160) if item["completed"] else (190, 195, 205), 1, cv2.LINE_AA)
         return canvas
+
+    def _motion_debug_line(self) -> str:
+        motion = self.detector.motion
+        if motion is None:
+            return f"Motion Profile: {self.detector.motion_profile_name}    Finger VY: n/a    Gain: 1.00    Block VY: n/a    Flinging: NO"
+        block_velocity = "n/a" if motion.block_velocity_y is None else f"{motion.block_velocity_y:7.1f} px/s"
+        return (
+            f"Motion Profile: {self.detector.motion_profile_name}    Finger VY: {motion.finger_velocity_y:7.1f} px/s"
+            f"    Up: {max(0.0, -motion.finger_velocity_y):6.1f}    Gain: {motion.gain:.2f}"
+            f"    Block VY: {block_velocity}    Flinging: {'YES' if motion.flinging else 'NO'}"
+        )
 
     @staticmethod
     def _draw_wood_log(canvas: np.ndarray, block, is_locked: bool, is_active: bool) -> None:
@@ -293,6 +345,14 @@ def main() -> None:
             elif key == ord("2"):
                 app.state.finger_mode = config.TWO_FINGER
                 app.reset_current_interaction()
+            elif key in (ord("b"), ord("B")):
+                app.set_motion_profile(config.MOTION_PROFILE_BASELINE)
+            elif key in (ord("a"), ord("A")):
+                app.set_motion_profile(config.MOTION_PROFILE_ACCEL)
+            elif key in (ord("m"), ord("M")):
+                app.set_motion_profile(config.MOTION_PROFILE_MOMENTUM)
+            elif key in (ord("e"), ord("E")):
+                app.set_motion_profile(config.MOTION_PROFILE_MOMENTUM_1EURO)
     finally:
         app.close()
         cv2.destroyAllWindows()
