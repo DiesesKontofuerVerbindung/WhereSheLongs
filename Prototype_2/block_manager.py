@@ -80,3 +80,9 @@ class BlockManager:
     def reset_uncompleted_positions(self) -> None:
         for block in self.blocks:
             self.restore(block.block_id)
+
+    def reset_all(self) -> None:
+        for block in self.blocks:
+            block.completed = False
+            block.center_x = block.initial_x
+            block.center_y = block.initial_y

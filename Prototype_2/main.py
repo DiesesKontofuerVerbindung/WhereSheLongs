@@ -70,6 +70,18 @@ class PrototypeApp:
         self.state.last_horizontal_distance = 0.0
         self.state.status_message = "当前交互已 reset；已完成方块保留"
 
+    def reset_all_blocks(self) -> None:
+        if self.logger.active is not None:
+            self.logger.finish_trial("aborted", "full_reset", time.perf_counter())
+        self.state.mouse_drag = None
+        self.detector.reset(self.blocks)
+        self.blocks.reset_all()
+        self.checklist.reset()
+        self.logger.set_blocks_completed(0)
+        self.state.last_vertical_distance = 0.0
+        self.state.last_horizontal_distance = 0.0
+        self.state.status_message = "五个方块与 Checklist 已全部重置"
+
     def update_fps(self) -> None:
         now = time.perf_counter()
         delta = max(1e-6, now - self._last_frame_time)
@@ -189,19 +201,19 @@ class PrototypeApp:
 
         frame = self.state.last_frame
         finger_xy = "-- / --" if frame is None or frame.cursor is None else f"{frame.cursor.normalized_x:.2f} / {frame.cursor.normalized_y:.2f}"
+        mapped_xy = "-- / --" if frame is None or frame.cursor is None else f"{frame.cursor.screen_x} / {frame.cursor.screen_y}"
+        hand_status = "HOLD" if frame and frame.cursor_held else "YES" if frame and frame.hand_detected else "NO"
+        extensions = "--" if frame is None else f"index={'UP' if frame.index_extended else 'DOWN'} middle={'UP' if frame.middle_extended else 'DOWN'}"
         metrics = calculate_metrics(self.logger.records)
         accuracy = metrics["accuracy"]
         accuracy_text = "n/a" if accuracy is None else f"{float(accuracy) * 100:.1f}%"
         debug_lines = [
-            "P positive | N negative | 1 one finger | 2 two fingers | R reset | Q quit",
-            f"FPS: {self.fps:5.1f}    Hand detected: {'YES' if frame and frame.hand_detected else 'NO'}",
-            f"Finger mode: {self.state.finger_mode.replace('_FINGER', '')}    Finger x/y: {finger_xy}",
-            f"State: {self.detector.state.value}    Target: {self.detector.target_block or '--'}",
-            f"Swipe dy: {self.state.last_vertical_distance:6.1f}    Swipe dx: {self.state.last_horizontal_distance:6.1f}",
-            f"Checklist Progress: {self.blocks.completed_count} / {config.BLOCK_COUNT}",
-            f"Expected trial: {self.state.expected_type.upper()}    Trials completed: {self.logger.completed_trials} / {self.logger.target_total}",
-            f"TP: {metrics['tp']}    TN: {metrics['tn']}    FP: {metrics['fp']}    FN: {metrics['fn']}    Accuracy: {accuracy_text}",
-            f"Status: {self.state.status_message}",
+            "P positive | N negative | 1 one finger | 2 two fingers | R current reset | T all reset | Q quit",
+            f"FPS: {self.fps:5.1f}    Hand: {hand_status}    Mode: {self.state.finger_mode.replace('_FINGER', '')}    {extensions}",
+            f"Raw x/y: {finger_xy}    Mapped x/y: {mapped_xy}    State: {self.detector.state.value}    Target: {self.detector.target_block or '--'}",
+            f"Swipe dy/dx: {self.state.last_vertical_distance:6.1f} / {self.state.last_horizontal_distance:6.1f}    Checklist: {self.blocks.completed_count} / {config.BLOCK_COUNT}",
+            f"Expected: {self.state.expected_type.upper()}    Trials: {self.logger.completed_trials} / {self.logger.target_total}    TP/TN/FP/FN: {metrics['tp']}/{metrics['tn']}/{metrics['fp']}/{metrics['fn']}    Acc: {accuracy_text}",
+            f"Camera: {self.tracker.error or 'ready'}    Status: {self.state.status_message}",
         ]
         base_y = config.WINDOW_HEIGHT - len(debug_lines) * 22 - 10
         for index, line in enumerate(debug_lines):
@@ -236,6 +248,8 @@ def main() -> None:
                 break
             if key in (ord("r"), ord("R")):
                 app.reset_current_interaction()
+            elif key in (ord("t"), ord("T")):
+                app.reset_all_blocks()
             elif key in (ord("p"), ord("P")):
                 app.state.expected_type = "positive"
                 app.state.status_message = "Expected trial = POSITIVE"

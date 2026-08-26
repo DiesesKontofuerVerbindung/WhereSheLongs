@@ -11,6 +11,7 @@ import config
 from block_manager import BlockManager
 from checklist_mapper import ChecklistMapper
 from hand_tracker import map_normalized_y_to_screen, valid_finger_mode
+from main import PrototypeApp
 from swipe_detector import Point, SwipeDetector
 from swipe_state import SwipeState
 from test_logger import TestLogger, calculate_metrics
@@ -36,7 +37,7 @@ class Prototype2Tests(unittest.TestCase):
         self.assertLessEqual(abs(mapped_y - block.center_y), config.BLOCK_HEIGHT / 2 + config.BLOCK_HITBOX_MARGIN)
         self.assertEqual(
             map_normalized_y_to_screen(config.CURSOR_Y_INPUT_MAX),
-            int(config.CURSOR_Y_OUTPUT_MAX_RATIO * config.WINDOW_HEIGHT),
+            config.WINDOW_HEIGHT - 1,
         )
 
     def test_blocks_are_contiguous(self) -> None:
@@ -132,6 +133,15 @@ class Prototype2Tests(unittest.TestCase):
         metrics = calculate_metrics([])
         self.assertIsNone(metrics["precision"])
         self.assertIsNone(metrics["false_positive_rate"])
+
+    def test_full_reset_restores_all_blocks_and_checklist_items(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            app = PrototypeApp(Path(temporary_directory))
+            self.assertTrue(app.complete_block("block_1", "test"))
+            app.reset_all_blocks()
+            self.assertEqual(app.blocks.completed_count, 0)
+            self.assertEqual(app.checklist.completed_count, 0)
+            app.close()
 
 
 if __name__ == "__main__":

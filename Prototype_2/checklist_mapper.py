@@ -29,3 +29,7 @@ class ChecklistMapper:
 
     def snapshot(self) -> list[dict[str, object]]:
         return [dict(item) for item in self.items.values()]
+
+    def reset(self) -> None:
+        for item in self.items.values():
+            item["completed"] = False

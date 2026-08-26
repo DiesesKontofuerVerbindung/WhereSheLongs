@@ -38,6 +38,7 @@ cd D:\PEKING26082026
 - `P`：下一次正式 Trial 期望为 Positive。
 - `N`：下一次正式 Trial 期望为 Negative。
 - `R`：重置当前交互和未完成方块；已完成 Checklist 项保留。
+- `T`：重置全部五个方块和全部 Checklist 项，开始新一轮。
 - `Q` / `Esc`：退出并落盘。
 - 鼠标按住方块向上拖过 `REMOVE_THRESHOLD_Y`：永久可用的 fallback。
 
@@ -100,7 +101,7 @@ results/run_YYYYMMDD_HHMMSS_xxxxxx/
 
 所有交互阈值在 `config.py`：窗口六等分、方块尺寸/间距、`INTERACTION_BOTTOM_RATIO`、`BLOCK_ARM_TIME`、`BLOCK_HITBOX_MARGIN`、`MIN_SWIPE_START_DISTANCE`、`MIN_SWIPE_UP_DISTANCE`、`MAX_HORIZONTAL_DRIFT`、`MAX_SWIPE_TIME`、`REMOVE_THRESHOLD_Y`、`SMOOTHING_FACTOR`、`MAX_MISSING_HAND_TIME` 等。不要把门槛写回 `main.py`，否则调参会变成考古。
 
-如果光点实际只能下到屏幕中部，调整 `CURSOR_Y_INPUT_MAX`。默认把 MediaPipe 的 `y=0.00–0.62` 拉伸到可交互区 `0.00–5.5/6`，因此玩家无需把手伸到摄像头画面最下方也能触及第五区方块。
+如果光点实际只能下到屏幕中部，调整 `CURSOR_Y_INPUT_MAX`。默认把 MediaPipe 的 `y=0.00–0.62` 拉伸到整个窗口高度，因此玩家无需把手伸到摄像头画面最下方也能触及第五区方块。界面同时显示 Raw 与 Mapped 坐标、手是否暂时 HOLD、以及 index/middle 是否伸出：这能区分相机丢帧、坐标映射和两指模式门槛。
 
 ## 验收顺序
 

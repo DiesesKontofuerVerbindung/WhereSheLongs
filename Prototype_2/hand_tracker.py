@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import time
 from typing import Optional
 
 try:
@@ -34,6 +35,7 @@ class TrackingFrame:
     cursor: CursorPoint | None
     index_extended: bool = False
     middle_extended: bool = False
+    cursor_held: bool = False
 
 
 def _is_extended(landmarks: list[object], tip_index: int, pip_index: int) -> bool:
@@ -82,6 +84,8 @@ class HandTracker:
         self.error: Optional[str] = None
         self.hand_detected = False
         self._timestamp_ms = 0
+        self._last_valid_cursor: CursorPoint | None = None
+        self._last_valid_cursor_at: float | None = None
 
     @property
     def available(self) -> bool:
@@ -127,6 +131,7 @@ class HandTracker:
                 return False
             self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, config.CAMERA_WIDTH)
             self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, config.CAMERA_HEIGHT)
+            self.capture.set(cv2.CAP_PROP_BUFFERSIZE, config.CAMERA_BUFFER_SIZE)
             self.error = None
             return True
         except Exception as exc:
@@ -135,14 +140,15 @@ class HandTracker:
             return False
 
     def read(self, finger_mode: str) -> TrackingFrame:
+        now = time.monotonic()
         if not self.available:
             self.hand_detected = False
-            return TrackingFrame(False, finger_mode, None)
+            return self._held_or_empty_frame(finger_mode, now)
         ok, frame = self.capture.read()
         if not ok or frame is None:
             self.hand_detected = False
             self.error = "摄像头暂时无法读取画面。"
-            return TrackingFrame(False, finger_mode, None)
+            return self._held_or_empty_frame(finger_mode, now)
         if config.MIRROR_CAMERA:
             frame = cv2.flip(frame, 1)
         try:
@@ -152,7 +158,7 @@ class HandTracker:
             result = self.landmarker.detect_for_video(image, self._timestamp_ms)
             if not result.hand_landmarks:
                 self.hand_detected = False
-                return TrackingFrame(False, finger_mode, None)
+                return self._held_or_empty_frame(finger_mode, now)
             landmarks = result.hand_landmarks[0]
             self.hand_detected = True
             mode_valid, middle_extended = valid_finger_mode(landmarks, finger_mode)
@@ -168,11 +174,22 @@ class HandTracker:
                 screen_x=min(config.WINDOW_WIDTH - 1, int(normalized_x * config.WINDOW_WIDTH)),
                 screen_y=map_normalized_y_to_screen(normalized_y),
             )
+            self._last_valid_cursor = cursor
+            self._last_valid_cursor_at = now
             return TrackingFrame(True, finger_mode, cursor, index_extended, middle_extended)
         except Exception as exc:
             self.hand_detected = False
             self.error = f"手部追踪单帧失败: {exc}"
-            return TrackingFrame(False, finger_mode, None)
+            return self._held_or_empty_frame(finger_mode, now)
+
+    def _held_or_empty_frame(self, finger_mode: str, now: float) -> TrackingFrame:
+        if (
+            self._last_valid_cursor is not None
+            and self._last_valid_cursor_at is not None
+            and now - self._last_valid_cursor_at <= config.CURSOR_HOLD_TIME
+        ):
+            return TrackingFrame(False, finger_mode, self._last_valid_cursor, cursor_held=True)
+        return TrackingFrame(False, finger_mode, None)
 
     def close(self) -> None:
         if self.capture is not None:
@@ -184,3 +201,5 @@ class HandTracker:
             except Exception:
                 pass
             self.landmarker = None
+        self._last_valid_cursor = None
+        self._last_valid_cursor_at = None
