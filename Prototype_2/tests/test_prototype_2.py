@@ -31,7 +31,7 @@ def arm(detector: SwipeDetector, blocks: BlockManager, block_id: str, now: float
 class Prototype2Tests(unittest.TestCase):
     def test_vertical_cursor_calibration_reaches_the_block_row(self) -> None:
         blocks = BlockManager()
-        block = blocks.get("block_1")
+        block = blocks.get("wood_5")
         assert block is not None
         raw_y_for_block_center = (
             block.center_y / (config.CURSOR_Y_OUTPUT_MAX_RATIO * config.WINDOW_HEIGHT)
@@ -45,10 +45,17 @@ class Prototype2Tests(unittest.TestCase):
             int(config.CURSOR_Y_OUTPUT_MAX_RATIO * config.WINDOW_HEIGHT),
         )
 
-    def test_blocks_are_contiguous(self) -> None:
+    def test_only_the_top_wood_is_locked_and_interactable(self) -> None:
         blocks = BlockManager()
-        centers = [block.center_x for block in blocks.blocks]
-        self.assertTrue(all(second - first == config.BLOCK_WIDTH for first, second in zip(centers, centers[1:])))
+        top = blocks.top_block
+        assert top is not None
+        self.assertEqual(top.block_id, "wood_5")
+        self.assertEqual(blocks.hit_test(top.center_x, top.center_y).block_id, "wood_5")
+        lower = blocks.get("wood_4")
+        assert lower is not None
+        self.assertIsNone(blocks.hit_test(lower.center_x, lower.center_y + lower.height / 2 - 2))
+        self.assertTrue(blocks.mark_completed("wood_5"))
+        self.assertEqual(blocks.top_block.block_id, "wood_4")
 
     def test_two_finger_mode_requires_both_fingertips_extended(self) -> None:
         landmarks = [type("Landmark", (), {"x": 0.0, "y": 0.5})() for _ in range(21)]
@@ -61,7 +68,7 @@ class Prototype2Tests(unittest.TestCase):
     def test_hover_does_not_move_or_start_trial_until_armed(self) -> None:
         blocks = BlockManager()
         detector = SwipeDetector()
-        block = blocks.get("block_1")
+        block = blocks.get("wood_5")
         assert block is not None
         original_y = block.center_y
         event = detector.update(Point(block.center_x, block.center_y), 0.0, blocks, config.ONE_FINGER)
@@ -72,7 +79,7 @@ class Prototype2Tests(unittest.TestCase):
     def test_one_finger_upward_swipe_completes_once(self) -> None:
         blocks = BlockManager()
         detector = SwipeDetector()
-        block_id = "block_1"
+        block_id = "wood_5"
         now = arm(detector, blocks, block_id)
         block = blocks.get(block_id)
         assert block is not None
@@ -91,8 +98,8 @@ class Prototype2Tests(unittest.TestCase):
         ):
             blocks = BlockManager()
             detector = SwipeDetector()
-            now = arm(detector, blocks, "block_1")
-            block = blocks.get("block_1")
+            now = arm(detector, blocks, "wood_5")
+            block = blocks.get("wood_5")
             assert block is not None
             detector.update(Point(block.center_x + points[0], block.center_y + points[1]), now, blocks, config.ONE_FINGER)
             detector.update(Point(block.center_x + points[0], block.center_y + points[1]), now + 0.08, blocks, config.ONE_FINGER)
@@ -104,21 +111,21 @@ class Prototype2Tests(unittest.TestCase):
 
     def test_checklist_mapping_is_separate_and_idempotent(self) -> None:
         checklist = ChecklistMapper()
-        self.assertTrue(checklist.complete_for_block("block_1"))
-        self.assertFalse(checklist.complete_for_block("block_1"))
+        self.assertTrue(checklist.complete_for_block("wood_1"))
+        self.assertFalse(checklist.complete_for_block("wood_1"))
         self.assertEqual(checklist.completed_count, 1)
-        self.assertEqual(checklist.block_to_checklist["block_1"], "item_1")
+        self.assertEqual(checklist.block_to_checklist["wood_1"], "item_1")
 
     def test_logger_writes_required_trial_and_trajectory_fields(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             logger = TestLogger(Path(temporary_directory))
             blocks = BlockManager()
-            block = blocks.get("block_1")
+            block = blocks.get("wood_5")
             assert block is not None
             detector = SwipeDetector()
             sample = detector.update(Point(block.center_x, block.center_y), 0.0, blocks, config.ONE_FINGER)
             self.assertIsNotNone(sample.sample)
-            logger.start_trial("positive", config.ONE_FINGER, "block_1", "gesture", 0.0)
+            logger.start_trial("positive", config.ONE_FINGER, "wood_5", "gesture", 0.0)
             logger.append_sample(sample.sample)
             logger.finish_trial("success", "", 1.0, 300.0, 4.0)
             with logger.trials_path.open(newline="", encoding="utf-8") as file:
@@ -142,7 +149,7 @@ class Prototype2Tests(unittest.TestCase):
     def test_full_reset_restores_all_blocks_and_checklist_items(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             app = PrototypeApp(Path(temporary_directory))
-            self.assertTrue(app.complete_block("block_1", "test"))
+            self.assertTrue(app.complete_block("wood_5", "test"))
             app.reset_all_blocks()
             self.assertEqual(app.blocks.completed_count, 0)
             self.assertEqual(app.checklist.completed_count, 0)

@@ -18,15 +18,18 @@ MIRROR_CAMERA = True
 TARGET_FPS = 30
 CAMERA_BUFFER_SIZE = 1
 
-# Layout: blocks live in logical section 5, between 4/6 and 5/6 of the screen.
+# Layout: five 2D logs overlap into one stack; only its top log is interactable.
 SECTION_COUNT = 6
 SECTION_HEIGHT = WINDOW_HEIGHT / SECTION_COUNT
 BLOCK_COUNT = 5
-BLOCK_WIDTH = 100
-BLOCK_HEIGHT = 100
+BLOCK_WIDTH = 500
+BLOCK_HEIGHT = 68
 BLOCK_GAP = 0
 BLOCK_SECTION = 5
-BLOCK_CENTER_Y = SECTION_HEIGHT * (BLOCK_SECTION - 0.5)
+WOOD_STACK_CENTER_X = WINDOW_WIDTH / 2
+WOOD_STACK_BASE_Y = WINDOW_HEIGHT * 0.82
+WOOD_STACK_LAYER_STEP = 48
+WOOD_STACK_X_OFFSETS = (0, -22, 18, -12, 10)
 
 # Interaction and swipe geometry.
 INTERACTION_BOTTOM_RATIO = 1.25

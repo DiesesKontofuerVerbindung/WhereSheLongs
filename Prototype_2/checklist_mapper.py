@@ -8,11 +8,11 @@ import config
 class ChecklistMapper:
     def __init__(self) -> None:
         self.block_to_checklist = {
-            f"block_{index}": f"item_{index}"
+            f"wood_{index}": f"item_{index}"
             for index in range(1, config.BLOCK_COUNT + 1)
         }
         self.items = {
-            item_id: {"item_id": item_id, "label": f"Item {index}", "completed": False}
+            item_id: {"item_id": item_id, "label": f"Wood {index}", "completed": False}
             for index, item_id in enumerate(self.block_to_checklist.values(), start=1)
         }
 

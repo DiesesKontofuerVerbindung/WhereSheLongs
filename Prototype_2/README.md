@@ -1,6 +1,6 @@
 # Prototype 2 — Swipe-up Checklist Interaction v0.1
 
-独立技术验证：
+独立技术验证：二维木头堆场景。程序始终锁定最上层木头；只有该木头能进入 Hover/Armed/Swipe，成功划走后自动锁定下一层。
 
 ```text
 Webcam -> MediaPipe Hand Tracking -> 1/2 finger cursor
@@ -62,11 +62,11 @@ Swipe 只跟随 Y 方向，X 方向保持方块原位。每个 block 有独立 `
 
 ```python
 {
-    "block_1": "item_1",
-    "block_2": "item_2",
-    "block_3": "item_3",
-    "block_4": "item_4",
-    "block_5": "item_5",
+    "wood_1": "item_1",
+    "wood_2": "item_2",
+    "wood_3": "item_3",
+    "wood_4": "item_4",
+    "wood_5": "item_5",
 }
 ```
 

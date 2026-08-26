@@ -171,6 +171,7 @@ class PrototypeApp:
 
     def render(self) -> np.ndarray:
         canvas = np.full((config.WINDOW_HEIGHT, config.WINDOW_WIDTH, 3), (0, 0, 0), dtype=np.uint8)
+        cv2.putText(canvas, "WOOD STACK — swipe the locked top log upward", (24, 36), cv2.FONT_HERSHEY_SIMPLEX, 0.72, (220, 220, 220), 2, cv2.LINE_AA)
         for section in range(1, config.SECTION_COUNT):
             y = int(section * config.SECTION_HEIGHT)
             cv2.line(canvas, (0, y), (config.WINDOW_WIDTH, y), (42, 42, 42), 1)
@@ -183,21 +184,17 @@ class PrototypeApp:
         cv2.line(canvas, (0, int(config.REMOVE_THRESHOLD_Y)), (config.WINDOW_WIDTH, int(config.REMOVE_THRESHOLD_Y)), (0, 190, 120), 2)
         cv2.putText(canvas, "REMOVE THRESHOLD", (config.WINDOW_WIDTH - 190, int(config.REMOVE_THRESHOLD_Y) - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 220, 150), 1, cv2.LINE_AA)
 
-        colors = {
-            SwipeState.TRACKING: (150, 155, 170),
-            SwipeState.BLOCK_HOVER: (0, 180, 255),
-            SwipeState.BLOCK_ARMED: (0, 235, 255),
-            SwipeState.SWIPING: (255, 170, 50),
-        }
         target = self.detector.target_block
+        locked = self.blocks.top_block
         for block in self.blocks.blocks:
             if block.completed and block.removal_started_at is None:
                 continue
-            color = (150, 115, 255) if block.completed else colors.get(self.detector.state if target == block.block_id else SwipeState.TRACKING, (150, 155, 170))
-            top_left = (int(block.center_x - config.BLOCK_WIDTH / 2), int(block.center_y - config.BLOCK_HEIGHT / 2))
-            bottom_right = (int(block.center_x + config.BLOCK_WIDTH / 2), int(block.center_y + config.BLOCK_HEIGHT / 2))
-            cv2.rectangle(canvas, top_left, bottom_right, color, 4 if target == block.block_id else 2, cv2.LINE_AA)
-            cv2.putText(canvas, block.block_id.replace("block_", ""), (top_left[0] + 42, top_left[1] + 59), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2, cv2.LINE_AA)
+            self._draw_wood_log(
+                canvas,
+                block,
+                is_locked=locked is not None and block.block_id == locked.block_id,
+                is_active=target == block.block_id,
+            )
 
         if self.detector.trail:
             for first, second in zip(self.detector.trail, self.detector.trail[1:]):
@@ -219,7 +216,7 @@ class PrototypeApp:
         debug_lines = [
             "P positive | N negative | 1 one finger | 2 two fingers | R current reset | T all reset | Q quit",
             f"FPS: {self.fps:5.1f}    Hand: {hand_status}    Mode: {self.state.finger_mode.replace('_FINGER', '')}    {extensions}",
-            f"Raw x/y: {finger_xy}    Virtual x/y: {mapped_xy} ({virtual_status})    State: {self.detector.state.value}    Target: {self.detector.target_block or '--'}",
+            f"Raw x/y: {finger_xy}    Virtual x/y: {mapped_xy} ({virtual_status})    State: {self.detector.state.value}    Locked: {locked.block_id if locked else '--'}",
             f"Swipe dy/dx: {self.state.last_vertical_distance:6.1f} / {self.state.last_horizontal_distance:6.1f}    Checklist: {self.blocks.completed_count} / {config.BLOCK_COUNT}",
             f"Expected: {self.state.expected_type.upper()}    Trials: {self.logger.completed_trials} / {self.logger.target_total}    TP/TN/FP/FN: {metrics['tp']}/{metrics['tn']}/{metrics['fp']}/{metrics['fn']}    Acc: {accuracy_text}",
             f"Camera: {self.tracker.error or 'ready'}    Status: {self.state.status_message}",
@@ -234,6 +231,29 @@ class PrototypeApp:
             mark = "[x]" if item["completed"] else "[ ]"
             cv2.putText(canvas, f"{mark} {item['label']}", (24, checklist_y + index * 24), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (120, 230, 160) if item["completed"] else (190, 195, 205), 1, cv2.LINE_AA)
         return canvas
+
+    @staticmethod
+    def _draw_wood_log(canvas: np.ndarray, block, is_locked: bool, is_active: bool) -> None:
+        """Draw one flat 2D log with a visible end grain and lock feedback."""
+
+        radius = int(block.height / 2)
+        left = int(block.center_x - block.width / 2)
+        right = int(block.center_x + block.width / 2)
+        center_y = int(block.center_y)
+        body_color = (42, 104, 166) if not block.completed else (90, 120, 210)
+        edge_color = (70, 165, 245) if is_locked else (75, 125, 190)
+        if is_active:
+            edge_color = (0, 230, 255)
+        cv2.rectangle(canvas, (left + radius, center_y - radius), (right - radius, center_y + radius), body_color, -1, cv2.LINE_AA)
+        cv2.circle(canvas, (left + radius, center_y), radius, (55, 130, 196), -1, cv2.LINE_AA)
+        cv2.circle(canvas, (right - radius, center_y), radius, (50, 118, 180), -1, cv2.LINE_AA)
+        cv2.rectangle(canvas, (left + radius, center_y - radius), (right - radius, center_y + radius), edge_color, 3 if is_locked else 2, cv2.LINE_AA)
+        cv2.circle(canvas, (left + radius, center_y), radius, edge_color, 3 if is_locked else 2, cv2.LINE_AA)
+        cv2.circle(canvas, (right - radius, center_y), radius, edge_color, 3 if is_locked else 2, cv2.LINE_AA)
+        cv2.ellipse(canvas, (right - radius, center_y), (max(4, radius // 2), max(4, radius // 2)), 0, 0, 360, (85, 70, 45), 2, cv2.LINE_AA)
+        cv2.putText(canvas, block.block_id.replace("wood_", "WOOD "), (left + radius + 20, center_y + 8), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (235, 235, 220), 2, cv2.LINE_AA)
+        if is_locked:
+            cv2.putText(canvas, "LOCKED", (left + radius + 170, center_y - radius - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (0, 235, 255), 2, cv2.LINE_AA)
 
     def close(self) -> None:
         self.logger.close(time.perf_counter())
