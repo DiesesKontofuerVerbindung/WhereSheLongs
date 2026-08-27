@@ -11,8 +11,8 @@ const SEGMENT_CENTERS := {
 }
 const SEGMENT_SPAWNS := {
     1: Vector2(384.0, 840.0),
-    2: Vector2(2140.0, 850.0),
-    3: Vector2(4060.0, 850.0),
+    2: Vector2(2284.0, 480.0),
+    3: Vector2(3939.0, 485.0),
 }
 
 # Position is the fixed route anchor. Collision offset/size is the tunable gameplay layer.

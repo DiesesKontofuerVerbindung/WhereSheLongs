@@ -17,7 +17,7 @@ func _run() -> void:
     await _test_mechanics_scene()
     await _test_continuous_parkour()
     if failures.is_empty():
-        print("[PARKOUR V2 SMOKE PASS] S2 height/jump/slide/shortcut, S3 two-plant safe-risk flow, guide-path Amai, checkpoints, completion one-shot, and shared-player hand-off passed.")
+        print("[PARKOUR V2 SMOKE PASS] Figma S2 height/jump/slide rhythm, S3 three-flower safe-risk flow, guide-path Amai, checkpoints, completion one-shot, and shared-player hand-off passed.")
         quit(0)
         return
     for failure in failures:
@@ -85,6 +85,7 @@ func _test_continuous_parkour() -> void:
     var vine_b = scene.get_node("Gameplay/Segment02_Vines/VineB")
     var plant_a = scene.get_node("Gameplay/Segment03_PredatorPlant/PredatorPlant")
     var plant_b = scene.get_node("Gameplay/Segment03_PredatorPlant/PredatorPlantB")
+    var plant_c = scene.get_node("Gameplay/Segment03_PredatorPlant/PredatorPlantC")
     var amai = scene.get_node("AmaiPlaceholder")
     var camera: Camera2D = scene.get_node("DesignCamera")
     var expected_route: Array[StringName] = [&"J1", &"J2", &"J3", &"J3_5", &"J4"]
@@ -154,6 +155,13 @@ func _test_continuous_parkour() -> void:
         plant_b.reset_choice()
         plant_b._on_risk_route_entered(player)
         _check(plant_b.last_choice == &"RISK_ROUTE", "Plant B upper route did not record RISK_ROUTE")
+        plant_c.reset_choice()
+        plant_c.set_state(plant_c.PlantState.CLOSED)
+        plant_c._on_safe_route_entered(player)
+        _check(plant_c.last_choice == &"WAIT", "Plant C CLOSED safe route did not record WAIT")
+        plant_c.reset_choice()
+        plant_c._on_risk_route_entered(player)
+        _check(plant_c.last_choice == &"RISK_ROUTE", "Plant C upper route did not record RISK_ROUTE")
 
         await scene.debug_complete_parkour()
         await scene.debug_complete_parkour()
@@ -182,11 +190,11 @@ func _test_segment_02_geometry(scene: Node, motor: Node, normal_height: float, s
         "Gameplay/Segment02_Vines/RaisedStepB",
         "Gameplay/Segment02_Vines/ExitPlatform",
     ]
-    _check(_surfaces_have_multiple_heights(scene, route_nodes, 4), "Segment 02 does not have four distinct gameplay heights")
+    _check(_surfaces_have_multiple_heights(scene, route_nodes, 5), "Segment 02 does not preserve the Figma high-low platform rhythm")
     _check(_surface_route_is_reachable(scene, route_nodes, motor), "Segment 02 main route contains an unreachable jump")
     var shortcut = scene.get_node("Gameplay/Segment02_Vines/OptionalNarrowShortcut") as Node2D
     var shortcut_size: Vector2 = shortcut.get("surface_size")
-    _check(shortcut_size.x <= 150.0 and _surface_is_reachable(scene.get_node("Gameplay/Segment02_Vines/RaisedStepB"), shortcut, motor), "Segment 02 narrow shortcut is missing or unreachable")
+    _check(shortcut_size.x <= 150.0 and _surface_is_reachable(scene.get_node("Gameplay/Segment02_Vines/RaisedStepA"), shortcut, motor), "Segment 02 narrow vine shortcut is missing or unreachable")
 
     var floor = scene.get_node("Gameplay/Segment02_Vines/LowRunPlatform") as Node2D
     var gate_shape_node: CollisionShape2D = scene.get_node("Gameplay/Segment02_Vines/VineB/StaticBody2D/CollisionShape2D")
@@ -198,27 +206,24 @@ func _test_segment_02_geometry(scene: Node, motor: Node, normal_height: float, s
 
 func _test_segment_03_geometry(scene: Node, motor: Node) -> void:
     var main_route := [
-        "Gameplay/Segment03_PredatorPlant/StartPlatform",
-        "Gameplay/Segment03_PredatorPlant/ApproachPlatformA",
-        "Gameplay/Segment03_PredatorPlant/TimingFloorA",
-        "Gameplay/Segment03_PredatorPlant/RecoveryPlatform",
-        "Gameplay/Segment03_PredatorPlant/ApproachPlatformB",
-        "Gameplay/Segment03_PredatorPlant/FinishPlatform",
+        "Gameplay/Segment03_PredatorPlant/Flower1Launch",
+        "Gameplay/Segment03_PredatorPlant/LowerGround01",
+        "Gameplay/Segment03_PredatorPlant/LowerGround02",
+        "Gameplay/Segment03_PredatorPlant/LowerGround03",
+        "Gameplay/Segment03_PredatorPlant/Flower3Landing",
     ]
     var risk_route := [
-        "Gameplay/Segment03_PredatorPlant/ApproachPlatformA",
-        "Gameplay/Segment03_PredatorPlant/PlantARisk01",
-        "Gameplay/Segment03_PredatorPlant/PlantARisk02",
-        "Gameplay/Segment03_PredatorPlant/PlantARisk03",
-        "Gameplay/Segment03_PredatorPlant/ApproachPlatformB",
-        "Gameplay/Segment03_PredatorPlant/PlantBRisk01",
-        "Gameplay/Segment03_PredatorPlant/PlantBRisk02",
-        "Gameplay/Segment03_PredatorPlant/FinishPlatform",
+        "Gameplay/Segment03_PredatorPlant/Flower1Launch",
+        "Gameplay/Segment03_PredatorPlant/Flower1Landing",
+        "Gameplay/Segment03_PredatorPlant/Flower2Landing",
+        "Gameplay/Segment03_PredatorPlant/Flower3Launch",
+        "Gameplay/Segment03_PredatorPlant/Flower3Landing",
     ]
-    _check(_surfaces_have_multiple_heights(scene, main_route, 4), "Segment 03 approach/recovery route is too flat")
+    _check(_surfaces_have_multiple_heights(scene, main_route, 5), "Segment 03 lower route does not preserve the Figma terrain rhythm")
     _check(_surface_route_is_reachable(scene, main_route, motor), "Segment 03 safe route contains an unreachable jump")
     _check(_surface_route_is_reachable(scene, risk_route, motor), "Segment 03 risk platforms are unreachable")
     _check(scene.get_node("Gameplay/Segment03_PredatorPlant/PredatorPlantB") != null, "Segment 03 is missing Plant B")
+    _check(scene.get_node("Gameplay/Segment03_PredatorPlant/PredatorPlantC") != null, "Segment 03 is missing Plant C")
     _check(scene.get_node("Gameplay/Checkpoints/S3AfterPlant") != null, "Segment 03 recovery checkpoint is missing")
 
 
@@ -248,12 +253,13 @@ func _test_debug_overlay_coverage(scene: Node) -> void:
         ^"../Gameplay/Segment02_Vines/VineB/SlideSensor/CollisionShape2D",
         ^"../Gameplay/Segment03_PredatorPlant/PredatorPlant/HazardArea/CollisionShape2D",
         ^"../Gameplay/Segment03_PredatorPlant/PredatorPlantB/HazardArea/CollisionShape2D",
+        ^"../Gameplay/Segment03_PredatorPlant/PredatorPlantC/HazardArea/CollisionShape2D",
         ^"../Gameplay/Checkpoints/S2AfterVine/CollisionShape2D",
         ^"../Gameplay/Checkpoints/S3AfterPlant/CollisionShape2D",
     ]
     for shape_path in required_shapes:
         _check(shape_path in debug.EXTRA_SHAPE_PATHS, "F4 overlay is missing %s" % shape_path)
-    _check(root.get_tree().get_nodes_in_group("parkour_greybox_surface").size() >= 16, "F4 overlay cannot find the new greybox platforms")
+    _check(root.get_tree().get_nodes_in_group("parkour_greybox_surface").size() >= 14, "F4 overlay cannot find the Figma-aligned greybox platforms")
 
 
 func _surfaces_have_multiple_heights(scene: Node, paths: Array, minimum_count: int) -> bool:
