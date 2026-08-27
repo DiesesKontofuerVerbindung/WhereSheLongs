@@ -104,6 +104,7 @@ flip_h = true
 
 [node name="RunnerActionController" type="Node" parent="Player"]
 script = ExtResource("2_runner")
+visual_path = NodePath("../XiaolingSprite")
 suspend_runner_physics = true
 
 [node name="Xiaomai" type="CharacterBody2D" parent="."]
@@ -128,10 +129,13 @@ text = "小麦"
 
 [node name="RunnerActionController" type="Node" parent="Xiaomai"]
 script = ExtResource("2_runner")
+visual_path = NodePath("../XiaomaiSprite")
 
 [node name="VineEchoCoordinator" type="Node" parent="."]
 script = ExtResource("4_coordinator")
 automatic_forward = false
+echo_waits_at_gates = true
+echo_fixed_route = PackedVector2Array(190, 774, 350, 774, 750, 774, 1150, 774, 1550, 774, 1900, 774)
 
 [node name="DebugLayer" type="CanvasLayer" parent="."]
 

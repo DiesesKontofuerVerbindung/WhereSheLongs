@@ -31,12 +31,17 @@ func _run() -> void:
     var xiaomai_runner = scene.get_node("Xiaomai/RunnerActionController")
     var gate_01 = scene.get_node("Gate01")
     var gate_02 = scene.get_node("Gate02")
+    var gate_03 = scene.get_node("Gate03")
+    var gate_04 = scene.get_node("Gate04")
 
     _check(player.scene_file_path == "res://shared/player/player.tscn", "Vine Segment does not reuse the Shared Player")
     _check(player_runner.get_script() == xiaomai_runner.get_script(), "Player and Xiaomai do not share RunnerActionController")
     _check(player_runner.run_speed == xiaomai_runner.run_speed, "Player and Xiaomai horizontal speeds differ")
     _check(gate_01.has_first_round_echo_bypass(xiaomai), "Gate 01 does not bypass Xiaomai's NONE echo")
     _check(not gate_02.has_first_round_echo_bypass(xiaomai), "Only Gate 01 may bypass Xiaomai")
+    for gate in [gate_01, gate_02, gate_03, gate_04]:
+        _check(gate.has_fixed_ground_route(xiaomai), "%s lets Xiaomai land on the floating UP platform" % gate.name)
+    _check(coordinator.get_echo_fixed_route().size() == 6, "Fixed Xiaomai route must contain spawn, four waits, and the exit anchor")
 
     _test_sequence_one(coordinator)
     _test_sequence_two(coordinator)

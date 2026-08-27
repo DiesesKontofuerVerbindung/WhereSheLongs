@@ -11,11 +11,14 @@ signal action_performed(action: int)
 
 @export var runner_path: NodePath = ^".."
 @export var collision_shape_path: NodePath = ^"../CollisionShape2D"
+@export var visual_path: NodePath
 @export var run_speed := 300.0
 @export var gravity := 1700.0
 @export var jump_impulse := 900.0
 @export var slide_duration := 1.05
 @export var suspend_runner_physics := false
+@export var slide_visual_offset := Vector2(0.0, 8.0)
+@export_range(0.4, 1.0, 0.01) var slide_visual_scale_y := 0.72
 
 var is_running := false
 var is_sliding := false
@@ -25,6 +28,9 @@ var _normal_shape: Shape2D
 var _slide_shape: Shape2D
 var _normal_collision_position := Vector2.ZERO
 var _slide_collision_position := Vector2.ZERO
+var _visual: Node2D
+var _normal_visual_position := Vector2.ZERO
+var _normal_visual_scale := Vector2.ONE
 
 @onready var runner: CharacterBody2D = get_node(runner_path)
 @onready var collision_shape: CollisionShape2D = get_node(collision_shape_path)
@@ -33,6 +39,7 @@ var _slide_collision_position := Vector2.ZERO
 func _ready() -> void:
     process_physics_priority = 10
     _cache_collision_shapes()
+    _cache_visual()
 
 
 func start_auto_run() -> void:
@@ -120,9 +127,26 @@ func _cache_collision_shapes() -> void:
         _slide_collision_position = _normal_collision_position + Vector2(0.0, (normal_rectangle.size.y - slide_rectangle.size.y) * 0.5)
 
 
+func _cache_visual() -> void:
+    if not visual_path.is_empty():
+        _visual = get_node_or_null(visual_path) as Node2D
+    if _visual == null:
+        for child in runner.get_children():
+            if child is Sprite2D and child.visible:
+                _visual = child as Node2D
+                break
+    if _visual == null:
+        return
+    _normal_visual_position = _visual.position
+    _normal_visual_scale = _visual.scale
+
+
 func _set_slide(enabled: bool) -> void:
     if _normal_shape == null or _slide_shape == null:
         return
     is_sliding = enabled
     collision_shape.shape = _slide_shape if enabled else _normal_shape
     collision_shape.position = _slide_collision_position if enabled else _normal_collision_position
+    if _visual != null:
+        _visual.position = _normal_visual_position + slide_visual_offset if enabled else _normal_visual_position
+        _visual.scale = Vector2(_normal_visual_scale.x, _normal_visual_scale.y * slide_visual_scale_y) if enabled else _normal_visual_scale

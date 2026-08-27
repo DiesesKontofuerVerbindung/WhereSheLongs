@@ -7,10 +7,12 @@ signal gate_passed(gate_index: int, body: Node2D)
 @export var gate_index := 0
 
 var _first_round_echo_bypass: CharacterBody2D
+var _fixed_ground_route_runner: CharacterBody2D
 
 @onready var decision_zone: Area2D = $DecisionZone
 @onready var pass_zone: Area2D = $PassZone
 @onready var slide_vine: StaticBody2D = $SlideVine
+@onready var up_path: StaticBody2D = $UpPath
 
 
 func _ready() -> void:
@@ -24,8 +26,17 @@ func allow_first_round_echo_bypass(echo_runner: CharacterBody2D) -> void:
     slide_vine.add_collision_exception_with(echo_runner)
 
 
+func allow_fixed_ground_route(echo_runner: CharacterBody2D) -> void:
+    _fixed_ground_route_runner = echo_runner
+    up_path.add_collision_exception_with(echo_runner)
+
+
 func has_first_round_echo_bypass(echo_runner: CharacterBody2D) -> bool:
     return _first_round_echo_bypass == echo_runner
+
+
+func has_fixed_ground_route(echo_runner: CharacterBody2D) -> bool:
+    return _fixed_ground_route_runner == echo_runner
 
 
 func _on_decision_zone_body_entered(body: Node2D) -> void:

@@ -26,6 +26,7 @@ J4 only completes the platform portion. It does not complete Parkour. J5 and the
 - Smoke: `godot --headless --path . --script res://scenes/forest/parkour/tests/parkour_smoke_test.gd`
 - Vine echo prototype: `res://scenes/forest/parkour/vine_segment_prototype.tscn` (focused layout test)
 - Vine echo smoke: `godot --headless --path . --script res://scenes/forest/parkour/tests/vine_echo_smoke_test.gd`
+- Amai fixed-route 30-run validation: `godot --headless --path . --script res://scenes/forest/parkour/tests/amai_fixed_route_30_test.gd`
 
 Controls:
 
@@ -43,4 +44,4 @@ Segment 02 and 03 are deliberately Greybox placeholders. Their gameplay scripts 
 
 ## Segment 02 Vine Echo
 
-The full `parkour_prototype.tscn` uses the four-gate delayed-action rule in Segment 02. Horizontal movement remains player-controlled. Amai Echo independently runs to the next Gate's waiting point, then waits for the Player to reach that decision. At Gate N, Amai Echo executes the Player action stored from Gate N-1. Gate 01 gives Amai Echo `NONE` and bypasses her obstacle collision. Space locks `UP`; `S`/Down/PgDn locks `DOWN`; the first valid input per gate wins. The focused `vine_segment_prototype.tscn` is retained for mechanism-only inspection.
+The full `parkour_prototype.tscn` uses the four-gate delayed-action rule in Segment 02. Horizontal movement remains player-controlled. Amai Echo follows a fixed ground route with one spawn anchor, four wait anchors, and one exit anchor. She runs ahead independently, waits 90 px before each Gate, ignores the floating `UP PATH` platforms, and still uses real gravity/jump plus the shortened slide collider. At Gate N, Amai Echo executes the Player action stored from Gate N-1. Gate 01 gives Amai Echo `NONE` and bypasses her obstacle collision. Space locks `UP`; `S`/Down/PgDn locks `DOWN`; the first valid input per gate wins. The focused `vine_segment_prototype.tscn` is retained for mechanism-only inspection.

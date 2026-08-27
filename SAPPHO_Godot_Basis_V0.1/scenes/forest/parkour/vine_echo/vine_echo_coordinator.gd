@@ -19,6 +19,9 @@ signal gate_action_locked(gate_index: int, player_action: int, xiaomai_action: i
 @export var echo_start_offset := Vector2(-18.0, 0.0)
 @export var echo_waits_at_gates := false
 @export var echo_wait_offset := 90.0
+@export var echo_fixed_route := PackedVector2Array()
+@export var echo_anchor_tolerance := 4.0
+@export var echo_ground_snap_tolerance := 20.0
 
 var previous_player_action = RunnerAction.NONE
 var current_gate_index = 0
@@ -32,6 +35,8 @@ var _echo_crossing_gate := false
 var _gates: Array[Node2D] = []
 var _player_history: Array[int] = []
 var _xiaomai_history: Array[int] = []
+var _last_echo_anchor_index := -1
+var _echo_anchor_hits: Array[Vector2] = []
 
 @onready var player: CharacterBody2D = get_node(player_path)
 @onready var xiaomai: CharacterBody2D = get_node(xiaomai_path)
@@ -46,6 +51,8 @@ func _ready() -> void:
     for gate in _gates:
         gate.decision_requested.connect(_on_gate_decision_requested)
         gate.gate_passed.connect(_on_gate_passed)
+        if not echo_fixed_route.is_empty():
+            gate.allow_fixed_ground_route(xiaomai)
     if not _gates.is_empty():
         _gates[0].allow_first_round_echo_bypass(xiaomai)
     player.add_collision_exception_with(xiaomai)
@@ -69,6 +76,7 @@ func _physics_process(_delta: float) -> void:
     if _running:
         var player_horizontal_input := 1.0 if automatic_forward else Input.get_axis("move_left", "move_right")
         player_runner.set_horizontal_input(player_horizontal_input)
+        _settle_echo_on_fixed_route()
         xiaomai_runner.set_horizontal_input(_get_echo_horizontal_input(player_horizontal_input))
     _capture_held_decision_input()
     if _action_pending:
@@ -80,7 +88,10 @@ func begin_run() -> void:
     _running = true
     player.use_external_control()
     player.set_interaction_enabled(false)
-    xiaomai.global_position = player.global_position + echo_start_offset
+    player_runner.stop_run()
+    xiaomai_runner.stop_run()
+    xiaomai.global_position = _get_echo_route_anchor(0, player.global_position + echo_start_offset)
+    xiaomai.velocity = Vector2.ZERO
     xiaomai.visible = true
     var initial_input := 1.0 if automatic_forward else 0.0
     player_runner.start_run(initial_input)
@@ -117,6 +128,8 @@ func reset_rounds() -> void:
     _echo_crossing_gate = false
     _player_history.clear()
     _xiaomai_history.clear()
+    _last_echo_anchor_index = -1
+    _echo_anchor_hits.clear()
     _update_debug_label()
 
 
@@ -171,6 +184,14 @@ func get_xiaomai_history() -> Array[int]:
     return _xiaomai_history.duplicate()
 
 
+func get_echo_fixed_route() -> PackedVector2Array:
+    return echo_fixed_route.duplicate()
+
+
+func get_echo_anchor_hits() -> Array[Vector2]:
+    return _echo_anchor_hits.duplicate()
+
+
 func action_name(action: int) -> String:
     match action:
         RunnerAction.UP:
@@ -202,8 +223,8 @@ func _commit_pending_action() -> void:
     _pending_action = RunnerAction.NONE
 
     player_runner.perform_action(current_action)
+    _echo_crossing_gate = true
     if xiaomai_action != RunnerAction.NONE:
-        _echo_crossing_gate = true
         xiaomai_runner.perform_action(xiaomai_action)
 
     _player_history.append(current_action)
@@ -236,15 +257,54 @@ func _get_echo_horizontal_input(player_horizontal_input: float) -> float:
         return 1.0
     if not echo_waits_at_gates:
         return player_horizontal_input
-    if _echo_crossing_gate:
-        return 1.0
-    if current_gate_index >= _gates.size():
+    if current_gate_index >= _gates.size() and echo_fixed_route.is_empty():
         return 0.0
-    var waiting_gate := _gates[current_gate_index]
-    var waiting_x: float = waiting_gate.global_position.x - echo_wait_offset
-    if xiaomai.global_position.x < waiting_x - 4.0:
+    var target := _get_current_echo_target()
+    if xiaomai.global_position.x < target.x - echo_anchor_tolerance:
         return 1.0
+    if xiaomai.global_position.x > target.x + echo_anchor_tolerance:
+        return -1.0
     return 0.0
+
+
+func _get_current_echo_target_index() -> int:
+    if echo_fixed_route.is_empty():
+        return -1
+    var target_index: int = current_gate_index + 1
+    if _echo_crossing_gate:
+        target_index += 1
+    return clampi(target_index, 0, echo_fixed_route.size() - 1)
+
+
+func _get_current_echo_target() -> Vector2:
+    var fixed_index := _get_current_echo_target_index()
+    if fixed_index >= 0:
+        return echo_fixed_route[fixed_index]
+    if current_gate_index >= _gates.size():
+        return xiaomai.global_position
+    return Vector2(_gates[current_gate_index].global_position.x - echo_wait_offset, xiaomai.global_position.y)
+
+
+func _get_echo_route_anchor(index: int, fallback: Vector2) -> Vector2:
+    if index >= 0 and index < echo_fixed_route.size():
+        return echo_fixed_route[index]
+    return fallback
+
+
+func _settle_echo_on_fixed_route() -> void:
+    var target_index := _get_current_echo_target_index()
+    if target_index < 0:
+        return
+    var target := echo_fixed_route[target_index]
+    if absf(xiaomai.global_position.x - target.x) <= echo_anchor_tolerance:
+        xiaomai.global_position.x = target.x
+    if not xiaomai.is_on_floor():
+        return
+    if absf(xiaomai.global_position.y - target.y) <= echo_ground_snap_tolerance:
+        xiaomai.global_position.y = target.y
+    if xiaomai.global_position.distance_to(target) <= echo_ground_snap_tolerance and _last_echo_anchor_index != target_index:
+        _last_echo_anchor_index = target_index
+        _echo_anchor_hits.append(xiaomai.global_position)
 
 
 func _is_page_down(event: InputEvent) -> bool:

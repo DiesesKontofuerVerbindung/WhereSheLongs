@@ -729,6 +729,7 @@ flip_h = true
 
 [node name="RunnerActionController" type="Node" parent="Player"]
 script = ExtResource("17_runner")
+visual_path = NodePath("../XiaolingSprite")
 suspend_runner_physics = true
 
 [node name="AmaiPlaceholder" type="Node2D" parent="."]
@@ -780,6 +781,7 @@ text = "阿麦 Echo"
 
 [node name="RunnerActionController" type="Node" parent="AmaiEcho"]
 script = ExtResource("17_runner")
+visual_path = NodePath("../AmaiSprite")
 
 [node name="DesignCamera" type="Camera2D" parent="."]
 position = Vector2(960, 540)
@@ -798,6 +800,7 @@ debug_label_path = NodePath("../VineEchoDebug/Panel/DebugText")
 start_on_ready = false
 automatic_forward = false
 echo_waits_at_gates = true
+echo_fixed_route = PackedVector2Array(2440, 584, 2610, 584, 2930, 584, 3250, 584, 3570, 584, 3820, 584)
 
 [node name="VineEchoDebug" type="CanvasLayer" parent="."]
 layer = 10
