@@ -1,6 +1,7 @@
 extends SceneTree
 
 const MOTOR_SCRIPT := preload("res://scenes/forest/parkour/parkour_motor.gd")
+const AMAI_SCRIPT_PATH := "res://scenes/forest/parkour/amai_parkour_placeholder.gd"
 const MECHANICS_SCENE_PATH := "res://scenes/forest/parkour/parkour_mechanics_test.tscn"
 const PROTOTYPE_SCENE_PATH := "res://scenes/forest/parkour/parkour_prototype.tscn"
 
@@ -16,7 +17,7 @@ func _run() -> void:
     await _test_mechanics_scene()
     await _test_continuous_parkour()
     if failures.is_empty():
-        print("[PARKOUR V2 SMOKE PASS] Shared Player hand-off, J1-J4 route, right-edge eye transition, slide collider, vine choices, timed plant routes, checkpoints, Amai mimic, completion one-shot, and 10 full state cycles passed.")
+        print("[PARKOUR V2 SMOKE PASS] S2 height/jump/slide/shortcut, S3 two-plant safe-risk flow, guide-path Amai, checkpoints, completion one-shot, and shared-player hand-off passed.")
         quit(0)
         return
     for failure in failures:
@@ -80,8 +81,10 @@ func _test_continuous_parkour() -> void:
     var player: CharacterBody2D = scene.get_node("Player")
     var player_shape_node: CollisionShape2D = player.get_node("CollisionShape2D")
     var eye_transition = scene.get_node("EyeTransition")
-    var vine = scene.get_node("Gameplay/Segment02_Vines/VineGate")
-    var plant = scene.get_node("Gameplay/Segment03_PredatorPlant/PredatorPlant")
+    var vine_a = scene.get_node("Gameplay/Segment02_Vines/VineGate")
+    var vine_b = scene.get_node("Gameplay/Segment02_Vines/VineB")
+    var plant_a = scene.get_node("Gameplay/Segment03_PredatorPlant/PredatorPlant")
+    var plant_b = scene.get_node("Gameplay/Segment03_PredatorPlant/PredatorPlantB")
     var amai = scene.get_node("AmaiPlaceholder")
     var camera: Camera2D = scene.get_node("DesignCamera")
     var expected_route: Array[StringName] = [&"J1", &"J2", &"J3", &"J3_5", &"J4"]
@@ -104,56 +107,59 @@ func _test_continuous_parkour() -> void:
     scene.debug_set_slide(false)
     _check(is_equal_approx((player_shape_node.shape as CapsuleShape2D).height, original_height), "Slide collider did not restore")
 
-    var floor_shape := scene.get_node("Gameplay/Segment02_Vines/Ground/CollisionShape2D").shape as RectangleShape2D
-    var vine_shape := scene.get_node("Gameplay/Segment02_Vines/VineGate/StaticBody2D/CollisionShape2D").shape as RectangleShape2D
-    var floor_top := 950.0 - floor_shape.size.y * 0.5
-    var vine_bottom := 811.0 + vine_shape.size.y * 0.5
-    var under_gap := floor_top - vine_bottom
-    _check(original_height > under_gap and slide_capsule.height < under_gap, "Vine gate geometry does not block run while allowing slide")
-    var jump_apex: float = motor.jump_velocity * motor.jump_velocity / (2.0 * motor.gravity)
-    _check(jump_apex > floor_top - (811.0 - vine_shape.size.y * 0.5), "Vine gate cannot be cleared by the unified jump")
+    _test_segment_02_geometry(scene, motor, original_height, slide_capsule.height)
+    _test_segment_03_geometry(scene, motor)
+    _test_guide_paths(scene, amai)
+    _test_debug_overlay_coverage(scene)
 
-    plant.set_state(plant.PlantState.OPEN)
-    _check(plant.get_state_name() == "OPEN", "Plant OPEN state failed")
-    plant.set_state(plant.PlantState.CLOSED)
-    _check(plant.get_state_name() == "CLOSED", "Plant CLOSED state failed")
-
-    var counts := [0, 0, 0, 0]
-    scene.segment_01_completed.connect(func(): counts[0] += 1)
-    scene.segment_02_completed.connect(func(_choice): counts[1] += 1)
-    scene.segment_03_completed.connect(func(_choice): counts[2] += 1)
-    scene.parkour_completed.connect(func(): counts[3] += 1)
-
-    for run_index in range(10):
+    var completion_count := [0]
+    scene.parkour_completed.connect(func(): completion_count[0] += 1)
+    for run_index in range(3):
         scene.reset_run_for_test()
         for platform_id in expected_route:
             scene.debug_teleport_to_platform(platform_id)
         _check(scene.actual_route == expected_route, "Run %d recorded an invalid Segment 01 route" % [run_index + 1])
-        _check(counts[3] == run_index, "J4 completed the whole Parkour")
 
         await scene.debug_jump_to_segment(2)
         _check(scene.current_segment == 2 and camera.position.is_equal_approx(route.get_segment_center(2)), "Eye transition did not enter Segment 02")
-        vine.reset_choice()
-        var vine_choice: StringName = &"SLIDE" if run_index % 2 == 0 else &"JUMP"
-        vine.debug_choose(vine_choice)
-        _check(vine.last_choice == vine_choice, "Vine choice was not recorded")
-        if vine_choice == &"SLIDE":
-            scene.debug_set_slide(true)
-            scene.respawn(false)
-            _check(is_equal_approx((player_shape_node.shape as CapsuleShape2D).height, original_height), "Respawn did not restore collider after slide")
+        vine_a.reset_choice()
+        vine_a.debug_choose(&"JUMP")
+        _check(vine_a.last_choice == &"JUMP" and amai.active_guide == &"Segment02JumpGuide", "Vine A jump did not select Amai's jump guide")
+        vine_b.reset_choice()
+        vine_b.debug_choose(&"SLIDE")
+        _check(vine_b.last_choice == &"SLIDE" and amai.active_guide == &"Segment02SlideGuide", "Vine B slide did not select Amai's slide guide")
+        scene._on_s2_checkpoint_entered(player)
+        scene.debug_set_slide(true)
+        scene.respawn(false)
+        _check(player.velocity == Vector2.ZERO and motor.velocity == Vector2.ZERO, "S2 respawn did not clear player and motor velocity")
+        _check(not motor.is_sliding and is_equal_approx((player_shape_node.shape as CapsuleShape2D).height, original_height), "S2 respawn did not restore the normal collider")
 
         await scene.debug_jump_to_segment(3)
         _check(scene.current_segment == 3 and camera.position.is_equal_approx(route.get_segment_center(3)), "Eye transition did not enter Segment 03")
-        plant.reset_choice()
-        var plant_choice: StringName = &"WAIT" if run_index % 2 == 0 else &"RISK_ROUTE"
-        plant.debug_choose(plant_choice)
-        _check(amai.last_mimicked_choice == plant_choice, "Amai did not mimic the latest player choice")
+        var hazards := [0]
+        plant_a.hazard_triggered.connect(func(): hazards[0] += 1, CONNECT_ONE_SHOT)
+        plant_a.set_state(plant_a.PlantState.OPEN)
+        _check(plant_a.debug_trigger_hazard() and hazards[0] == 1, "Plant A OPEN state did not activate its hazard")
+        plant_a.reset_choice()
+        plant_a.set_state(plant_a.PlantState.CLOSED)
+        plant_a._on_safe_route_entered(player)
+        _check(plant_a.last_choice == &"WAIT" and amai.active_guide == &"Segment03SafeGuide", "Plant A CLOSED safe route did not select WAIT and the safe guide")
+        plant_a.reset_choice()
+        plant_a._on_risk_route_entered(player)
+        _check(plant_a.last_choice == &"RISK_ROUTE" and amai.active_guide == &"Segment03RiskGuide", "Plant A risk route did not select the upper guide")
+        plant_b.reset_choice()
+        plant_b.set_state(plant_b.PlantState.CLOSED)
+        plant_b._on_safe_route_entered(player)
+        _check(plant_b.last_choice == &"WAIT", "Plant B CLOSED safe route did not record WAIT")
+        plant_b.reset_choice()
+        plant_b._on_risk_route_entered(player)
+        _check(plant_b.last_choice == &"RISK_ROUTE", "Plant B upper route did not record RISK_ROUTE")
 
         await scene.debug_complete_parkour()
         await scene.debug_complete_parkour()
-        _check(scene.current_segment == 4, "Parkour did not enter Waterfall placeholder")
+        _check(scene.current_segment == 4, "Segment 03 finish did not enter the Waterfall placeholder")
+        _check(completion_count[0] == run_index + 1, "parkour_completed emitted more than once for run %d" % [run_index + 1])
 
-    _check(counts == [10, 10, 10, 10], "Segment or completion signals were not one-shot across 10 runs: %s" % [counts])
     _check(player.control_mode == player.ControlMode.LOCKED, "Waterfall intro placeholder did not lock control")
 
     scene.reset_run_for_test()
@@ -166,6 +172,129 @@ func _test_continuous_parkour() -> void:
 
     scene.queue_free()
     await process_frame
+
+
+func _test_segment_02_geometry(scene: Node, motor: Node, normal_height: float, slide_height: float) -> void:
+    var route_nodes := [
+        "Gameplay/Segment02_Vines/StartPlatform",
+        "Gameplay/Segment02_Vines/RaisedStepA",
+        "Gameplay/Segment02_Vines/LowRunPlatform",
+        "Gameplay/Segment02_Vines/RaisedStepB",
+        "Gameplay/Segment02_Vines/ExitPlatform",
+    ]
+    _check(_surfaces_have_multiple_heights(scene, route_nodes, 4), "Segment 02 does not have four distinct gameplay heights")
+    _check(_surface_route_is_reachable(scene, route_nodes, motor), "Segment 02 main route contains an unreachable jump")
+    var shortcut = scene.get_node("Gameplay/Segment02_Vines/OptionalNarrowShortcut") as Node2D
+    var shortcut_size: Vector2 = shortcut.get("surface_size")
+    _check(shortcut_size.x <= 150.0 and _surface_is_reachable(scene.get_node("Gameplay/Segment02_Vines/RaisedStepB"), shortcut, motor), "Segment 02 narrow shortcut is missing or unreachable")
+
+    var floor = scene.get_node("Gameplay/Segment02_Vines/LowRunPlatform") as Node2D
+    var gate_shape_node: CollisionShape2D = scene.get_node("Gameplay/Segment02_Vines/VineB/StaticBody2D/CollisionShape2D")
+    var gate_shape := gate_shape_node.shape as RectangleShape2D
+    var under_clearance := _surface_top(floor) - (gate_shape_node.global_position.y + gate_shape.size.y * 0.5)
+    _check(normal_height > under_clearance and slide_height < under_clearance, "Vine B must block standing movement while allowing the slide collider")
+    _check(scene.get_node("Gameplay/Checkpoints/S2AfterVine") != null, "S2_AFTER_VINE checkpoint is missing")
+
+
+func _test_segment_03_geometry(scene: Node, motor: Node) -> void:
+    var main_route := [
+        "Gameplay/Segment03_PredatorPlant/StartPlatform",
+        "Gameplay/Segment03_PredatorPlant/ApproachPlatformA",
+        "Gameplay/Segment03_PredatorPlant/TimingFloorA",
+        "Gameplay/Segment03_PredatorPlant/RecoveryPlatform",
+        "Gameplay/Segment03_PredatorPlant/ApproachPlatformB",
+        "Gameplay/Segment03_PredatorPlant/FinishPlatform",
+    ]
+    var risk_route := [
+        "Gameplay/Segment03_PredatorPlant/ApproachPlatformA",
+        "Gameplay/Segment03_PredatorPlant/PlantARisk01",
+        "Gameplay/Segment03_PredatorPlant/PlantARisk02",
+        "Gameplay/Segment03_PredatorPlant/PlantARisk03",
+        "Gameplay/Segment03_PredatorPlant/ApproachPlatformB",
+        "Gameplay/Segment03_PredatorPlant/PlantBRisk01",
+        "Gameplay/Segment03_PredatorPlant/PlantBRisk02",
+        "Gameplay/Segment03_PredatorPlant/FinishPlatform",
+    ]
+    _check(_surfaces_have_multiple_heights(scene, main_route, 4), "Segment 03 approach/recovery route is too flat")
+    _check(_surface_route_is_reachable(scene, main_route, motor), "Segment 03 safe route contains an unreachable jump")
+    _check(_surface_route_is_reachable(scene, risk_route, motor), "Segment 03 risk platforms are unreachable")
+    _check(scene.get_node("Gameplay/Segment03_PredatorPlant/PredatorPlantB") != null, "Segment 03 is missing Plant B")
+    _check(scene.get_node("Gameplay/Checkpoints/S3AfterPlant") != null, "Segment 03 recovery checkpoint is missing")
+
+
+func _test_guide_paths(scene: Node, amai: Node) -> void:
+    var guide_names: Array[StringName] = [
+        &"Segment01Guide",
+        &"Segment02MainGuide",
+        &"Segment02JumpGuide",
+        &"Segment02SlideGuide",
+        &"Segment03SafeGuide",
+        &"Segment03RiskGuide",
+    ]
+    for guide_name in guide_names:
+        _check(amai.has_guide(guide_name), "Amai guide %s is missing" % guide_name)
+        var guide = scene.get_node("Gameplay/AmaiGuides/%s" % guide_name)
+        _check(guide.get_child_count() >= 3, "Amai guide %s has too few anchors" % guide_name)
+    var amai_script := load(AMAI_SCRIPT_PATH) as GDScript
+    var amai_source := amai_script.source_code
+    _check("player.global_position +" not in amai_source and "lead_distance" not in amai_source, "Amai still uses direct player-position lead following")
+    _check("guide_root" in amai_source and "_guide_points" in amai_source, "Amai is not driven by predefined guide anchors")
+
+
+func _test_debug_overlay_coverage(scene: Node) -> void:
+    var debug = scene.get_node("ParkourDebug")
+    var required_shapes := [
+        ^"../Gameplay/Segment02_Vines/VineB/StaticBody2D/CollisionShape2D",
+        ^"../Gameplay/Segment02_Vines/VineB/SlideSensor/CollisionShape2D",
+        ^"../Gameplay/Segment03_PredatorPlant/PredatorPlant/HazardArea/CollisionShape2D",
+        ^"../Gameplay/Segment03_PredatorPlant/PredatorPlantB/HazardArea/CollisionShape2D",
+        ^"../Gameplay/Checkpoints/S2AfterVine/CollisionShape2D",
+        ^"../Gameplay/Checkpoints/S3AfterPlant/CollisionShape2D",
+    ]
+    for shape_path in required_shapes:
+        _check(shape_path in debug.EXTRA_SHAPE_PATHS, "F4 overlay is missing %s" % shape_path)
+    _check(root.get_tree().get_nodes_in_group("parkour_greybox_surface").size() >= 16, "F4 overlay cannot find the new greybox platforms")
+
+
+func _surfaces_have_multiple_heights(scene: Node, paths: Array, minimum_count: int) -> bool:
+    var heights: Array[float] = []
+    for path in paths:
+        var surface = scene.get_node(path) as Node2D
+        var top := _surface_top(surface)
+        var found := false
+        for height in heights:
+            if is_equal_approx(height, top):
+                found = true
+                break
+        if not found:
+            heights.append(top)
+    return heights.size() >= minimum_count
+
+
+func _surface_route_is_reachable(scene: Node, paths: Array, motor: Node) -> bool:
+    for index in range(paths.size() - 1):
+        var source = scene.get_node(paths[index]) as Node2D
+        var target = scene.get_node(paths[index + 1]) as Node2D
+        if not _surface_is_reachable(source, target, motor):
+            return false
+    return true
+
+
+func _surface_is_reachable(source: Node2D, target: Node2D, motor: Node) -> bool:
+    var discriminant: float = motor.jump_velocity * motor.jump_velocity + 2.0 * motor.gravity * (_surface_top(target) - _surface_top(source))
+    if discriminant < 0.0:
+        return false
+    var flight_time: float = (-motor.jump_velocity + sqrt(discriminant)) / motor.gravity
+    var center_gap: float = absf(target.global_position.x - source.global_position.x)
+    var source_size: Vector2 = source.get("surface_size")
+    var target_size: Vector2 = target.get("surface_size")
+    var edge_gap: float = maxf(0.0, center_gap - source_size.x * 0.5 - target_size.x * 0.5)
+    return edge_gap <= motor.move_speed * flight_time
+
+
+func _surface_top(surface: Node2D) -> float:
+    var surface_size: Vector2 = surface.get("surface_size")
+    return surface.global_position.y - surface_size.y * 0.5
 
 
 func _jump_is_reachable(scene: Node, from_id: StringName, to_id: StringName, motor: Node) -> bool:

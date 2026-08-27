@@ -52,6 +52,13 @@ func debug_choose(choice: StringName) -> void:
     _record_choice(choice)
 
 
+func debug_trigger_hazard() -> bool:
+    if state != PlantState.OPEN:
+        return false
+    hazard_triggered.emit()
+    return true
+
+
 func get_state_name() -> String:
     return "OPEN" if state == PlantState.OPEN else "CLOSED"
 

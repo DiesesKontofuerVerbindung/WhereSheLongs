@@ -12,8 +12,17 @@ const EXTRA_SHAPE_PATHS := [
     ^"../Gameplay/Segment02_Vines/VineGate/StaticBody2D/CollisionShape2D",
     ^"../Gameplay/Segment02_Vines/VineGate/JumpSensor/CollisionShape2D",
     ^"../Gameplay/Segment02_Vines/VineGate/SlideSensor/CollisionShape2D",
+    ^"../Gameplay/Segment02_Vines/VineB/StaticBody2D/CollisionShape2D",
+    ^"../Gameplay/Segment02_Vines/VineB/JumpSensor/CollisionShape2D",
+    ^"../Gameplay/Segment02_Vines/VineB/SlideSensor/CollisionShape2D",
     ^"../Gameplay/Segment03_PredatorPlant/PredatorPlant/HazardArea/CollisionShape2D",
     ^"../Gameplay/Segment03_PredatorPlant/PredatorPlant/RiskRouteSensor/CollisionShape2D",
+    ^"../Gameplay/Segment03_PredatorPlant/PredatorPlant/SafeRouteSensor/CollisionShape2D",
+    ^"../Gameplay/Segment03_PredatorPlant/PredatorPlantB/HazardArea/CollisionShape2D",
+    ^"../Gameplay/Segment03_PredatorPlant/PredatorPlantB/RiskRouteSensor/CollisionShape2D",
+    ^"../Gameplay/Segment03_PredatorPlant/PredatorPlantB/SafeRouteSensor/CollisionShape2D",
+    ^"../Gameplay/Checkpoints/S2AfterVine/CollisionShape2D",
+    ^"../Gameplay/Checkpoints/S3AfterPlant/CollisionShape2D",
     ^"../Gameplay/SectionTransitions/Segment01Exit/CollisionShape2D",
     ^"../Gameplay/SectionTransitions/Segment02Exit/CollisionShape2D",
     ^"../Gameplay/SectionTransitions/Segment03Finish/CollisionShape2D",
@@ -81,3 +90,10 @@ func _draw() -> void:
             var center := collision_shape.global_position
             draw_rect(Rect2(center - rectangle.size * 0.5, rectangle.size), Color(1.0, 0.55, 0.15, 0.22), true)
             draw_rect(Rect2(center - rectangle.size * 0.5, rectangle.size), Color(1.0, 0.55, 0.15, 0.9), false, 2.0)
+        for surface_node in get_tree().get_nodes_in_group("parkour_greybox_surface"):
+            var surface := surface_node as Node2D
+            if surface == null:
+                continue
+            var surface_size: Vector2 = surface.get("surface_size")
+            draw_rect(Rect2(surface.global_position - surface_size * 0.5, surface_size), Color(0.35, 0.95, 0.72, 0.25), true)
+            draw_rect(Rect2(surface.global_position - surface_size * 0.5, surface_size), Color(0.35, 0.95, 0.72, 0.95), false, 2.0)

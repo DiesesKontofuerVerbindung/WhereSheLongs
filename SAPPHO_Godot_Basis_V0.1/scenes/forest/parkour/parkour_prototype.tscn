@@ -1,4 +1,4 @@
-[gd_scene load_steps=27 format=3]
+[gd_scene load_steps=28 format=3]
 
 [ext_resource type="Script" path="res://scenes/forest/parkour/parkour_controller.gd" id="1_controller"]
 [ext_resource type="Texture2D" path="res://scenes/forest/parkour/reference/forest_parkour_art.png" id="2_art"]
@@ -12,12 +12,19 @@
 [ext_resource type="Script" path="res://scenes/forest/parkour/parkour_vine_gate.gd" id="10_vine"]
 [ext_resource type="Script" path="res://scenes/forest/parkour/parkour_predator_plant.gd" id="11_plant"]
 [ext_resource type="Script" path="res://scenes/forest/parkour/amai_parkour_placeholder.gd" id="12_amai"]
+[ext_resource type="Script" path="res://scenes/forest/parkour/parkour_greybox_surface.gd" id="13_surface"]
 
 [sub_resource type="RectangleShape2D" id="Rect_ground"]
 size = Vector2(1920, 100)
 
 [sub_resource type="RectangleShape2D" id="Rect_vine"]
 size = Vector2(160, 120)
+
+[sub_resource type="RectangleShape2D" id="Rect_vine_a"]
+size = Vector2(40, 110)
+
+[sub_resource type="RectangleShape2D" id="Rect_vine_b"]
+size = Vector2(130, 34)
 
 [sub_resource type="RectangleShape2D" id="Rect_jump_sensor"]
 size = Vector2(220, 190)
@@ -98,12 +105,24 @@ platform_id = &"J4"
 
 [node name="Segment02_Vines" type="Node2D" parent="Gameplay"]
 
-[node name="GroundVisual" type="Polygon2D" parent="Gameplay/Segment02_Vines"]
-polygon = PackedVector2Array(1920, 900, 3840, 900, 3840, 1080, 1920, 1080)
+[node name="GroundVisualA" type="Polygon2D" parent="Gameplay/Segment02_Vines"]
+polygon = PackedVector2Array(1920, 900, 2350, 900, 2350, 1080, 1920, 1080)
+color = Color(0.13, 0.31, 0.27, 1)
+
+[node name="GroundVisualB" type="Polygon2D" parent="Gameplay/Segment02_Vines"]
+polygon = PackedVector2Array(2420, 900, 2670, 900, 2670, 1080, 2420, 1080)
+color = Color(0.13, 0.31, 0.27, 1)
+
+[node name="GroundVisualC" type="Polygon2D" parent="Gameplay/Segment02_Vines"]
+polygon = PackedVector2Array(2740, 900, 3310, 900, 3310, 1080, 2740, 1080)
+color = Color(0.13, 0.31, 0.27, 1)
+
+[node name="GroundVisualD" type="Polygon2D" parent="Gameplay/Segment02_Vines"]
+polygon = PackedVector2Array(3390, 900, 3840, 900, 3840, 1080, 3390, 1080)
 color = Color(0.13, 0.31, 0.27, 1)
 
 [node name="Ground" type="StaticBody2D" parent="Gameplay/Segment02_Vines"]
-position = Vector2(2880, 950)
+position = Vector2(2880, 1280)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment02_Vines/Ground"]
 shape = SubResource("Rect_ground")
@@ -112,33 +131,75 @@ shape = SubResource("Rect_ground")
 position = Vector2(2100, 100)
 theme_override_colors/font_color = Color(0.62, 0.95, 0.83, 1)
 theme_override_font_sizes/font_size = 42
-text = "SEGMENT 02 · VINE PLACEHOLDER"
+text = "SEGMENT 02 · VINES / HEIGHT + SLIDE"
 
 [node name="Hint" type="Label" parent="Gameplay/Segment02_Vines"]
 position = Vector2(2100, 160)
 theme_override_font_sizes/font_size = 24
-text = "Space：跳过去    S / ↓：滑过去"
+text = "连续起伏：低藤跳跃 → 高梁滑铲 → 窄高台捷径"
+
+[node name="StartPlatform" type="StaticBody2D" parent="Gameplay/Segment02_Vines"]
+position = Vector2(2195, 860)
+script = ExtResource("13_surface")
+surface_size = Vector2(310, 80)
+
+[node name="RaisedStepA" type="StaticBody2D" parent="Gameplay/Segment02_Vines"]
+position = Vector2(2545, 830)
+script = ExtResource("13_surface")
+surface_size = Vector2(250, 140)
+
+[node name="LowRunPlatform" type="StaticBody2D" parent="Gameplay/Segment02_Vines"]
+position = Vector2(2875, 867.5)
+script = ExtResource("13_surface")
+surface_size = Vector2(230, 65)
+
+[node name="RaisedStepB" type="StaticBody2D" parent="Gameplay/Segment02_Vines"]
+position = Vector2(3175, 800)
+script = ExtResource("13_surface")
+surface_size = Vector2(270, 200)
+
+[node name="ExitPlatform" type="StaticBody2D" parent="Gameplay/Segment02_Vines"]
+position = Vector2(3515, 845)
+script = ExtResource("13_surface")
+surface_size = Vector2(290, 110)
+
+[node name="OptionalNarrowShortcut" type="StaticBody2D" parent="Gameplay/Segment02_Vines"]
+position = Vector2(3250, 604)
+script = ExtResource("13_surface")
+surface_size = Vector2(150, 28)
+surface_color = Color(0.55, 0.39, 0.68, 1)
+
+[node name="StartLabel" type="Label" parent="Gameplay/Segment02_Vines"]
+position = Vector2(2050, 795)
+theme_override_font_sizes/font_size = 18
+text = "S2_START"
+
+[node name="ShortcutLabel" type="Label" parent="Gameplay/Segment02_Vines"]
+position = Vector2(3150, 540)
+theme_override_colors/font_color = Color(0.84, 0.66, 1, 1)
+theme_override_font_sizes/font_size = 17
+text = "窄高台捷径"
 
 [node name="VineGate" type="Node2D" parent="Gameplay/Segment02_Vines"]
-position = Vector2(2880, 811)
+position = Vector2(2580, 705)
 script = ExtResource("10_vine")
 
 [node name="Visual" type="Polygon2D" parent="Gameplay/Segment02_Vines/VineGate"]
-polygon = PackedVector2Array(-80, -60, 80, -60, 80, 60, -80, 60)
+polygon = PackedVector2Array(-20, -55, 20, -55, 20, 55, -20, 55)
 color = Color(0.38, 0.75, 0.29, 1)
 
 [node name="Label" type="Label" parent="Gameplay/Segment02_Vines/VineGate"]
-position = Vector2(-112, -104)
+position = Vector2(-66, -104)
 theme_override_font_sizes/font_size = 22
-text = "PH_VINE"
+text = "VINE A · 跳"
 
 [node name="StaticBody2D" type="StaticBody2D" parent="Gameplay/Segment02_Vines/VineGate"]
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment02_Vines/VineGate/StaticBody2D"]
-shape = SubResource("Rect_vine")
+shape = SubResource("Rect_vine_a")
 
 [node name="JumpSensor" type="Area2D" parent="Gameplay/Segment02_Vines/VineGate"]
-position = Vector2(0, -155)
+position = Vector2(0, -100)
 collision_layer = 0
 collision_mask = 1
 
@@ -146,21 +207,75 @@ collision_mask = 1
 shape = SubResource("Rect_jump_sensor")
 
 [node name="SlideSensor" type="Area2D" parent="Gameplay/Segment02_Vines/VineGate"]
-position = Vector2(0, 64)
+position = Vector2(0, 60)
 collision_layer = 0
 collision_mask = 1
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment02_Vines/VineGate/SlideSensor"]
 shape = SubResource("Rect_slide_sensor")
 
+[node name="VineB" type="Node2D" parent="Gameplay/Segment02_Vines"]
+position = Vector2(2930, 789)
+script = ExtResource("10_vine")
+
+[node name="Visual" type="Polygon2D" parent="Gameplay/Segment02_Vines/VineB"]
+polygon = PackedVector2Array(-65, -17, 65, -17, 65, 17, -65, 17)
+color = Color(0.38, 0.75, 0.29, 1)
+
+[node name="Label" type="Label" parent="Gameplay/Segment02_Vines/VineB"]
+position = Vector2(-76, -62)
+theme_override_font_sizes/font_size = 22
+text = "VINE B · 滑"
+
+[node name="StaticBody2D" type="StaticBody2D" parent="Gameplay/Segment02_Vines/VineB"]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment02_Vines/VineB/StaticBody2D"]
+shape = SubResource("Rect_vine_b")
+
+[node name="JumpSensor" type="Area2D" parent="Gameplay/Segment02_Vines/VineB"]
+position = Vector2(0, -85)
+collision_layer = 0
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment02_Vines/VineB/JumpSensor"]
+shape = SubResource("Rect_jump_sensor")
+
+[node name="SlideSensor" type="Area2D" parent="Gameplay/Segment02_Vines/VineB"]
+position = Vector2(0, 30)
+collision_layer = 0
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment02_Vines/VineB/SlideSensor"]
+shape = SubResource("Rect_slide_sensor")
+
 [node name="Segment03_PredatorPlant" type="Node2D" parent="Gameplay"]
 
-[node name="GroundVisual" type="Polygon2D" parent="Gameplay/Segment03_PredatorPlant"]
-polygon = PackedVector2Array(3840, 900, 5760, 900, 5760, 1080, 3840, 1080)
+[node name="GroundVisualA" type="Polygon2D" parent="Gameplay/Segment03_PredatorPlant"]
+polygon = PackedVector2Array(3840, 900, 4220, 900, 4220, 1080, 3840, 1080)
+color = Color(0.29, 0.19, 0.34, 1)
+
+[node name="GroundVisualB" type="Polygon2D" parent="Gameplay/Segment03_PredatorPlant"]
+polygon = PackedVector2Array(4270, 900, 4510, 900, 4510, 1080, 4270, 1080)
+color = Color(0.29, 0.19, 0.34, 1)
+
+[node name="GroundVisualC" type="Polygon2D" parent="Gameplay/Segment03_PredatorPlant"]
+polygon = PackedVector2Array(4570, 900, 4790, 900, 4790, 1080, 4570, 1080)
+color = Color(0.29, 0.19, 0.34, 1)
+
+[node name="GroundVisualD" type="Polygon2D" parent="Gameplay/Segment03_PredatorPlant"]
+polygon = PackedVector2Array(4860, 900, 5110, 900, 5110, 1080, 4860, 1080)
+color = Color(0.29, 0.19, 0.34, 1)
+
+[node name="GroundVisualE" type="Polygon2D" parent="Gameplay/Segment03_PredatorPlant"]
+polygon = PackedVector2Array(5190, 900, 5400, 900, 5400, 1080, 5190, 1080)
+color = Color(0.29, 0.19, 0.34, 1)
+
+[node name="GroundVisualF" type="Polygon2D" parent="Gameplay/Segment03_PredatorPlant"]
+polygon = PackedVector2Array(5480, 900, 5760, 900, 5760, 1080, 5480, 1080)
 color = Color(0.29, 0.19, 0.34, 1)
 
 [node name="Ground" type="StaticBody2D" parent="Gameplay/Segment03_PredatorPlant"]
-position = Vector2(4800, 950)
+position = Vector2(4800, 1280)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment03_PredatorPlant/Ground"]
 shape = SubResource("Rect_ground")
@@ -169,15 +284,75 @@ shape = SubResource("Rect_ground")
 position = Vector2(4020, 100)
 theme_override_colors/font_color = Color(0.94, 0.68, 0.93, 1)
 theme_override_font_sizes/font_size = 42
-text = "SEGMENT 03 · MOVING PLANT PLACEHOLDER"
+text = "SEGMENT 03 · TIMING + RISK ROUTES"
 
 [node name="Hint" type="Label" parent="Gameplay/Segment03_PredatorPlant"]
 position = Vector2(4020, 160)
 theme_override_font_sizes/font_size = 24
-text = "等它闭合后直跑，或走上方高台冒险越过"
+text = "两次时机判断：等 CLOSED 走安全线，或连跳高台压缩时间"
+
+[node name="StartPlatform" type="StaticBody2D" parent="Gameplay/Segment03_PredatorPlant"]
+position = Vector2(4080, 860)
+script = ExtResource("13_surface")
+surface_size = Vector2(280, 80)
+
+[node name="ApproachPlatformA" type="StaticBody2D" parent="Gameplay/Segment03_PredatorPlant"]
+position = Vector2(4390, 845)
+script = ExtResource("13_surface")
+surface_size = Vector2(240, 110)
+
+[node name="TimingFloorA" type="StaticBody2D" parent="Gameplay/Segment03_PredatorPlant"]
+position = Vector2(4680, 875)
+script = ExtResource("13_surface")
+surface_size = Vector2(220, 50)
+
+[node name="RecoveryPlatform" type="StaticBody2D" parent="Gameplay/Segment03_PredatorPlant"]
+position = Vector2(4985, 845)
+script = ExtResource("13_surface")
+surface_size = Vector2(250, 110)
+
+[node name="ApproachPlatformB" type="StaticBody2D" parent="Gameplay/Segment03_PredatorPlant"]
+position = Vector2(5295, 822.5)
+script = ExtResource("13_surface")
+surface_size = Vector2(210, 155)
+
+[node name="FinishPlatform" type="StaticBody2D" parent="Gameplay/Segment03_PredatorPlant"]
+position = Vector2(5585, 852.5)
+script = ExtResource("13_surface")
+surface_size = Vector2(210, 95)
+
+[node name="PlantARisk01" type="StaticBody2D" parent="Gameplay/Segment03_PredatorPlant"]
+position = Vector2(4540, 633)
+script = ExtResource("13_surface")
+surface_size = Vector2(180, 26)
+surface_color = Color(0.55, 0.39, 0.68, 1)
+
+[node name="PlantARisk02" type="StaticBody2D" parent="Gameplay/Segment03_PredatorPlant"]
+position = Vector2(4835, 543)
+script = ExtResource("13_surface")
+surface_size = Vector2(160, 26)
+surface_color = Color(0.55, 0.39, 0.68, 1)
+
+[node name="PlantARisk03" type="StaticBody2D" parent="Gameplay/Segment03_PredatorPlant"]
+position = Vector2(5075, 623)
+script = ExtResource("13_surface")
+surface_size = Vector2(170, 26)
+surface_color = Color(0.55, 0.39, 0.68, 1)
+
+[node name="PlantBRisk01" type="StaticBody2D" parent="Gameplay/Segment03_PredatorPlant"]
+position = Vector2(5220, 532)
+script = ExtResource("13_surface")
+surface_size = Vector2(120, 24)
+surface_color = Color(0.55, 0.39, 0.68, 1)
+
+[node name="PlantBRisk02" type="StaticBody2D" parent="Gameplay/Segment03_PredatorPlant"]
+position = Vector2(5412, 482)
+script = ExtResource("13_surface")
+surface_size = Vector2(125, 24)
+surface_color = Color(0.55, 0.39, 0.68, 1)
 
 [node name="PredatorPlant" type="Node2D" parent="Gameplay/Segment03_PredatorPlant"]
-position = Vector2(4740, 810)
+position = Vector2(4680, 790)
 script = ExtResource("11_plant")
 
 [node name="Visual" type="Polygon2D" parent="Gameplay/Segment03_PredatorPlant/PredatorPlant"]
@@ -214,24 +389,53 @@ collision_mask = 1
 shape = SubResource("Rect_safe_sensor")
 
 [node name="RiskPlatform1Visual" type="Polygon2D" parent="Gameplay/Segment03_PredatorPlant"]
-polygon = PackedVector2Array(4385, 705, 4615, 705, 4615, 735, 4385, 735)
-color = Color(0.68, 0.46, 0.78, 1)
+polygon = PackedVector2Array(4440, 595, 4630, 595, 4630, 621, 4440, 621)
+color = Color(0.55, 0.39, 0.68, 1)
 
-[node name="RiskPlatform1" type="StaticBody2D" parent="Gameplay/Segment03_PredatorPlant"]
-position = Vector2(4500, 720)
+[node name="RiskLabel" type="Label" parent="Gameplay/Segment03_PredatorPlant"]
+position = Vector2(4630, 470)
+theme_override_colors/font_color = Color(0.84, 0.66, 1, 1)
+theme_override_font_sizes/font_size = 18
+text = "Plant A：3 连跳风险线"
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment03_PredatorPlant/RiskPlatform1"]
-shape = SubResource("Rect_risk_platform_1")
+[node name="PredatorPlantB" type="Node2D" parent="Gameplay/Segment03_PredatorPlant"]
+position = Vector2(5310, 685)
+script = ExtResource("11_plant")
+open_duration = 1.15
+closed_duration = 0.85
 
-[node name="RiskPlatform2Visual" type="Polygon2D" parent="Gameplay/Segment03_PredatorPlant"]
-polygon = PackedVector2Array(4715, 605, 4925, 605, 4925, 635, 4715, 635)
-color = Color(0.76, 0.52, 0.83, 1)
+[node name="Visual" type="Polygon2D" parent="Gameplay/Segment03_PredatorPlant/PredatorPlantB"]
+polygon = PackedVector2Array(-70, 60, -52, -24, 0, -60, 52, -24, 70, 60)
+color = Color(0.92, 0.2, 0.32, 1)
 
-[node name="RiskPlatform2" type="StaticBody2D" parent="Gameplay/Segment03_PredatorPlant"]
-position = Vector2(4820, 620)
+[node name="Label" type="Label" parent="Gameplay/Segment03_PredatorPlant/PredatorPlantB"]
+position = Vector2(-76, 76)
+theme_override_font_sizes/font_size = 18
+text = "PLANT B"
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment03_PredatorPlant/RiskPlatform2"]
-shape = SubResource("Rect_risk_platform_2")
+[node name="HazardArea" type="Area2D" parent="Gameplay/Segment03_PredatorPlant/PredatorPlantB"]
+position = Vector2(0, 45)
+collision_layer = 0
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment03_PredatorPlant/PredatorPlantB/HazardArea"]
+shape = SubResource("Rect_hazard")
+
+[node name="RiskRouteSensor" type="Area2D" parent="Gameplay/Segment03_PredatorPlant/PredatorPlantB"]
+position = Vector2(0, -150)
+collision_layer = 0
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment03_PredatorPlant/PredatorPlantB/RiskRouteSensor"]
+shape = SubResource("Rect_risk_sensor")
+
+[node name="SafeRouteSensor" type="Area2D" parent="Gameplay/Segment03_PredatorPlant/PredatorPlantB"]
+position = Vector2(175, 45)
+collision_layer = 0
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment03_PredatorPlant/PredatorPlantB/SafeRouteSensor"]
+shape = SubResource("Rect_safe_sensor")
 
 [node name="SectionTransitions" type="Node2D" parent="Gameplay"]
 
@@ -244,7 +448,7 @@ collision_mask = 1
 shape = SubResource("Rect_exit")
 
 [node name="Segment02Exit" type="Area2D" parent="Gameplay/SectionTransitions"]
-position = Vector2(3870, 540)
+position = Vector2(3760, 540)
 collision_layer = 0
 collision_mask = 1
 
@@ -270,12 +474,119 @@ collision_mask = 1
 shape = SubResource("Rect_checkpoint")
 
 [node name="S3AfterPlant" type="Area2D" parent="Gameplay/Checkpoints"]
-position = Vector2(5210, 700)
+position = Vector2(5050, 700)
 collision_layer = 0
 collision_mask = 1
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Checkpoints/S3AfterPlant"]
 shape = SubResource("Rect_checkpoint")
+
+[node name="AmaiGuides" type="Node2D" parent="Gameplay"]
+
+[node name="Segment01Guide" type="Node2D" parent="Gameplay/AmaiGuides"]
+
+[node name="A0" type="Marker2D" parent="Gameplay/AmaiGuides/Segment01Guide"]
+position = Vector2(550, 730)
+
+[node name="A1" type="Marker2D" parent="Gameplay/AmaiGuides/Segment01Guide"]
+position = Vector2(1040, 610)
+
+[node name="A2" type="Marker2D" parent="Gameplay/AmaiGuides/Segment01Guide"]
+position = Vector2(1500, 540)
+
+[node name="Segment02MainGuide" type="Node2D" parent="Gameplay/AmaiGuides"]
+
+[node name="A0" type="Marker2D" parent="Gameplay/AmaiGuides/Segment02MainGuide"]
+position = Vector2(2210, 760)
+
+[node name="A1" type="Marker2D" parent="Gameplay/AmaiGuides/Segment02MainGuide"]
+position = Vector2(2440, 690)
+
+[node name="A2" type="Marker2D" parent="Gameplay/AmaiGuides/Segment02MainGuide"]
+position = Vector2(2760, 700)
+
+[node name="A3" type="Marker2D" parent="Gameplay/AmaiGuides/Segment02MainGuide"]
+position = Vector2(3100, 630)
+
+[node name="A4" type="Marker2D" parent="Gameplay/AmaiGuides/Segment02MainGuide"]
+position = Vector2(3480, 720)
+
+[node name="Segment02JumpGuide" type="Node2D" parent="Gameplay/AmaiGuides"]
+
+[node name="A0" type="Marker2D" parent="Gameplay/AmaiGuides/Segment02JumpGuide"]
+position = Vector2(2210, 760)
+
+[node name="A1" type="Marker2D" parent="Gameplay/AmaiGuides/Segment02JumpGuide"]
+position = Vector2(2550, 585)
+
+[node name="A2" type="Marker2D" parent="Gameplay/AmaiGuides/Segment02JumpGuide"]
+position = Vector2(2860, 665)
+
+[node name="A3" type="Marker2D" parent="Gameplay/AmaiGuides/Segment02JumpGuide"]
+position = Vector2(3150, 585)
+
+[node name="A4" type="Marker2D" parent="Gameplay/AmaiGuides/Segment02JumpGuide"]
+position = Vector2(3480, 720)
+
+[node name="Segment02SlideGuide" type="Node2D" parent="Gameplay/AmaiGuides"]
+
+[node name="A0" type="Marker2D" parent="Gameplay/AmaiGuides/Segment02SlideGuide"]
+position = Vector2(2210, 760)
+
+[node name="A1" type="Marker2D" parent="Gameplay/AmaiGuides/Segment02SlideGuide"]
+position = Vector2(2510, 650)
+
+[node name="A2" type="Marker2D" parent="Gameplay/AmaiGuides/Segment02SlideGuide"]
+position = Vector2(2930, 650)
+
+[node name="A3" type="Marker2D" parent="Gameplay/AmaiGuides/Segment02SlideGuide"]
+position = Vector2(3170, 630)
+
+[node name="A4" type="Marker2D" parent="Gameplay/AmaiGuides/Segment02SlideGuide"]
+position = Vector2(3480, 720)
+
+[node name="Segment03SafeGuide" type="Node2D" parent="Gameplay/AmaiGuides"]
+
+[node name="A0" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03SafeGuide"]
+position = Vector2(4130, 700)
+
+[node name="A1" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03SafeGuide"]
+position = Vector2(4310, 650)
+
+[node name="A2" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03SafeGuide"]
+position = Vector2(4570, 610)
+
+[node name="A3" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03SafeGuide"]
+position = Vector2(4930, 630)
+
+[node name="A4" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03SafeGuide"]
+position = Vector2(5180, 600)
+
+[node name="A5" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03SafeGuide"]
+position = Vector2(5530, 670)
+
+[node name="Segment03RiskGuide" type="Node2D" parent="Gameplay/AmaiGuides"]
+
+[node name="A0" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03RiskGuide"]
+position = Vector2(4130, 700)
+
+[node name="A1" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03RiskGuide"]
+position = Vector2(4520, 585)
+
+[node name="A2" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03RiskGuide"]
+position = Vector2(4840, 495)
+
+[node name="A3" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03RiskGuide"]
+position = Vector2(5080, 575)
+
+[node name="A4" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03RiskGuide"]
+position = Vector2(5220, 485)
+
+[node name="A5" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03RiskGuide"]
+position = Vector2(5410, 435)
+
+[node name="A6" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03RiskGuide"]
+position = Vector2(5530, 750)
 
 [node name="WaterfallIntroPlaceholder" type="Node2D" parent="Gameplay"]
 

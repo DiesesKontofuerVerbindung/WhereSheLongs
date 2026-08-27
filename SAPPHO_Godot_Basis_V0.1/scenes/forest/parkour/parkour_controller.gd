@@ -19,7 +19,9 @@ signal player_respawned(checkpoint_id: StringName)
 @export var camera_path: NodePath = ^"DesignCamera"
 @export var eye_transition_path: NodePath = ^"EyeTransition"
 @export var vine_gate_path: NodePath = ^"Gameplay/Segment02_Vines/VineGate"
+@export var vine_gate_b_path: NodePath = ^"Gameplay/Segment02_Vines/VineB"
 @export var predator_plant_path: NodePath = ^"Gameplay/Segment03_PredatorPlant/PredatorPlant"
+@export var predator_plant_b_path: NodePath = ^"Gameplay/Segment03_PredatorPlant/PredatorPlantB"
 @export var amai_path: NodePath = ^"AmaiPlaceholder"
 
 var current_platform: StringName = &""
@@ -54,7 +56,9 @@ var _slide_collision_position := Vector2.ZERO
 @onready var design_camera: Camera2D = get_node_or_null(camera_path)
 @onready var eye_transition: ParkourEyeTransition = get_node_or_null(eye_transition_path)
 @onready var vine_gate: ParkourVineGate = get_node_or_null(vine_gate_path)
+@onready var vine_gate_b: ParkourVineGate = get_node_or_null(vine_gate_b_path)
 @onready var predator_plant: ParkourPredatorPlant = get_node_or_null(predator_plant_path)
+@onready var predator_plant_b: ParkourPredatorPlant = get_node_or_null(predator_plant_b_path)
 @onready var amai: AmaiParkourPlaceholder = get_node_or_null(amai_path)
 
 
@@ -135,7 +139,7 @@ func enter_parkour() -> void:
         _last_safe_spawn = route.get_segment_spawn(1)
     _place_player(_last_safe_spawn)
     if amai != null:
-        amai.warp_to_player_lead()
+        amai.reset_to_segment(1)
 
 
 func exit_parkour() -> void:
@@ -152,7 +156,7 @@ func respawn(count_as_fall: bool = true) -> void:
     _set_slide_state(false)
     _place_player(_last_safe_spawn)
     if amai != null:
-        amai.warp_to_player_lead()
+        amai.reset_to_segment(current_segment)
     player_respawned.emit(last_safe_platform)
 
 
@@ -223,7 +227,7 @@ func transition_to_segment(next_segment: int) -> void:
     motor.velocity = Vector2(carried_speed, 0.0)
     player.set_external_velocity(motor.velocity)
     if amai != null:
-        amai.warp_to_player_lead()
+        amai.reset_to_segment(next_segment)
 
     if previous_segment == 1:
         segment_01_completed.emit()
@@ -272,8 +276,12 @@ func reset_run_for_test() -> void:
     motor.reset_counters()
     if vine_gate != null:
         vine_gate.reset_choice()
+    if vine_gate_b != null:
+        vine_gate_b.reset_choice()
     if predator_plant != null:
         predator_plant.reset_choice()
+    if predator_plant_b != null:
+        predator_plant_b.reset_choice()
     for platform in _platforms.values():
         platform.reset_landing_guard()
     if design_camera != null:
@@ -287,6 +295,8 @@ func reset_run_for_test() -> void:
     _last_safe_spawn = start_platform.get_respawn_position()
     _place_player(_last_safe_spawn)
     start_platform.debug_register_landing(player)
+    if amai != null:
+        amai.reset_to_segment(1)
 
 
 func toggle_reference_background() -> void:
@@ -303,7 +313,9 @@ func get_platform(platform_id: StringName) -> ParkourPlatform:
 
 func get_debug_text() -> String:
     var plant_state := predator_plant.get_state_name() if predator_plant != null else "N/A"
-    return "Segment: %d\nPosition: (%.1f, %.1f)\nVelocity: (%.1f, %.1f)\nGrounded: %s\nSliding: %s\nCurrent Platform: %s\nLast Checkpoint: %s\nCoyote Timer: %.3f\nJump Buffer Timer: %.3f\nJump Count: %d\nFall Count: %d\nPlant: %s\nChoices: %s\nActual Route: %s" % [
+    var plant_b_state := predator_plant_b.get_state_name() if predator_plant_b != null else "N/A"
+    var amai_guide := str(amai.active_guide) if amai != null else "N/A"
+    return "Segment: %d\nPosition: (%.1f, %.1f)\nVelocity: (%.1f, %.1f)\nGrounded: %s\nSliding: %s\nCurrent Platform: %s\nLast Checkpoint: %s\nCoyote Timer: %.3f\nJump Buffer Timer: %.3f\nJump Count: %d\nFall Count: %d\nPlant A/B: %s / %s\nAmai Guide: %s\nChoices: %s\nActual Route: %s" % [
         current_segment,
         player.global_position.x,
         player.global_position.y,
@@ -318,6 +330,8 @@ func get_debug_text() -> String:
         motor.jump_count,
         fall_count,
         plant_state,
+        plant_b_state,
+        amai_guide,
         " → ".join(player_choices),
         " → ".join(actual_route),
     ]
@@ -386,9 +400,14 @@ func _connect_segment_nodes() -> void:
         s3_checkpoint.body_entered.connect(_on_s3_checkpoint_entered)
     if vine_gate != null:
         vine_gate.choice_made.connect(_on_vine_choice)
+    if vine_gate_b != null:
+        vine_gate_b.choice_made.connect(_on_vine_choice)
     if predator_plant != null:
         predator_plant.choice_made.connect(_on_plant_choice)
         predator_plant.hazard_triggered.connect(_on_plant_hazard)
+    if predator_plant_b != null:
+        predator_plant_b.choice_made.connect(_on_plant_choice)
+        predator_plant_b.hazard_triggered.connect(_on_plant_hazard)
 
 
 func _on_platform_landed(platform_id: StringName) -> void:
@@ -420,12 +439,12 @@ func _on_segment_03_finish_entered(body: Node2D) -> void:
 
 func _on_s2_checkpoint_entered(body: Node2D) -> void:
     if body == player and current_segment == 2:
-        _set_checkpoint(&"S2_AFTER_VINE", Vector2(3290.0, 850.0))
+        _set_checkpoint(&"S2_AFTER_VINE", Vector2(3290.0, 670.0))
 
 
 func _on_s3_checkpoint_entered(body: Node2D) -> void:
     if body == player and current_segment == 3:
-        _set_checkpoint(&"S3_AFTER_PLANT", Vector2(5210.0, 850.0))
+        _set_checkpoint(&"S3_AFTER_PLANT", Vector2(5010.0, 710.0))
 
 
 func _on_vine_choice(choice: StringName) -> void:
