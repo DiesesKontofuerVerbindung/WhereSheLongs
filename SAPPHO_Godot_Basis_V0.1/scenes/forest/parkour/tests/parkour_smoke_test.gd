@@ -97,6 +97,7 @@ func _test_continuous_parkour() -> void:
 
     _check(player.scene_file_path == "res://shared/player/player.tscn", "Prototype does not use the canonical Shared Player")
     _check(route.get_order() == expected_route, "Segment 01 route is not J1 → J2 → J3 → J3.5 → J4")
+    _check(amai is CharacterBody2D, "Segment 01/03 Amai is not a physical CharacterBody2D")
     _check(scene.get_platform(&"J5") == null, "J5 still exists")
     _check(not scene.has_signal("parkour_advanced_route_completed"), "Deprecated advanced-route signal still exists")
     _check(scene.get_node("Background/Art").texture != null, "Segment 01 art failed to load")
@@ -164,7 +165,7 @@ func _test_continuous_parkour() -> void:
         _check(plant_a.last_choice == &"WAIT" and amai.active_guide == &"Segment03SafeGuide", "Plant A CLOSED safe route did not select WAIT and the safe guide")
         plant_a.reset_choice()
         plant_a._on_risk_route_entered(player)
-        _check(plant_a.last_choice == &"RISK_ROUTE" and amai.active_guide == &"Segment03RiskGuide", "Plant A risk route did not select the upper guide")
+        _check(plant_a.last_choice == &"RISK_ROUTE" and amai.active_guide == &"Segment03SafeGuide", "Amai changed its fixed Segment 03 route after the first choice")
         plant_b.reset_choice()
         plant_b.set_state(plant_b.PlantState.CLOSED)
         plant_b._on_safe_route_entered(player)
@@ -264,6 +265,8 @@ func _test_guide_paths(scene: Node, amai: Node) -> void:
     var amai_source := amai_script.source_code
     _check("player.global_position +" not in amai_source and "lead_distance" not in amai_source, "Amai still uses direct player-position lead following")
     _check("guide_root" in amai_source and "_guide_points" in amai_source, "Amai is not driven by predefined guide anchors")
+    _check("move_and_slide()" in amai_source and "jump_impulse" in amai_source, "Amai fixed guides do not use real jump physics")
+    _check("global_position.move_toward" not in amai_source, "Amai still floats directly between guide anchors")
 
 
 func _test_debug_overlay_coverage(scene: Node) -> void:

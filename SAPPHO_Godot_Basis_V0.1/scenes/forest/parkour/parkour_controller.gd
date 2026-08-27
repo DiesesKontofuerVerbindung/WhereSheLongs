@@ -344,8 +344,8 @@ func get_debug_text() -> String:
     var plant_state := predator_plant.get_state_name() if predator_plant != null else "N/A"
     var plant_b_state := predator_plant_b.get_state_name() if predator_plant_b != null else "N/A"
     var plant_c_state := predator_plant_c.get_state_name() if predator_plant_c != null else "N/A"
-    var amai_guide := str(amai.active_guide) if amai != null else "N/A"
-    return "Segment: %d\nPosition: (%.1f, %.1f)\nVelocity: (%.1f, %.1f)\nGrounded: %s\nSliding: %s\nCurrent Platform: %s\nLast Checkpoint: %s\nCoyote Timer: %.3f\nJump Buffer Timer: %.3f\nJump Count: %d\nFall Count: %d\nPlant A/B/C: %s / %s / %s\nAmai Guide: %s\nChoices: %s\nActual Route: %s" % [
+    var amai_state := amai.get_debug_state_text() if amai != null else "N/A"
+    return "Segment: %d\nPosition: (%.1f, %.1f)\nVelocity: (%.1f, %.1f)\nGrounded: %s\nSliding: %s\nCurrent Platform: %s\nLast Checkpoint: %s\nCoyote Timer: %.3f\nJump Buffer Timer: %.3f\nJump Count: %d\nFall Count: %d\nPlant A/B/C: %s / %s / %s\nAmai: %s\nChoices: %s\nActual Route: %s" % [
         current_segment,
         player.global_position.x,
         player.global_position.y,
@@ -362,7 +362,7 @@ func get_debug_text() -> String:
         plant_state,
         plant_b_state,
         plant_c_state,
-        amai_guide,
+        amai_state,
         " → ".join(player_choices),
         " → ".join(actual_route),
     ]

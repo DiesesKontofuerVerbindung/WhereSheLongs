@@ -589,13 +589,19 @@ shape = SubResource("Rect_checkpoint")
 [node name="Segment01Guide" type="Node2D" parent="Gameplay/AmaiGuides"]
 
 [node name="A0" type="Marker2D" parent="Gameplay/AmaiGuides/Segment01Guide"]
-position = Vector2(550, 730)
+position = Vector2(500, 874)
 
 [node name="A1" type="Marker2D" parent="Gameplay/AmaiGuides/Segment01Guide"]
-position = Vector2(1040, 610)
+position = Vector2(650, 724)
 
 [node name="A2" type="Marker2D" parent="Gameplay/AmaiGuides/Segment01Guide"]
-position = Vector2(1500, 540)
+position = Vector2(960, 844)
+
+[node name="A3" type="Marker2D" parent="Gameplay/AmaiGuides/Segment01Guide"]
+position = Vector2(1170, 624)
+
+[node name="A4" type="Marker2D" parent="Gameplay/AmaiGuides/Segment01Guide"]
+position = Vector2(1470, 564)
 
 [node name="Segment02MainGuide" type="Node2D" parent="Gameplay/AmaiGuides"]
 
@@ -651,45 +657,45 @@ position = Vector2(3800, 760)
 [node name="Segment03SafeGuide" type="Node2D" parent="Gameplay/AmaiGuides"]
 
 [node name="A0" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03SafeGuide"]
-position = Vector2(3939, 490)
+position = Vector2(4025, 500)
 
 [node name="A1" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03SafeGuide"]
-position = Vector2(4160, 710)
+position = Vector2(4160, 744)
 
 [node name="A2" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03SafeGuide"]
-position = Vector2(4620, 745)
+position = Vector2(4620, 764)
 
 [node name="A3" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03SafeGuide"]
-position = Vector2(5080, 770)
+position = Vector2(5200, 784)
 
 [node name="A4" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03SafeGuide"]
-position = Vector2(5380, 690)
+position = Vector2(5410, 664)
 
 [node name="A5" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03SafeGuide"]
-position = Vector2(5620, 680)
+position = Vector2(5620, 664)
 
 [node name="Segment03RiskGuide" type="Node2D" parent="Gameplay/AmaiGuides"]
 
 [node name="A0" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03RiskGuide"]
-position = Vector2(3939, 490)
+position = Vector2(4025, 500)
 
 [node name="A1" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03RiskGuide"]
-position = Vector2(4410, 440)
+position = Vector2(4330, 453)
 
 [node name="A2" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03RiskGuide"]
-position = Vector2(4519, 245)
+position = Vector2(4510, 260)
 
 [node name="A3" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03RiskGuide"]
-position = Vector2(5036, 260)
+position = Vector2(4940, 784)
 
 [node name="A4" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03RiskGuide"]
-position = Vector2(5300, 300)
+position = Vector2(5120, 784)
 
 [node name="A5" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03RiskGuide"]
-position = Vector2(5520, 650)
+position = Vector2(5390, 664)
 
 [node name="A6" type="Marker2D" parent="Gameplay/AmaiGuides/Segment03RiskGuide"]
-position = Vector2(5620, 680)
+position = Vector2(5620, 664)
 
 [node name="WaterfallIntroPlaceholder" type="Node2D" parent="Gameplay"]
 
@@ -732,10 +738,16 @@ script = ExtResource("17_runner")
 visual_path = NodePath("../XiaolingSprite")
 suspend_runner_physics = true
 
-[node name="AmaiPlaceholder" type="Node2D" parent="."]
+[node name="AmaiPlaceholder" type="CharacterBody2D" parent="."]
 z_index = 9
 position = Vector2(620, 760)
+collision_layer = 4
+collision_mask = 1
+floor_snap_length = 12.0
 script = ExtResource("12_amai")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="AmaiPlaceholder"]
+shape = SubResource("Capsule_amai_echo")
 
 [node name="Visual" type="Polygon2D" parent="AmaiPlaceholder"]
 visible = false
