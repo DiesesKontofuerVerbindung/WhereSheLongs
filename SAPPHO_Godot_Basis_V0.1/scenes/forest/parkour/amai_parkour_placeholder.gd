@@ -21,6 +21,9 @@ signal fixed_landing_reached(guide_name: StringName, anchor_index: int, position
 @export var landing_anchor_tolerance := 48.0
 @export var landing_vertical_tolerance := 18.0
 @export var lead_gap_pattern := PackedFloat32Array([320.0, 620.0, 320.0, 620.0])
+@export var recovery_release_distance := 160.0
+@export var segment_one_escort_lead := 260.0
+@export var segment_one_exit_x := 1900.0
 @export var trace_enabled := true
 @export var trace_path := "res://../tmp/codex_logs/amai_fixed_route_live.log"
 
@@ -43,6 +46,8 @@ var _last_recorded_anchor_index := -1
 var _max_observed_lead := 0.0
 var _max_observed_horizontal_speed := 0.0
 var _segment_three_route_locked := false
+var _waiting_for_player_recovery := false
+var _segment_one_exit_released := false
 var _trace_file: FileAccess
 var _trace_frame := 0
 
@@ -83,7 +88,23 @@ func _physics_process(delta: float) -> void:
         _trace_state()
         return
 
+    if _waiting_for_player_recovery and not _leg_active and is_on_floor():
+        if global_position.x - player.global_position.x > recovery_release_distance:
+            velocity = Vector2.ZERO
+            _set_state(AmaiState.WAITING)
+            _trace_state()
+            return
+        _waiting_for_player_recovery = false
+        _trace_event("RECOVERY_RELEASE", "player_x=%.1f amai_x=%.1f" % [
+            player.global_position.x,
+            global_position.x,
+        ])
+
     if _guide_index >= _guide_points.size() - 1:
+        if active_guide == &"Segment01Guide" and _segment_one_exit_released:
+            _step_segment_one_escort(delta)
+            _trace_state()
+            return
         velocity.x = 0.0
         _apply_gravity(delta)
         move_and_slide()
@@ -141,7 +162,46 @@ func reset_to_segment(segment_index: int) -> void:
     _max_observed_lead = 0.0
     _max_observed_horizontal_speed = 0.0
     _segment_three_route_locked = false
+    _waiting_for_player_recovery = false
+    _segment_one_exit_released = false
     _set_guide(guide_name, true)
+
+
+func hold_for_player_recovery() -> void:
+    if active_guide != &"Segment01Guide":
+        return
+    _waiting_for_player_recovery = true
+    _trace_event("RECOVERY_HOLD", "index=%d p=(%.1f,%.1f) player_x=%.1f" % [
+        _guide_index,
+        global_position.x,
+        global_position.y,
+        player.global_position.x,
+    ])
+
+
+func release_segment_one_exit() -> void:
+    if active_guide != &"Segment01Guide" or _segment_one_exit_released:
+        return
+    _segment_one_exit_released = true
+    _waiting_for_player_recovery = false
+    _trace_event("SEGMENT01_EXIT_RELEASE", "index=%d p=(%.1f,%.1f) player_x=%.1f" % [
+        _guide_index,
+        global_position.x,
+        global_position.y,
+        player.global_position.x,
+    ])
+
+
+func is_waiting_for_player_recovery() -> bool:
+    return _waiting_for_player_recovery
+
+
+func is_segment_one_exit_released() -> bool:
+    return _segment_one_exit_released
+
+
+func get_guide_index() -> int:
+    return _guide_index
 
 
 func get_jump_count() -> int:
@@ -165,7 +225,7 @@ func is_route_complete() -> bool:
 
 
 func get_debug_state_text() -> String:
-    return "%s i=%d/%d p=(%.1f,%.1f) v=(%.1f,%.1f) floor=%s lead=%.1f jumps=%d" % [
+    return "%s i=%d/%d p=(%.1f,%.1f) v=(%.1f,%.1f) floor=%s lead=%.1f jumps=%d recovery=%s exit=%s" % [
         str(active_guide),
         _guide_index,
         maxi(0, _guide_points.size() - 1),
@@ -176,6 +236,8 @@ func get_debug_state_text() -> String:
         str(is_on_floor()),
         global_position.x - player.global_position.x,
         _jump_count,
+        str(_waiting_for_player_recovery),
+        str(_segment_one_exit_released),
     ]
 
 
@@ -296,6 +358,19 @@ func _step_jump_leg(delta: float, target: Vector2) -> void:
 func _step_run_leg(delta: float, target: Vector2) -> void:
     velocity.x = _ground_approach_velocity(target.x)
     _apply_gravity(delta)
+
+
+func _step_segment_one_escort(delta: float) -> void:
+    var lead := global_position.x - player.global_position.x
+    if global_position.x >= segment_one_exit_x or lead >= segment_one_escort_lead:
+        velocity.x = 0.0
+        _set_state(AmaiState.WAITING)
+    else:
+        velocity.x = movement_speed
+        _set_state(AmaiState.RUNNING)
+    _max_observed_horizontal_speed = maxf(_max_observed_horizontal_speed, absf(velocity.x))
+    _apply_gravity(delta)
+    move_and_slide()
 
 
 func _after_move(target: Vector2) -> void:

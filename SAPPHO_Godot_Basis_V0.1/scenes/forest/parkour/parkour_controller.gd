@@ -170,7 +170,10 @@ func respawn(count_as_fall: bool = true) -> void:
     if current_segment == 2 and vine_echo != null:
         vine_echo.begin_run()
     if amai != null:
-        amai.reset_to_segment(current_segment)
+        if current_segment == 1:
+            amai.hold_for_player_recovery()
+        else:
+            amai.reset_to_segment(current_segment)
     player_respawned.emit(last_safe_platform)
 
 
@@ -456,6 +459,8 @@ func _on_platform_landed(platform_id: StringName) -> void:
     highest_progress = maxi(highest_progress, route.get_progress_index(platform_id))
     if platform.checkpoint_enabled:
         _set_checkpoint(platform_id, platform.get_respawn_position())
+    if platform_id == &"J4" and current_segment == 1 and amai != null:
+        amai.release_segment_one_exit()
 
 
 func _on_segment_01_exit_entered(body: Node2D) -> void:
