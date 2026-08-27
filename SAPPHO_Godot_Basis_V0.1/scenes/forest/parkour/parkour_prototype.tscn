@@ -1,0 +1,77 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" path="res://scenes/forest/parkour/parkour_controller.gd" id="1_controller"]
+[ext_resource type="Texture2D" path="res://scenes/forest/parkour/reference/forest_parkour_art.png" id="2_art"]
+[ext_resource type="Texture2D" path="res://scenes/forest/parkour/reference/forest_parkour_layout_ref.png" id="3_layout"]
+[ext_resource type="Script" path="res://scenes/forest/parkour/parkour_motor.gd" id="4_motor"]
+[ext_resource type="Script" path="res://scenes/forest/parkour/parkour_route.gd" id="5_route"]
+[ext_resource type="PackedScene" path="res://scenes/forest/parkour/parkour_platform.tscn" id="6_platform"]
+[ext_resource type="PackedScene" path="res://shared/player/player.tscn" id="7_player"]
+[ext_resource type="Script" path="res://scenes/forest/parkour/parkour_debug.gd" id="8_debug"]
+
+[node name="ForestParkourPrototype" type="Node2D"]
+script = ExtResource("1_controller")
+
+[node name="Background" type="Node2D" parent="."]
+z_index = -10
+
+[node name="Art" type="Sprite2D" parent="Background"]
+texture = ExtResource("2_art")
+
+[node name="LayoutReference" type="Sprite2D" parent="Background"]
+visible = false
+texture = ExtResource("3_layout")
+
+[node name="ParkourMotor" type="Node" parent="."]
+script = ExtResource("4_motor")
+
+[node name="ParkourRoute" type="Node" parent="."]
+script = ExtResource("5_route")
+
+[node name="Gameplay" type="Node2D" parent="."]
+
+[node name="Platforms" type="Node2D" parent="Gameplay"]
+
+[node name="J1" parent="Gameplay/Platforms" instance=ExtResource("6_platform")]
+platform_id = &"J1"
+
+[node name="J2" parent="Gameplay/Platforms" instance=ExtResource("6_platform")]
+platform_id = &"J2"
+
+[node name="J3" parent="Gameplay/Platforms" instance=ExtResource("6_platform")]
+platform_id = &"J3"
+
+[node name="J3_5" parent="Gameplay/Platforms" instance=ExtResource("6_platform")]
+platform_id = &"J3_5"
+
+[node name="J4" parent="Gameplay/Platforms" instance=ExtResource("6_platform")]
+platform_id = &"J4"
+
+[node name="J5" parent="Gameplay/Platforms" instance=ExtResource("6_platform")]
+platform_id = &"J5"
+
+[node name="Player" parent="." instance=ExtResource("7_player")]
+z_index = 10
+floor_snap_length = 8.0
+
+[node name="DesignCamera" type="Camera2D" parent="."]
+position = Vector2(960, 540)
+zoom = Vector2(0.666667, 0.666667)
+enabled = true
+
+[node name="ParkourDebug" type="Node2D" parent="."]
+script = ExtResource("8_debug")
+
+[node name="CanvasLayer" type="CanvasLayer" parent="ParkourDebug"]
+
+[node name="PanelContainer" type="PanelContainer" parent="ParkourDebug/CanvasLayer"]
+offset_left = 18.0
+offset_top = 18.0
+offset_right = 478.0
+offset_bottom = 300.0
+
+[node name="DebugText" type="Label" parent="ParkourDebug/CanvasLayer/PanelContainer"]
+custom_minimum_size = Vector2(430, 250)
+theme_override_colors/font_color = Color(0.88, 1, 0.95, 1)
+theme_override_font_sizes/font_size = 16
+text = "Parkour Debug"

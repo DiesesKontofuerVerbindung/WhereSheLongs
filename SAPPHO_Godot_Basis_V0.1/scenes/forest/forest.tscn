@@ -1,19 +1,82 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="PackedScene" path="res://shared/player/player.tscn" id="1_player"]
 [ext_resource type="Script" path="res://shared/interaction/interactable.gd" id="2_interactable"]
 [ext_resource type="Script" path="res://shared/interaction/scene_portal.gd" id="3_portal"]
+[ext_resource type="Script" path="res://scenes/forest/forest_sequence_controller.gd" id="4_sequence"]
+[ext_resource type="PackedScene" path="res://scenes/forest/forest_debug_panel.tscn" id="5_debug"]
+[ext_resource type="Script" path="res://scenes/forest/forest_narrative_beat.gd" id="6_narrative"]
+[ext_resource type="Script" path="res://scenes/forest/forest_drowning_controller.gd" id="7_drowning"]
 
 [sub_resource type="RectangleShape2D" id="Rect_interaction"]
 size = Vector2(90, 70)
 
 [node name="Forest" type="Node2D"]
 
-[node name="Background" type="Polygon2D" parent="."]
+[node name="ForestSequenceController" type="Node" parent="."]
+script = ExtResource("4_sequence")
+
+[node name="Player" parent="." instance=ExtResource("1_player")]
+position = Vector2(350, 360)
+
+[node name="Characters" type="Node" parent="."]
+
+[node name="ForestOpening" type="Node" parent="Characters"]
+script = ExtResource("6_narrative")
+copy_id = &"forest.opening"
+trigger_id = &"forest_opening_complete"
+expected_state = 0
+next_state = 1
+
+[node name="LightGuide" type="Node" parent="Characters"]
+script = ExtResource("6_narrative")
+copy_id = &"forest.light_guide"
+trigger_id = &"light_guide_complete"
+expected_state = 1
+next_state = 2
+
+[node name="AmaiEncounter" type="Node" parent="Characters"]
+script = ExtResource("6_narrative")
+copy_id = &"forest.amai.encounter"
+trigger_id = &"amai_encounter_complete"
+expected_state = 2
+next_state = 3
+
+[node name="AmaiFollowDecision" type="Node" parent="Characters"]
+script = ExtResource("6_narrative")
+copy_id = &"forest.amai.follow_decision"
+trigger_id = &"amai_follow_selected"
+expected_state = 3
+next_state = 4
+
+[node name="AmaiForkDialogue" type="Node" parent="Characters"]
+script = ExtResource("6_narrative")
+copy_id = &"forest.amai.fork"
+trigger_id = &"amai_fork_dialogue_complete"
+expected_state = 5
+next_state = 6
+
+[node name="MysteryGirlRescue" type="Node" parent="Characters"]
+script = ExtResource("6_narrative")
+copy_id = &"forest.mystery_girl.rescue"
+trigger_id = &"mystery_girl_rescue_complete"
+expected_state = 14
+next_state = 15
+
+[node name="LakeDialogue" type="Node" parent="Characters"]
+script = ExtResource("6_narrative")
+copy_id = &"forest.mystery_girl.lake_dialogue"
+trigger_id = &"lake_dialogue_complete"
+expected_state = 15
+next_state = 16
+
+[node name="Environment" type="Node2D" parent="."]
+
+[node name="Background" type="Polygon2D" parent="Environment"]
 polygon = PackedVector2Array(0, 0, 1280, 0, 1280, 720, 0, 720)
 color = Color(0.055, 0.12, 0.09, 1)
 
-[node name="Title" type="Label" parent="."]
+[node name="Title" type="Label" parent="Environment"]
 offset_left = 40.0
 offset_top = 30.0
 offset_right = 650.0
@@ -21,45 +84,103 @@ offset_bottom = 95.0
 theme_override_font_sizes/font_size = 30
 text = "FOREST — OWNER PLACEHOLDER"
 
-[node name="Note" type="Label" parent="."]
+[node name="Note" type="Label" parent="Environment"]
 offset_left = 40.0
 offset_top = 88.0
 offset_right = 920.0
 offset_bottom = 150.0
-text = "Build Forest here. Keep shared Player / Input / GameState / Dialogue unchanged."
+text = "T01 skeleton active. F1 opens state-machine debug controls."
 
-[node name="Player" parent="." instance=ExtResource("1_player")]
-position = Vector2(350, 360)
-
-[node name="ForestMarker" type="Area2D" parent="."]
+[node name="ForestMarker" type="Area2D" parent="Environment"]
 position = Vector2(620, 360)
 script = ExtResource("2_interactable")
 speaker_name = "Forest"
 interaction_text = "Forest scene owns its local mechanics. Shared infrastructure is reused, not copied."
 look_text = "This placeholder is intentionally minimal."
 
-[node name="Visual" type="Polygon2D" parent="ForestMarker"]
+[node name="Visual" type="Polygon2D" parent="Environment/ForestMarker"]
 polygon = PackedVector2Array(-38, 30, 0, -45, 38, 30)
 color = Color(0.29, 0.62, 0.35, 1)
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="ForestMarker"]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Environment/ForestMarker"]
 shape = SubResource("Rect_interaction")
 
-[node name="BackToTest" type="Area2D" parent="."]
+[node name="BackToTest" type="Area2D" parent="Environment"]
 position = Vector2(980, 360)
 script = ExtResource("3_portal")
 target_scene = "res://scenes/test_room/test_room.tscn"
 
-[node name="Visual" type="Polygon2D" parent="BackToTest"]
+[node name="Visual" type="Polygon2D" parent="Environment/BackToTest"]
 polygon = PackedVector2Array(-45, -35, 45, -35, 45, 35, -45, 35)
 color = Color(0.26, 0.28, 0.32, 1)
 
-[node name="Label" type="Label" parent="BackToTest"]
+[node name="Label" type="Label" parent="Environment/BackToTest"]
 offset_left = -35.0
 offset_top = -10.0
 offset_right = 40.0
 offset_bottom = 22.0
 text = "BACK"
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="BackToTest"]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Environment/BackToTest"]
 shape = SubResource("Rect_interaction")
+
+[node name="Gameplay" type="Node" parent="."]
+
+[node name="SequenceTriggers" type="Node" parent="Gameplay"]
+
+[node name="WaterfallSequence" type="Node" parent="Gameplay"]
+script = ExtResource("6_narrative")
+copy_id = &"forest.waterfall.jump_prompt"
+trigger_id = &"waterfall_jump_confirmed"
+expected_state = 7
+next_state = 8
+
+[node name="WaterfallLanding" type="Node" parent="Gameplay"]
+script = ExtResource("6_narrative")
+copy_id = &"forest.waterfall.fall"
+trigger_id = &"waterfall_fall_complete"
+expected_state = 8
+next_state = 9
+
+[node name="HeartInteraction" type="Node" parent="Gameplay"]
+script = ExtResource("6_narrative")
+copy_id = &"forest.heart.interaction"
+trigger_id = &"heart_interaction_complete"
+expected_state = 9
+next_state = 10
+
+[node name="LakeIntro" type="Node" parent="Gameplay"]
+script = ExtResource("6_narrative")
+copy_id = &"forest.lake.intro"
+trigger_id = &"lake_intro_complete"
+expected_state = 11
+next_state = 12
+
+[node name="DrowningController" type="Node" parent="Gameplay"]
+script = ExtResource("7_drowning")
+
+[node name="WorldCollapse" type="Node" parent="Gameplay"]
+script = ExtResource("6_narrative")
+copy_id = &"forest.world_collapse"
+trigger_id = &"world_collapse_complete"
+expected_state = 16
+next_state = 17
+
+[node name="Debug" type="Node" parent="."]
+
+[node name="ForestDebugPanel" parent="Debug" instance=ExtResource("5_debug")]
+
+[connection signal="state_changed" from="ForestSequenceController" to="Gameplay/DrowningController" method="_on_forest_state_changed"]
+[connection signal="transition_requested" from="Characters/ForestOpening" to="ForestSequenceController" method="request_transition"]
+[connection signal="transition_requested" from="Characters/LightGuide" to="ForestSequenceController" method="request_transition"]
+[connection signal="transition_requested" from="Characters/AmaiEncounter" to="ForestSequenceController" method="request_transition"]
+[connection signal="transition_requested" from="Characters/AmaiFollowDecision" to="ForestSequenceController" method="request_transition"]
+[connection signal="transition_requested" from="Characters/AmaiForkDialogue" to="ForestSequenceController" method="request_transition"]
+[connection signal="transition_requested" from="Characters/MysteryGirlRescue" to="ForestSequenceController" method="request_transition"]
+[connection signal="transition_requested" from="Characters/LakeDialogue" to="ForestSequenceController" method="request_transition"]
+[connection signal="transition_requested" from="Gameplay/WaterfallSequence" to="ForestSequenceController" method="request_transition"]
+[connection signal="transition_requested" from="Gameplay/WaterfallLanding" to="ForestSequenceController" method="request_transition"]
+[connection signal="transition_requested" from="Gameplay/HeartInteraction" to="ForestSequenceController" method="request_transition"]
+[connection signal="transition_requested" from="Gameplay/LakeIntro" to="ForestSequenceController" method="request_transition"]
+[connection signal="transition_requested" from="Gameplay/DrowningController" to="ForestSequenceController" method="request_transition"]
+[connection signal="transition_requested" from="Gameplay/WorldCollapse" to="ForestSequenceController" method="request_transition"]
