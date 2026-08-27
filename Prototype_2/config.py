@@ -69,20 +69,28 @@ STRENGTH_AMPLITUDE_REFERENCE = 180.0
 STRENGTH_FREQUENCY_REFERENCE = 2.5
 RECENT_SWEEP_WINDOW = 2.0
 
-# Interference entities: mixed Latin/Cyrillic "voices" begin as one central
-# cluster. Local palm forces and impulses remain available; a separate
-# presentation layer can also spread both groups outward during a palm motion.
-INTERFERENCE_ENTITY_COUNT = 28
+# Interference text: whole V2 "reality voices" begin as a dense field around
+# the later input area. One sentence is always one physical entity.
+INTERFERENCE_TEXT_ENTITY_COUNT = 12
 INTERFERENCE_RANDOM_SEED = 2608
 INTERFERENCE_CENTER_X = WINDOW_WIDTH / 2
 INTERFERENCE_CENTER_Y = WINDOW_HEIGHT * 0.62
-INTERFERENCE_CLUSTER_WIDTH = 260.0
-INTERFERENCE_CLUSTER_HEIGHT = 170.0
-INTERFERENCE_MIN_FONT_SIZE = 30
-INTERFERENCE_MAX_FONT_SIZE = 48
-LETTER_MASS_MIN = 0.8
-LETTER_MASS_MAX = 1.2
-LETTER_RADIUS_SCALE = 0.45
+INTERFERENCE_INPUT_BOX_WIDTH = 340.0
+INTERFERENCE_INPUT_BOX_HEIGHT = 82.0
+INTERFERENCE_TEXT_MIN_FONT_SIZE = 30
+INTERFERENCE_TEXT_MAX_FONT_SIZE = 42
+INTERFERENCE_TEXT_OPACITY_MIN = 0.66
+INTERFERENCE_TEXT_OPACITY_MAX = 0.92
+INTERFERENCE_PHRASES = (
+    "这样不好吗",
+    "别跑这么远",
+    "恭喜你被录用了",
+    "可是我们要结婚……",
+)
+TEXT_MASS_BASE = 0.86
+TEXT_MASS_PER_PIXEL = 0.00085
+TEXT_MASS_MIN = 0.90
+TEXT_MASS_MAX = 1.22
 LETTER_GRAVITY = 0.0
 LETTER_FLOOR_Y = WINDOW_HEIGHT - 48.0
 LETTER_RESTITUTION = 0.28
@@ -112,10 +120,10 @@ INTERFERENCE_DISPERSED_MARGIN = 45.0
 # voices outward from the central field, while local left/right mechanics stay.
 AUTO_DISPERSION_MOTION_THRESHOLD = 55.0
 AUTO_DISPERSION_SPEED_REFERENCE = 650.0
-AUTO_DISPERSION_ACCELERATION = 2600.0
+AUTO_DISPERSION_ACCELERATION = 220.0
 AUTO_DISPERSION_DECAY = 1.15
 
-# Pillow renders real Cyrillic glyphs; OpenCV Hershey fonts only cover ASCII.
+# Pillow renders real CJK text; OpenCV Hershey fonts only cover ASCII.
 UNICODE_FONT_CANDIDATES = (
     "C:/Windows/Fonts/segoeui.ttf",
     "C:/Windows/Fonts/arial.ttf",

@@ -1,4 +1,4 @@
-"""Unicode letter entities that visualize mixed voices being fanned apart."""
+"""Whole V2 reality-voice text entities that the player fans apart."""
 
 from __future__ import annotations
 
@@ -11,10 +11,6 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 import config
-
-
-LATIN_GLYPHS = tuple("ABCDEFGHIKLMNOPRSTUVXYZ")
-CYRILLIC_GLYPHS = tuple("БГДЖЗЛФЦЧШЩЭЮЯ")
 
 
 @dataclass(frozen=True)
@@ -180,13 +176,14 @@ class PalmMotionTracker:
 
 
 @dataclass
-class LetterEntity:
-    glyph: str
+class TextEntity:
+    text: str
     x: float
     y: float
+    width: float
+    height: float
     mass: float
-    radius: float
-    size: int
+    font_size: int
     color: tuple[int, int, int]
     velocity_x: float = 0.0
     velocity_y: float = 0.0
@@ -194,10 +191,11 @@ class LetterEntity:
     acceleration_y: float = 0.0
     dispersed: bool = False
     side: int = 1
+    opacity: float = 1.0
 
 
 class InterferenceField:
-    """Maintain deterministic Unicode letter entities with force state."""
+    """Maintain deterministic whole-sentence entities with force state."""
 
     _colors = (
         (235, 104, 115),
@@ -216,18 +214,18 @@ class InterferenceField:
         self.width = int(width)
         self.height = int(height)
         self.seed = int(seed)
-        self.entities: list[LetterEntity] = []
+        self.entities: list[TextEntity] = []
         self.elapsed = 0.0
         self.hand_force_active = False
-        self.letters_inside_influence_radius = 0
+        self.texts_inside_influence_area = 0
         self.last_impulse_strength = 0.0
         self.last_impulse_stroke_id = 0
         self.stroke_phase = "waiting"
         self.stroke_direction = 0
         self.auto_dispersion_strength = 0.0
         self._font_cache: dict[int, ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
-        self._glyph_cache: dict[
-            tuple[str, int, tuple[int, int, int]],
+        self._text_cache: dict[
+            tuple[str, int, tuple[int, int, int], float],
             tuple[np.ndarray, np.ndarray],
         ] = {}
         self.reset()
@@ -252,36 +250,52 @@ class InterferenceField:
 
     def reset(self) -> None:
         random = Random(self.seed)
-        glyphs = list(LATIN_GLYPHS + CYRILLIC_GLYPHS)
-        random.shuffle(glyphs)
         self.entities = []
-        for index in range(config.INTERFERENCE_ENTITY_COUNT):
-            glyph = glyphs[index % len(glyphs)]
-            size = random.randint(config.INTERFERENCE_MIN_FONT_SIZE, config.INTERFERENCE_MAX_FONT_SIZE)
-            x = config.INTERFERENCE_CENTER_X + random.uniform(
-                -config.INTERFERENCE_CLUSTER_WIDTH / 2,
-                config.INTERFERENCE_CLUSTER_WIDTH / 2,
+        layout_offsets = (
+            (-35.0, -132.0),
+            (-230.0, -38.0),
+            (175.0, -38.0),
+            (-18.0, 123.0),
+        )
+        for index in range(config.INTERFERENCE_TEXT_ENTITY_COUNT):
+            text = config.INTERFERENCE_PHRASES[index % len(config.INTERFERENCE_PHRASES)]
+            font_size = random.randint(
+                config.INTERFERENCE_TEXT_MIN_FONT_SIZE,
+                config.INTERFERENCE_TEXT_MAX_FONT_SIZE,
             )
-            y = config.INTERFERENCE_CENTER_Y + random.uniform(
-                -config.INTERFERENCE_CLUSTER_HEIGHT / 2,
-                config.INTERFERENCE_CLUSTER_HEIGHT / 2,
+            text_width, text_height = self._text_bounds(text, font_size)
+            offset_x, offset_y = layout_offsets[index % len(layout_offsets)]
+            x = _clamp(
+                config.INTERFERENCE_CENTER_X + offset_x + random.uniform(-28.0, 28.0),
+                text_width / 2 + 12.0,
+                self.width - text_width / 2 - 12.0,
+            )
+            y = _clamp(
+                config.INTERFERENCE_CENTER_Y + offset_y + random.uniform(-20.0, 20.0),
+                300.0 + text_height / 2,
+                self.height - text_height / 2 - 24.0,
             )
             side = -1 if x < config.INTERFERENCE_CENTER_X else 1
             if x == config.INTERFERENCE_CENTER_X:
                 side = -1 if index % 2 else 1
-            self.entities.append(LetterEntity(
-                glyph=glyph,
+            self.entities.append(TextEntity(
+                text=text,
                 x=x,
                 y=y,
-                mass=random.uniform(config.LETTER_MASS_MIN, config.LETTER_MASS_MAX),
-                radius=size * config.LETTER_RADIUS_SCALE,
-                size=size,
+                width=text_width,
+                height=text_height,
+                mass=self._text_mass(text_width),
+                font_size=font_size,
                 color=random.choice(self._colors),
                 side=side,
+                opacity=random.uniform(
+                    config.INTERFERENCE_TEXT_OPACITY_MIN,
+                    config.INTERFERENCE_TEXT_OPACITY_MAX,
+                ),
             ))
         self.elapsed = 0.0
         self.hand_force_active = False
-        self.letters_inside_influence_radius = 0
+        self.texts_inside_influence_area = 0
         self.last_impulse_strength = 0.0
         self.last_impulse_stroke_id = 0
         self.stroke_phase = "waiting"
@@ -296,7 +310,7 @@ class InterferenceField:
         self.stroke_direction = 0 if palm is None else palm.stroke_direction
         active_palm = palm is not None and palm.stroke_phase == "active"
         influence = self._influence_falloffs(palm) if active_palm else {}
-        self.letters_inside_influence_radius = len(influence)
+        self.texts_inside_influence_area = len(influence)
         palm_speed = 0.0 if palm is None else abs(palm.velocity_x) + abs(palm.velocity_y)
         self.hand_force_active = active_palm and bool(influence) and palm_speed >= config.HAND_MIN_FORCE_VELOCITY
         motion_strength = self._auto_dispersion_motion_strength(palm)
@@ -341,8 +355,8 @@ class InterferenceField:
             entity.y += entity.velocity_y * delta_time
             self._resolve_floor_collision(entity, delta_time)
             entity.dispersed = (
-                entity.x < -config.INTERFERENCE_DISPERSED_MARGIN
-                or entity.x > self.width + config.INTERFERENCE_DISPERSED_MARGIN
+                entity.x < -entity.width / 2 - config.INTERFERENCE_DISPERSED_MARGIN
+                or entity.x > self.width + entity.width / 2 + config.INTERFERENCE_DISPERSED_MARGIN
             )
         if applied_impulse_strength > 0.0:
             self.last_impulse_strength = applied_impulse_strength
@@ -371,18 +385,17 @@ class InterferenceField:
                 continue
             previous_x = palm.x if palm.previous_x is None else palm.previous_x
             previous_y = palm.y if palm.previous_y is None else palm.previous_y
-            center_distance = _distance_to_segment(
-                entity.x,
-                entity.y,
+            if _segment_intersects_aabb(
                 previous_x,
                 previous_y,
                 palm.x,
                 palm.y,
-            )
-            surface_distance = max(0.0, center_distance - entity.radius)
-            if surface_distance <= radius:
-                linear = 1.0 - surface_distance / radius
-                falloffs[id(entity)] = linear ** config.HAND_FORCE_FALLOFF_EXPONENT
+                entity.x - entity.width / 2 - radius,
+                entity.y - entity.height / 2 - radius,
+                entity.x + entity.width / 2 + radius,
+                entity.y + entity.height / 2 + radius,
+            ):
+                falloffs[id(entity)] = 1.0
         return falloffs
 
     def _impulse_strength_ratio(self, palm: PalmPhysicsInput | None, letters_in_range: bool) -> float:
@@ -413,13 +426,13 @@ class InterferenceField:
         )
 
     @staticmethod
-    def apply_force(entity: LetterEntity, force_x: float, force_y: float) -> None:
+    def apply_force(entity: TextEntity, force_x: float, force_y: float) -> None:
         entity.acceleration_x += force_x / entity.mass
         entity.acceleration_y += force_y / entity.mass
 
     @staticmethod
-    def _resolve_floor_collision(entity: LetterEntity, delta_time: float) -> None:
-        floor_center_y = config.LETTER_FLOOR_Y - entity.radius
+    def _resolve_floor_collision(entity: TextEntity, delta_time: float) -> None:
+        floor_center_y = config.LETTER_FLOOR_Y - entity.height / 2
         if entity.y < floor_center_y:
             return
         entity.y = floor_center_y
@@ -431,42 +444,56 @@ class InterferenceField:
         entity.velocity_x *= exp(-config.LETTER_FLOOR_FRICTION * delta_time)
 
     def render(self, canvas: np.ndarray) -> np.ndarray:
-        """Blend cached Unicode glyph sprites directly onto a BGR canvas."""
+        """Blend cached Unicode sentence sprites directly onto a BGR canvas."""
 
         for entity in self.entities:
             if entity.dispersed:
                 continue
-            premultiplied, inverse_alpha = self._glyph_sprite(entity)
+            premultiplied, inverse_alpha = self._text_sprite(entity)
             self._blend_sprite(canvas, premultiplied, inverse_alpha, entity.x, entity.y)
         return canvas
 
-    def _glyph_sprite(self, entity: LetterEntity) -> tuple[np.ndarray, np.ndarray]:
-        key = (entity.glyph, entity.size, entity.color)
-        cached = self._glyph_cache.get(key)
+    def _text_sprite(self, entity: TextEntity) -> tuple[np.ndarray, np.ndarray]:
+        key = (entity.text, entity.font_size, entity.color, round(entity.opacity, 3))
+        cached = self._text_cache.get(key)
         if cached is not None:
             return cached
-        font = self._font(entity.size)
+        font = self._font(entity.font_size)
         measuring_image = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
         measuring_draw = ImageDraw.Draw(measuring_image)
-        bounds = measuring_draw.textbbox((0, 0), entity.glyph, font=font, stroke_width=1)
+        bounds = measuring_draw.textbbox((0, 0), entity.text, font=font, stroke_width=1)
         width = max(1, bounds[2] - bounds[0])
         height = max(1, bounds[3] - bounds[1])
         image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(image)
         draw.text(
             (-bounds[0], -bounds[1]),
-            entity.glyph,
+            entity.text,
             font=font,
             fill=(*entity.color, 255),
             stroke_width=1,
             stroke_fill=(18, 20, 28, 255),
         )
         rgba = np.asarray(image, dtype=np.uint8)
-        alpha = rgba[:, :, 3:4].astype(np.float32) / 255.0
+        alpha = rgba[:, :, 3:4].astype(np.float32) / 255.0 * entity.opacity
         bgr = rgba[:, :, :3][:, :, ::-1].astype(np.float32)
         cached = (bgr * alpha, 1.0 - alpha)
-        self._glyph_cache[key] = cached
+        self._text_cache[key] = cached
         return cached
+
+    def _text_bounds(self, text: str, font_size: int) -> tuple[float, float]:
+        font = self._font(font_size)
+        image = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
+        bounds = ImageDraw.Draw(image).textbbox((0, 0), text, font=font, stroke_width=1)
+        return float(max(1, bounds[2] - bounds[0])), float(max(1, bounds[3] - bounds[1]))
+
+    @staticmethod
+    def _text_mass(text_width: float) -> float:
+        return _clamp(
+            config.TEXT_MASS_BASE + text_width * config.TEXT_MASS_PER_PIXEL,
+            config.TEXT_MASS_MIN,
+            config.TEXT_MASS_MAX,
+        )
 
     @staticmethod
     def _blend_sprite(
@@ -541,26 +568,34 @@ def _clip_segment_to_outward_boundary(
     return boundary_x, start_y + ratio * (end_y - start_y)
 
 
-def _distance_to_segment(
-    point_x: float,
-    point_y: float,
+def _segment_intersects_aabb(
     start_x: float,
     start_y: float,
     end_x: float,
     end_y: float,
-) -> float:
-    """Shortest distance from a letter center to the palm's swept path."""
-
+    left: float,
+    top: float,
+    right: float,
+    bottom: float,
+) -> bool:
+    """Whether a palm segment intersects a text hitbox expanded by force radius."""
     delta_x = end_x - start_x
     delta_y = end_y - start_y
-    length_squared = delta_x * delta_x + delta_y * delta_y
-    if length_squared <= 1e-9:
-        return ((point_x - end_x) ** 2 + (point_y - end_y) ** 2) ** 0.5
-    projection = (
-        (point_x - start_x) * delta_x
-        + (point_y - start_y) * delta_y
-    ) / length_squared
-    projection = _clamp(projection, 0.0, 1.0)
-    nearest_x = start_x + projection * delta_x
-    nearest_y = start_y + projection * delta_y
-    return ((point_x - nearest_x) ** 2 + (point_y - nearest_y) ** 2) ** 0.5
+    entry, exit = 0.0, 1.0
+    for direction, start, minimum, maximum in (
+        (delta_x, start_x, left, right),
+        (delta_y, start_y, top, bottom),
+    ):
+        if abs(direction) <= 1e-9:
+            if start < minimum or start > maximum:
+                return False
+            continue
+        near = (minimum - start) / direction
+        far = (maximum - start) / direction
+        if near > far:
+            near, far = far, near
+        entry = max(entry, near)
+        exit = min(exit, far)
+        if entry > exit:
+            return False
+    return True

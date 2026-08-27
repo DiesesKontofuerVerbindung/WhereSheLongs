@@ -164,6 +164,11 @@ class PrototypeApp:
             cv2.line(canvas, (split_x, y), (split_x, min(y + 10, config.WINDOW_HEIGHT - 30)), (42, 48, 62), 1, cv2.LINE_AA)
         cv2.putText(canvas, "< DISPERSE", (40, config.WINDOW_HEIGHT - 24), cv2.FONT_HERSHEY_SIMPLEX, 0.60, (125, 150, 185), 1, cv2.LINE_AA)
         cv2.putText(canvas, "DISPERSE >", (config.WINDOW_WIDTH - 170, config.WINDOW_HEIGHT - 24), cv2.FONT_HERSHEY_SIMPLEX, 0.60, (125, 150, 185), 1, cv2.LINE_AA)
+        input_left = int(config.INTERFERENCE_CENTER_X - config.INTERFERENCE_INPUT_BOX_WIDTH / 2)
+        input_top = int(config.INTERFERENCE_CENTER_Y - config.INTERFERENCE_INPUT_BOX_HEIGHT / 2)
+        input_right = int(config.INTERFERENCE_CENTER_X + config.INTERFERENCE_INPUT_BOX_WIDTH / 2)
+        input_bottom = int(config.INTERFERENCE_CENTER_Y + config.INTERFERENCE_INPUT_BOX_HEIGHT / 2)
+        cv2.rectangle(canvas, (input_left, input_top), (input_right, input_bottom), (48, 58, 78), 1, cv2.LINE_AA)
         center_y = int(self.detector.anchor_y if self.detector.anchor_y is not None else config.WINDOW_HEIGHT / 2)
         cv2.line(canvas, (0, center_y), (config.WINDOW_WIDTH, center_y), (65, 70, 85), 1, cv2.LINE_AA)
         if self.detector.anchor_y is not None:
@@ -221,10 +226,10 @@ class PrototypeApp:
             f"Fan Strength: {self.detector.fan_strength:.3f}    Expected: {self.state.expected_type.upper()}",
             f"Raw dx / Physics dx: {signal.raw_delta_x:7.1f} / {signal.physics_delta_x:7.1f} px    Physics velocity X/Y: {signal.velocity_x:8.1f} / {signal.velocity_y:8.1f} px/s",
             f"Profile: {self.signal_processor.profile.upper()}    X gain: {signal.physics_gain:.2f}    Physics deadzone: {config.PHYSICS_DEADZONE:.1f}px    Input: {'ACTIVE' if signal.active and signal.open_palm else 'IDLE'}",
-            f"Hand force: {'YES' if self.interference.hand_force_active else 'NO'}    Letters hit: {self.interference.letters_inside_influence_radius}    Auto scatter: {self.interference.auto_dispersion_strength:.2f}",
+            f"Text entities active: {len(self.interference.entities) - self.interference.dispersed_count}    Texts inside influence: {self.interference.texts_inside_influence_area}    Hand force: {'YES' if self.interference.hand_force_active else 'NO'}",
             f"Last impulse: {self.interference.last_impulse_strength:.1f}    Hit stroke: {self.interference.last_impulse_stroke_id}",
-            f"Gravity: {config.LETTER_GRAVITY:.1f} px/s2    Mean letter vx/vy: {self.interference.mean_velocity_x:7.1f} / {self.interference.mean_velocity_y:7.1f}",
-            f"Letters dispersed: {self.interference.dispersed_count}/{len(self.interference.entities)}    Clear: {self.interference.dispersed_ratio * 100:5.1f}%",
+            f"Gravity: {config.LETTER_GRAVITY:.1f} px/s2    Mean text vx/vy: {self.interference.mean_velocity_x:7.1f} / {self.interference.mean_velocity_y:7.1f}    Auto assist: {self.interference.auto_dispersion_strength:.2f}",
+            f"Texts dispersed: {self.interference.dispersed_count}/{len(self.interference.entities)}    Clear: {self.interference.dispersed_ratio * 100:5.1f}%",
             f"Trials: {self.logger.completed_trials}/{self.logger.target_total}    TP/TN/FP/FN: {metrics['tp']}/{metrics['tn']}/{metrics['fp']}/{metrics['fn']}    Acc: {accuracy_text}",
             f"Camera: {self.tracker.error or 'ready'}",
             f"Status: {self.state.status_message}",
