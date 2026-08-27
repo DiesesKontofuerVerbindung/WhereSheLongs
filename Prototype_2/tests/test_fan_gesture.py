@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import config
 from fan_detector import FanDetector, Point, TrajectorySample
 from fan_state import FanState
-from hand_tracker import extract_hand_features
+from hand_tracker import HandFeatures, extract_hand_features
 from interference_field import (
     CYRILLIC_GLYPHS,
     LATIN_GLYPHS,
@@ -147,6 +147,48 @@ class FanGestureTests(unittest.TestCase):
         self.assertGreater(fast.last_impulse_strength, 0.0)
         self.assertGreater(fast.entities[0].velocity_x, slow.entities[0].velocity_x)
 
+    def test_fast_palm_sweep_hits_letter_between_sampled_positions(self) -> None:
+        letter = letter_entity(x=500.0, y=400.0)
+        field = physics_field(letter)
+        palm = PalmPhysicsInput(
+            x=800.0,
+            y=400.0,
+            velocity_x=1200.0,
+            velocity_y=0.0,
+            previous_x=200.0,
+            previous_y=400.0,
+        )
+        field.update(0.01, palm)
+        self.assertEqual(field.letters_inside_influence_radius, 1)
+        self.assertGreater(field.last_impulse_strength, 0.0)
+        self.assertGreater(letter.velocity_x, 0.0)
+
+    def test_brief_open_palm_flicker_keeps_current_sweep_segment(self) -> None:
+        tracker = PalmMotionTracker()
+        tracker.update(300.0, 400.0, 0.0, True)
+        palm = tracker.update(
+            700.0,
+            400.0,
+            config.PHYSICS_OPEN_PALM_GRACE_TIME / 2,
+            False,
+        )
+        self.assertIsNotNone(palm)
+        assert palm is not None
+        self.assertEqual(palm.previous_x, 300.0)
+        self.assertEqual(palm.x, 700.0)
+        self.assertGreater(palm.velocity_x, config.HAND_IMPULSE_VELOCITY_THRESHOLD)
+
+    def test_expired_open_palm_grace_disables_hand_physics(self) -> None:
+        tracker = PalmMotionTracker()
+        tracker.update(300.0, 400.0, 0.0, True)
+        palm = tracker.update(
+            700.0,
+            400.0,
+            config.PHYSICS_OPEN_PALM_GRACE_TIME + 0.01,
+            False,
+        )
+        self.assertIsNone(palm)
+
     def test_letter_keeps_inertia_after_hand_disappears(self) -> None:
         field = physics_field(letter_entity(x=500.0, y=400.0))
         field.update(0.03, PalmPhysicsInput(500.0, 400.0, 400.0, 0.0))
@@ -157,7 +199,7 @@ class FanGestureTests(unittest.TestCase):
         self.assertLess(field.entities[0].velocity_x, velocity_with_hand)
         self.assertGreater(field.entities[0].x, x_with_hand)
 
-    def test_open_palm_loss_does_not_reset_physical_world(self) -> None:
+    def test_open_palm_loss_uses_grace_without_resetting_physical_world(self) -> None:
         tracker = PalmMotionTracker()
         tracker.update(480.0, 400.0, 0.0, True)
         palm = tracker.update(520.0, 400.0, 0.05, True)
@@ -166,7 +208,7 @@ class FanGestureTests(unittest.TestCase):
         pushed_x = field.entities[0].x
         missing = tracker.update(520.0, 400.0, 0.08, False)
         field.update(0.03, missing)
-        self.assertIsNone(missing)
+        self.assertIsNotNone(missing)
         self.assertEqual(len(field.entities), 1)
         self.assertGreater(field.entities[0].x, pushed_x)
 
@@ -188,6 +230,14 @@ class FanGestureTests(unittest.TestCase):
         for rotation in (0.0, 45.0, 90.0, 180.0):
             features = extract_hand_features(open_palm_landmarks(rotation))
             self.assertTrue(features.open_palm, rotation)
+
+    def test_relaxed_open_palm_allows_one_bent_finger(self) -> None:
+        features = HandFeatures(0.5, 0.5, True, True, True, False)
+        self.assertTrue(features.open_palm)
+
+    def test_two_extended_fingers_are_not_an_open_palm(self) -> None:
+        features = HandFeatures(0.5, 0.5, True, True, False, False)
+        self.assertFalse(features.open_palm)
 
     def test_open_palm_is_required_to_arm(self) -> None:
         detector = FanDetector()

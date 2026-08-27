@@ -23,15 +23,18 @@ class PalmPhysicsInput:
     y: float
     velocity_x: float
     velocity_y: float
+    previous_x: float | None = None
+    previous_y: float | None = None
 
 
 class PalmMotionTracker:
-    """Convert valid open-palm positions into bounded, smoothed velocity."""
+    """Convert palm positions into velocity with brief classification grace."""
 
     def __init__(self) -> None:
         self._last_x: float | None = None
         self._last_y: float | None = None
         self._last_time: float | None = None
+        self._last_open_palm_at: float | None = None
         self.velocity_x = 0.0
         self.velocity_y = 0.0
 
@@ -42,13 +45,24 @@ class PalmMotionTracker:
         now: float,
         open_palm: bool,
     ) -> PalmPhysicsInput | None:
-        if x is None or y is None or not open_palm:
+        now = float(now)
+        if x is None or y is None:
+            self.clear_tracking()
+            return None
+        if open_palm:
+            self._last_open_palm_at = now
+        elif (
+            self._last_open_palm_at is None
+            or now - self._last_open_palm_at > config.PHYSICS_OPEN_PALM_GRACE_TIME
+        ):
             self.clear_tracking()
             return None
         x = float(x)
         y = float(y)
+        previous_x = self._last_x
+        previous_y = self._last_y
         if self._last_x is not None and self._last_y is not None and self._last_time is not None:
-            delta_time = max(1e-6, float(now) - self._last_time)
+            delta_time = max(1e-6, now - self._last_time)
             raw_velocity_x = _clamp(
                 (x - self._last_x) / delta_time,
                 -config.PALM_VELOCITY_MAX,
@@ -67,13 +81,21 @@ class PalmMotionTracker:
             self.velocity_y = 0.0
         self._last_x = x
         self._last_y = y
-        self._last_time = float(now)
-        return PalmPhysicsInput(x, y, self.velocity_x, self.velocity_y)
+        self._last_time = now
+        return PalmPhysicsInput(
+            x,
+            y,
+            self.velocity_x,
+            self.velocity_y,
+            x if previous_x is None else previous_x,
+            y if previous_y is None else previous_y,
+        )
 
     def clear_tracking(self) -> None:
         self._last_x = None
         self._last_y = None
         self._last_time = None
+        self._last_open_palm_at = None
         self.velocity_x = 0.0
         self.velocity_y = 0.0
 
@@ -227,10 +249,20 @@ class InterferenceField:
         for entity in self.entities:
             if entity.dispersed:
                 continue
-            distance = ((entity.x - palm.x) ** 2 + (entity.y - palm.y) ** 2) ** 0.5
-            if distance <= radius:
-                linear = 1.0 - distance / radius
-                falloffs[id(entity)] = linear * linear
+            previous_x = palm.x if palm.previous_x is None else palm.previous_x
+            previous_y = palm.y if palm.previous_y is None else palm.previous_y
+            center_distance = _distance_to_segment(
+                entity.x,
+                entity.y,
+                previous_x,
+                previous_y,
+                palm.x,
+                palm.y,
+            )
+            surface_distance = max(0.0, center_distance - entity.radius)
+            if surface_distance <= radius:
+                linear = 1.0 - surface_distance / radius
+                falloffs[id(entity)] = linear ** config.HAND_FORCE_FALLOFF_EXPONENT
         return falloffs
 
     def _should_trigger_impulse(self, palm: PalmPhysicsInput | None, letters_in_range: bool) -> bool:
@@ -320,3 +352,28 @@ def resolve_unicode_font() -> Path | None:
 
 def _clamp(value: float, minimum: float, maximum: float) -> float:
     return max(minimum, min(maximum, value))
+
+
+def _distance_to_segment(
+    point_x: float,
+    point_y: float,
+    start_x: float,
+    start_y: float,
+    end_x: float,
+    end_y: float,
+) -> float:
+    """Shortest distance from a letter center to the palm's swept path."""
+
+    delta_x = end_x - start_x
+    delta_y = end_y - start_y
+    length_squared = delta_x * delta_x + delta_y * delta_y
+    if length_squared <= 1e-9:
+        return ((point_x - end_x) ** 2 + (point_y - end_y) ** 2) ** 0.5
+    projection = (
+        (point_x - start_x) * delta_x
+        + (point_y - start_y) * delta_y
+    ) / length_squared
+    projection = _clamp(projection, 0.0, 1.0)
+    nearest_x = start_x + projection * delta_x
+    nearest_y = start_y + projection * delta_y
+    return ((point_x - nearest_x) ** 2 + (point_y - nearest_y) ** 2) ** 0.5

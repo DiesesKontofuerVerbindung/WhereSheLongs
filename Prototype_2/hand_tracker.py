@@ -52,7 +52,13 @@ class HandFeatures:
 
     @property
     def open_palm(self) -> bool:
-        return all((self.index_extended, self.middle_extended, self.ring_extended, self.pinky_extended))
+        extended_count = sum((
+            self.index_extended,
+            self.middle_extended,
+            self.ring_extended,
+            self.pinky_extended,
+        ))
+        return extended_count >= config.OPEN_PALM_MIN_EXTENDED_FINGERS
 
 
 def _xy(landmark: object) -> tuple[float, float]:

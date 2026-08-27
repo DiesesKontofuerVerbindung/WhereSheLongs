@@ -18,10 +18,11 @@ MIRROR_CAMERA = True
 TARGET_FPS = 30
 CAMERA_BUFFER_SIZE = 1
 
-# Explainable palm classification. Finger extension combines a PIP joint angle
-# with fingertip distance from the palm; it does not assume an upright hand.
-FINGER_EXTENDED_MIN_ANGLE = 150.0
-FINGER_EXTENDED_DISTANCE_RATIO = 1.12
+# Explainable relaxed-palm classification. A natural fan hand may keep one
+# finger bent; the thumb remains irrelevant to this prototype.
+FINGER_EXTENDED_MIN_ANGLE = 140.0
+FINGER_EXTENDED_DISTANCE_RATIO = 1.06
+OPEN_PALM_MIN_EXTENDED_FINGERS = 3
 
 # Fan state machine and horizontal motion geometry (screen pixels / seconds).
 PALM_ARM_TIME = 0.25
@@ -49,7 +50,7 @@ STRENGTH_FREQUENCY_REFERENCE = 2.5
 RECENT_SWEEP_WINDOW = 2.0
 
 # Interference entities: mixed Latin/Cyrillic "voices" begin as one central
-# cluster and fan strength pushes assigned halves toward opposite screen edges.
+# cluster and move only through local palm forces, impulses, and inertia.
 INTERFERENCE_ENTITY_COUNT = 28
 INTERFERENCE_RANDOM_SEED = 2608
 INTERFERENCE_CENTER_X = WINDOW_WIDTH / 2
@@ -68,13 +69,15 @@ LETTER_SETTLE_VERTICAL_SPEED = 38.0
 LETTER_AIR_DRAG = 0.75
 LETTER_FLOOR_FRICTION = 5.0
 LETTER_PHYSICS_MAX_DT = 0.05
-HAND_FORCE_RADIUS = 165.0
+HAND_FORCE_RADIUS = 220.0
+HAND_FORCE_FALLOFF_EXPONENT = 1.5
 HAND_HORIZONTAL_FORCE_GAIN = 3.2
 HAND_VERTICAL_FORCE_GAIN = 0.65
 HAND_MIN_FORCE_VELOCITY = 15.0
 PALM_VELOCITY_SMOOTHING = 0.45
 PALM_VELOCITY_MAX = 2400.0
-HAND_IMPULSE_VELOCITY_THRESHOLD = 650.0
+PHYSICS_OPEN_PALM_GRACE_TIME = 0.12
+HAND_IMPULSE_VELOCITY_THRESHOLD = 500.0
 HAND_IMPULSE_GAIN = 0.55
 HAND_IMPULSE_COOLDOWN = 0.22
 HAND_IMPULSE_REARM_RATIO = 0.65
