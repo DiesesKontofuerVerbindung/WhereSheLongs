@@ -346,7 +346,12 @@ class InterferenceField:
             if palm is not None and falloff > 0.0 and self.local_force_strength > 0.0:
                 force_velocity_x = self._effective_force_velocity(palm.velocity_x)
                 force_velocity_y = palm.velocity_y * self.local_force_strength
-                force_x = force_velocity_x * config.HAND_HORIZONTAL_FORCE_GAIN * falloff
+                force_x = (
+                    force_velocity_x
+                    * self._directional_force_scale()
+                    * config.HAND_HORIZONTAL_FORCE_GAIN
+                    * falloff
+                )
                 force_y = force_velocity_y * config.HAND_VERTICAL_FORCE_GAIN * falloff
                 self.apply_force(entity, force_x, force_y)
                 if impulse_strength_ratio > 0.0:
@@ -354,6 +359,7 @@ class InterferenceField:
                         palm.velocity_x
                         * config.HAND_IMPULSE_GAIN
                         * impulse_strength_ratio
+                        * self._directional_impulse_scale()
                         * falloff
                     )
                     entity.velocity_x += impulse_x / entity.mass
@@ -406,6 +412,16 @@ class InterferenceField:
         capped_speed = min(abs(velocity_x), config.HAND_FORCE_MAX_EFFECTIVE_SPEED)
         direction = _sign(velocity_x)
         return direction * capped_speed * self.local_force_strength
+
+    def _directional_force_scale(self) -> float:
+        return 1.0 - self.auto_dispersion_strength * (
+            1.0 - config.AUTO_DISPERSION_LOCAL_FORCE_SCALE
+        )
+
+    def _directional_impulse_scale(self) -> float:
+        return 1.0 - self.auto_dispersion_strength * (
+            1.0 - config.AUTO_DISPERSION_IMPULSE_SCALE
+        )
 
     def _influence_falloffs(self, palm: PalmPhysicsInput | None) -> dict[int, float]:
         if palm is None:

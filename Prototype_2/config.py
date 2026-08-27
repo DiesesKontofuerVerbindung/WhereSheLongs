@@ -100,7 +100,7 @@ LETTER_FLOOR_FRICTION = 5.0
 LETTER_PHYSICS_MAX_DT = 0.05
 HAND_FORCE_RADIUS = 125.0
 HAND_FORCE_FALLOFF_EXPONENT = 1.5
-HAND_HORIZONTAL_FORCE_GAIN = 4.8
+HAND_HORIZONTAL_FORCE_GAIN = 2.6
 HAND_VERTICAL_FORCE_GAIN = 0.65
 HAND_MIN_FORCE_VELOCITY = 80.0
 HAND_FORCE_FULL_VELOCITY = 460.0
@@ -121,10 +121,14 @@ INTERFERENCE_DISPERSED_MARGIN = 45.0
 # Presentation-level two-sided dispersion. This is intentionally separate
 # from local hand force: a valid horizontal palm motion drives the mixed
 # voices outward from the central field, while local left/right mechanics stay.
-AUTO_DISPERSION_MOTION_THRESHOLD = 600.0
-AUTO_DISPERSION_SPEED_REFERENCE = 1000.0
-AUTO_DISPERSION_ACCELERATION = 900.0
+AUTO_DISPERSION_MOTION_THRESHOLD = 420.0
+AUTO_DISPERSION_SPEED_REFERENCE = 760.0
+AUTO_DISPERSION_ACCELERATION = 1850.0
 AUTO_DISPERSION_DECAY = 1.15
+# Once a fast sweep activates presentation assist, both-side separation takes
+# priority over the hand's one-sided local push.
+AUTO_DISPERSION_LOCAL_FORCE_SCALE = 0.25
+AUTO_DISPERSION_IMPULSE_SCALE = 0.35
 
 # Pillow renders real CJK text; OpenCV Hershey fonts only cover ASCII.
 UNICODE_FONT_CANDIDATES = (

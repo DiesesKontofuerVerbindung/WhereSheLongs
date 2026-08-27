@@ -325,6 +325,25 @@ class FanGestureTests(unittest.TestCase):
         self.assertLess(left.velocity_x, 0.0)
         self.assertGreater(right.velocity_x, 0.0)
 
+    def test_fast_auto_assist_overrides_one_sided_local_push(self) -> None:
+        text = text_entity(x=500.0, y=400.0, side=-1)
+        field = physics_field(text)
+        field.update(
+            0.02,
+            PalmPhysicsInput(
+                x=500.0,
+                y=400.0,
+                velocity_x=config.AUTO_DISPERSION_SPEED_REFERENCE,
+                velocity_y=0.0,
+                previous_x=400.0,
+                previous_y=400.0,
+                auto_dispersion=True,
+            ),
+        )
+        self.assertTrue(field.hand_force_active)
+        self.assertEqual(field.auto_dispersion_strength, 1.0)
+        self.assertLess(text.velocity_x, 0.0)
+
     def test_crossing_center_arms_opposite_outward_half_stroke(self) -> None:
         tracker = PalmMotionTracker()
         tracker.update(config.INTERFERENCE_CENTER_X, 400.0, 0.0, True)
