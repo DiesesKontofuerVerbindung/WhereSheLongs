@@ -13,7 +13,14 @@ import config
 from fan_detector import FanDetector, Point, TrajectorySample
 from fan_state import FanState
 from hand_tracker import extract_hand_features
-from interference_field import CYRILLIC_GLYPHS, LATIN_GLYPHS, InterferenceField
+from interference_field import (
+    CYRILLIC_GLYPHS,
+    LATIN_GLYPHS,
+    InterferenceField,
+    LetterEntity,
+    PalmMotionTracker,
+    PalmPhysicsInput,
+)
 from test_logger import TestLogger
 
 
@@ -55,6 +62,33 @@ def feed_x(detector: FanDetector, x: float, y: float, now: float, count: int = 4
     return now, events
 
 
+def letter_entity(
+    x: float = 500.0,
+    y: float = 400.0,
+    mass: float = 1.0,
+    radius: float = 15.0,
+    velocity_x: float = 0.0,
+    velocity_y: float = 0.0,
+) -> LetterEntity:
+    return LetterEntity(
+        glyph="A",
+        x=x,
+        y=y,
+        mass=mass,
+        radius=radius,
+        size=32,
+        color=(255, 255, 255),
+        velocity_x=velocity_x,
+        velocity_y=velocity_y,
+    )
+
+
+def physics_field(*entities: LetterEntity) -> InterferenceField:
+    field = InterferenceField(seed=1)
+    field.entities = list(entities)
+    return field
+
+
 class FanGestureTests(unittest.TestCase):
     def test_interference_cluster_mixes_latin_and_cyrillic_glyphs(self) -> None:
         field = InterferenceField(seed=7)
@@ -63,28 +97,85 @@ class FanGestureTests(unittest.TestCase):
         self.assertTrue(glyphs.intersection(CYRILLIC_GLYPHS))
         self.assertEqual(len(field.entities), config.INTERFERENCE_ENTITY_COUNT)
 
-    def test_fan_strength_pushes_entities_outward_on_both_sides(self) -> None:
-        field = InterferenceField(seed=7)
-        initial_left = sum(entity.x for entity in field.entities if entity.side < 0) / 14
-        initial_right = sum(entity.x for entity in field.entities if entity.side > 0) / 14
-        for step in range(40):
-            field.update(0.05, 0.90, "right" if step % 2 == 0 else "left", step // 10)
-        final_left = sum(entity.x for entity in field.entities if entity.side < 0) / 14
-        final_right = sum(entity.x for entity in field.entities if entity.side > 0) / 14
-        self.assertLess(final_left, initial_left - 100.0)
-        self.assertGreater(final_right, initial_right + 100.0)
+    def test_gravity_accelerates_and_moves_letter_downward_without_hand(self) -> None:
+        field = physics_field(letter_entity(y=300.0))
+        field.update(0.05, None)
+        letter = field.entities[0]
+        self.assertEqual(letter.acceleration_y, config.LETTER_GRAVITY)
+        self.assertGreater(letter.velocity_y, 0.0)
+        self.assertGreater(letter.y, 300.0)
 
-    def test_zero_strength_does_not_disperse_and_reset_restores_cluster(self) -> None:
-        field = InterferenceField(seed=11)
-        initial = [(entity.x, entity.y) for entity in field.entities]
-        for _ in range(20):
-            field.update(0.05, 0.0, "center", 0)
-        self.assertEqual([entity.x for entity in field.entities], [point[0] for point in initial])
-        self.assertEqual(field.dispersed_count, 0)
-        field.update(0.10, 1.0, "right", 2)
-        field.reset()
-        self.assertEqual([(entity.x, entity.y) for entity in field.entities], initial)
-        self.assertEqual(field.dispersed_ratio, 0.0)
+    def test_floor_prevents_tunneling_and_small_bounce_settles(self) -> None:
+        letter = letter_entity(
+            y=config.LETTER_FLOOR_Y - 16.0,
+            radius=15.0,
+            velocity_y=200.0,
+        )
+        field = physics_field(letter)
+        field.update(0.05, None)
+        self.assertEqual(letter.y, config.LETTER_FLOOR_Y - letter.radius)
+        self.assertLessEqual(letter.velocity_y, 0.0)
+        letter.velocity_y = 1.0
+        field.update(0.05, None)
+        self.assertEqual(letter.y, config.LETTER_FLOOR_Y - letter.radius)
+        self.assertEqual(letter.velocity_y, 0.0)
+
+    def test_hand_force_is_local_to_influence_radius(self) -> None:
+        near = letter_entity(x=500.0, y=400.0)
+        far = letter_entity(x=800.0, y=400.0)
+        field = physics_field(near, far)
+        field.update(0.02, PalmPhysicsInput(500.0, 400.0, 300.0, 0.0))
+        self.assertGreater(near.acceleration_x, 0.0)
+        self.assertEqual(far.acceleration_x, 0.0)
+        self.assertEqual(field.letters_inside_influence_radius, 1)
+
+    def test_palm_velocity_controls_force_direction(self) -> None:
+        right = physics_field(letter_entity(x=500.0, y=400.0))
+        right.update(0.02, PalmPhysicsInput(500.0, 400.0, 300.0, 0.0))
+        left = physics_field(letter_entity(x=500.0, y=400.0))
+        left.update(0.02, PalmPhysicsInput(500.0, 400.0, -300.0, 0.0))
+        self.assertGreater(right.entities[0].velocity_x, 0.0)
+        self.assertLess(left.entities[0].velocity_x, 0.0)
+
+    def test_fast_palm_triggers_impulse_but_slow_palm_does_not(self) -> None:
+        slow = physics_field(letter_entity(x=500.0, y=400.0))
+        slow.update(0.01, PalmPhysicsInput(500.0, 400.0, 300.0, 0.0))
+        fast = physics_field(letter_entity(x=500.0, y=400.0))
+        fast.update(0.01, PalmPhysicsInput(500.0, 400.0, 900.0, 0.0))
+        self.assertEqual(slow.last_impulse_strength, 0.0)
+        self.assertGreater(fast.last_impulse_strength, 0.0)
+        self.assertGreater(fast.entities[0].velocity_x, slow.entities[0].velocity_x)
+
+    def test_letter_keeps_inertia_after_hand_disappears(self) -> None:
+        field = physics_field(letter_entity(x=500.0, y=400.0))
+        field.update(0.03, PalmPhysicsInput(500.0, 400.0, 400.0, 0.0))
+        velocity_with_hand = field.entities[0].velocity_x
+        x_with_hand = field.entities[0].x
+        field.update(0.03, None)
+        self.assertGreater(field.entities[0].velocity_x, 0.0)
+        self.assertLess(field.entities[0].velocity_x, velocity_with_hand)
+        self.assertGreater(field.entities[0].x, x_with_hand)
+
+    def test_open_palm_loss_does_not_reset_physical_world(self) -> None:
+        tracker = PalmMotionTracker()
+        tracker.update(480.0, 400.0, 0.0, True)
+        palm = tracker.update(520.0, 400.0, 0.05, True)
+        field = physics_field(letter_entity(x=500.0, y=400.0))
+        field.update(0.03, palm)
+        pushed_x = field.entities[0].x
+        missing = tracker.update(520.0, 400.0, 0.08, False)
+        field.update(0.03, missing)
+        self.assertIsNone(missing)
+        self.assertEqual(len(field.entities), 1)
+        self.assertGreater(field.entities[0].x, pushed_x)
+
+    def test_same_force_accelerates_lighter_letter_more(self) -> None:
+        light = letter_entity(x=500.0, y=400.0, mass=0.8)
+        heavy = letter_entity(x=500.0, y=400.0, mass=1.2)
+        field = physics_field(light, heavy)
+        field.update(0.01, PalmPhysicsInput(500.0, 400.0, 300.0, 0.0))
+        self.assertGreater(light.acceleration_x, heavy.acceleration_x)
+        self.assertGreater(light.velocity_x, heavy.velocity_x)
 
     def test_unicode_entities_render_onto_opencv_canvas(self) -> None:
         field = InterferenceField(seed=7)
