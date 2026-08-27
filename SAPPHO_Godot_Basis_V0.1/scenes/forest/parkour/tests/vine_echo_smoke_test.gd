@@ -49,6 +49,7 @@ func _run() -> void:
     _test_pre_gate_input_buffer(coordinator)
     _test_action_waits_for_execution_line(coordinator)
     _test_same_gate_reentry_preserves_and_repeats_action(coordinator, player_runner)
+    _test_same_gate_landing_retry(coordinator, player, player_runner)
     _test_airborne_action_buffer(xiaomai, xiaomai_runner)
     _test_gate_index_survives_pause_and_frame_variation(coordinator)
 
@@ -134,6 +135,21 @@ func _test_same_gate_reentry_preserves_and_repeats_action(coordinator: Node, pla
     _check(coordinator.get_player_history() == history_before, "Repeated physical DOWN execution duplicated Gate history")
     coordinator.debug_pass_gate(0)
     _check(coordinator.current_gate_index == 1, "Same-Gate re-entry prevented the Gate from finishing")
+
+
+func _test_same_gate_landing_retry(coordinator: Node, player: CharacterBody2D, player_runner: Node) -> void:
+    coordinator.reset_rounds()
+    coordinator.debug_enter_gate(0)
+    coordinator.debug_submit_action(VINE_ECHO_COORDINATOR_SCRIPT.RunnerAction.UP)
+    coordinator.debug_execute_gate(0)
+    var player_history_before: Array[int] = coordinator.get_player_history()
+    var xiaomai_history_before: Array[int] = coordinator.get_xiaomai_history()
+    player.velocity.y = 0.0
+    _check(coordinator.debug_retry_locked_player_action(VINE_ECHO_COORDINATOR_SCRIPT.RunnerAction.UP), "Locked UP could not be retried after landing")
+    _check(player.velocity.y == -player_runner.jump_impulse, "Locked UP retry did not produce a physical jump")
+    _check(not coordinator.debug_retry_locked_player_action(VINE_ECHO_COORDINATOR_SCRIPT.RunnerAction.DOWN), "Same-Gate retry changed the locked UP choice")
+    _check(coordinator.get_player_history() == player_history_before, "Same-Gate UP retry duplicated Player history")
+    _check(coordinator.get_xiaomai_history() == xiaomai_history_before, "Same-Gate UP retry duplicated Amai echo history")
 
 
 func _test_airborne_action_buffer(xiaomai: CharacterBody2D, runner: Node) -> void:

@@ -69,13 +69,18 @@ func _ready() -> void:
 
 
 func _input(event: InputEvent) -> void:
-    if not _running or action_locked or _action_pending:
+    if not _running:
         return
-    if event.is_action_pressed(&"jump"):
-        buffer_action(RunnerAction.UP)
-        get_viewport().set_input_as_handled()
-    elif event.is_action_pressed(&"move_down") or _is_page_down(event):
-        buffer_action(RunnerAction.DOWN)
+    var event_action := _get_event_action(event)
+    if event_action == RunnerAction.NONE:
+        return
+    if action_locked:
+        if retry_locked_player_action(event_action):
+            get_viewport().set_input_as_handled()
+        return
+    if _action_pending:
+        return
+    if buffer_action(event_action):
         get_viewport().set_input_as_handled()
 
 
@@ -173,6 +178,26 @@ func buffer_action(action: int) -> bool:
 
 func debug_buffer_action(action: int) -> bool:
     return buffer_action(action)
+
+
+func retry_locked_player_action(action: int) -> bool:
+    if not _running or not action_locked or not _action_executed:
+        return false
+    if action != _locked_player_action:
+        return false
+    player_runner.perform_action(action)
+    print("[VINE ECHO] retry gate=%d action=%s p=(%.1f, %.1f)" % [
+        current_gate_index + 1,
+        action_name(action),
+        player.global_position.x,
+        player.global_position.y,
+    ])
+    _update_debug_label()
+    return true
+
+
+func debug_retry_locked_player_action(action: int) -> bool:
+    return retry_locked_player_action(action)
 
 
 func debug_enter_gate(gate_index: int) -> void:
@@ -412,6 +437,17 @@ func _is_page_down(event: InputEvent) -> bool:
     return key_event != null and key_event.pressed and key_event.keycode == KEY_PAGEDOWN
 
 
+func _get_event_action(event: InputEvent) -> int:
+    var key_event := event as InputEventKey
+    if key_event != null and key_event.echo:
+        return RunnerAction.NONE
+    if event.is_action_pressed(&"jump"):
+        return RunnerAction.UP
+    if event.is_action_pressed(&"move_down") or _is_page_down(event):
+        return RunnerAction.DOWN
+    return RunnerAction.NONE
+
+
 func _get_sorted_gates() -> Array[Node2D]:
     var result: Array[Node2D] = []
     for candidate in get_tree().get_nodes_in_group("vine_decision_gate"):
@@ -437,6 +473,8 @@ func _update_debug_label() -> void:
         decision_text = "BUFFERED %s · %.2fs" % [action_name(_buffered_action), _buffered_action_remaining]
     elif action_locked and not _action_executed:
         decision_text = "LOCKED %s · Move to action line" % action_name(_locked_player_action)
+    elif action_locked:
+        decision_text = "LOCKED %s · Same key retries / move right" % action_name(_locked_player_action)
     var echo_text := "CROSSING" if _echo_crossing_gate else "WAITING AT GATE"
     debug_label.text = "Gate: %d\nDecision: %s\nPlayer Current: %s\nAmai Echo: %s (%s)\nPrevious Player: %s\nLocked: %s" % [
         current_gate_index + 1,
