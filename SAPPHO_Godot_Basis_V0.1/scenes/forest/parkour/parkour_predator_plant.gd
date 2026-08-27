@@ -8,6 +8,7 @@ enum PlantState {
 
 signal hazard_triggered
 signal choice_made(choice: StringName)
+signal state_changed(next_state: int)
 
 @export var open_duration := 1.6
 @export var closed_duration := 1.2
@@ -42,6 +43,7 @@ func set_state(next_state: int) -> void:
     state = next_state
     state_timer = open_duration if state == PlantState.OPEN else closed_duration
     _refresh_visual()
+    state_changed.emit(state)
 
 
 func reset_choice() -> void:

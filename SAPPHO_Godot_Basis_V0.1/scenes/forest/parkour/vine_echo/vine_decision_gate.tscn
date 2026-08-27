@@ -46,35 +46,39 @@ shape = SubResource("Rectangle_pass")
 
 [node name="SlideVine" type="StaticBody2D" parent="."]
 position = Vector2(0, -42)
-collision_layer = 1
+collision_layer = 0
 collision_mask = 0
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="SlideVine"]
 shape = SubResource("Rectangle_vine")
 
 [node name="Visual" type="Polygon2D" parent="SlideVine"]
+visible = false
 polygon = PackedVector2Array(-40, -11, 40, -11, 40, 11, -40, 11)
 color = Color(0.28, 0.72, 0.35, 1)
 
 [node name="UpPath" type="StaticBody2D" parent="."]
 position = Vector2(84, -150)
-collision_layer = 1
+collision_layer = 0
 collision_mask = 0
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="UpPath"]
 shape = SubResource("Rectangle_upper")
 
 [node name="Visual" type="Polygon2D" parent="UpPath"]
+visible = false
 polygon = PackedVector2Array(-110, -15, 110, -15, 110, 15, -110, 15)
 color = Color(0.55, 0.39, 0.68, 1)
 
 [node name="UpperLabel" type="Label" parent="."]
+visible = false
 position = Vector2(36, -205)
 theme_override_colors/font_color = Color(0.88, 0.74, 1, 1)
 theme_override_font_sizes/font_size = 16
 text = "UP PATH"
 
 [node name="LowerLabel" type="Label" parent="."]
+visible = false
 position = Vector2(-56, 16)
 theme_override_colors/font_color = Color(0.74, 1, 0.8, 1)
 theme_override_font_sizes/font_size = 16

@@ -4,11 +4,11 @@ const PARKOUR_PATH := "res://scenes/forest/parkour/parkour_prototype.tscn"
 const COORDINATOR_SCRIPT := preload("res://scenes/forest/parkour/vine_echo/vine_echo_coordinator.gd")
 const RUN_COUNT := 30
 var expected_route := PackedVector2Array([
-    Vector2(2440.0, 584.0),
-    Vector2(2610.0, 584.0),
-    Vector2(2930.0, 584.0),
-    Vector2(3250.0, 584.0),
-    Vector2(3570.0, 584.0),
+    Vector2(2070.0, 584.0),
+    Vector2(2089.0, 584.0),
+    Vector2(2462.0, 584.0),
+    Vector2(2781.0, 584.0),
+    Vector2(3110.0, 584.0),
     Vector2(3820.0, 584.0),
 ])
 

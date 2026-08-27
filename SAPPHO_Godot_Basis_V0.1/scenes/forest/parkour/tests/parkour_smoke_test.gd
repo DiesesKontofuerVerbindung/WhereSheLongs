@@ -4,6 +4,14 @@ const MOTOR_SCRIPT := preload("res://scenes/forest/parkour/parkour_motor.gd")
 const AMAI_SCRIPT_PATH := "res://scenes/forest/parkour/amai_parkour_placeholder.gd"
 const MECHANICS_SCENE_PATH := "res://scenes/forest/parkour/parkour_mechanics_test.tscn"
 const PROTOTYPE_SCENE_PATH := "res://scenes/forest/parkour/parkour_prototype.tscn"
+const SEGMENT01_ART_PATH := "res://scenes/forest/parkour/reference/segment01_layout_authority_20260828.jpg"
+const SEGMENT02_BACKDROP_ART_PATH := "res://scenes/forest/parkour/art/segment02_backdrop.jpg"
+const SEGMENT02_ROOT_ART_PATH := "res://scenes/forest/parkour/art/segment02_roots.png"
+const SEGMENT02_FOREGROUND_ART_PATH := "res://scenes/forest/parkour/art/segment02_foreground.png"
+const SEGMENT03_CLOSED_ART_PATH := "res://scenes/forest/parkour/art/segment03_backdrop_closed.jpg"
+const SEGMENT03_OPEN_ART_PATH := "res://scenes/forest/parkour/art/segment03_backdrop_open.jpg"
+const SEGMENT03_PLATFORM_ART_PATH := "res://scenes/forest/parkour/art/segment03_platforms.png"
+const SEGMENT03_FOREGROUND_ART_PATH := "res://scenes/forest/parkour/art/segment03_foreground.png"
 
 var failures: Array[String] = []
 
@@ -17,7 +25,7 @@ func _run() -> void:
     await _test_mechanics_scene()
     await _test_continuous_parkour()
     if failures.is_empty():
-        print("[PARKOUR V2 SMOKE PASS] Figma S2 height/jump/slide rhythm, S3 three-flower safe-risk flow, guide-path Amai, checkpoints, completion one-shot, and shared-player hand-off passed.")
+        print("[PARKOUR V2 SMOKE PASS] S2 root-arch echo, supplied S3 dual-route art with stompable flower heads, trailing Amai, checkpoints, completion one-shot, and shared-player hand-off passed.")
         quit(0)
         return
     for failure in failures:
@@ -90,6 +98,7 @@ func _test_continuous_parkour() -> void:
     var plant_a = scene.get_node("Gameplay/Segment03_PredatorPlant/PredatorPlant")
     var plant_b = scene.get_node("Gameplay/Segment03_PredatorPlant/PredatorPlantB")
     var plant_c = scene.get_node("Gameplay/Segment03_PredatorPlant/PredatorPlantC")
+    var lower_exit_platform = scene.get_node("Gameplay/Segment03_PredatorPlant/LowerExitPlatform")
     var amai = scene.get_node("AmaiPlaceholder")
     var camera: Camera2D = scene.get_node("DesignCamera")
     var expected_route: Array[StringName] = [&"J1", &"J2", &"J3", &"J3_5", &"J4"]
@@ -98,9 +107,28 @@ func _test_continuous_parkour() -> void:
     _check(player.scene_file_path == "res://shared/player/player.tscn", "Prototype does not use the canonical Shared Player")
     _check(route.get_order() == expected_route, "Segment 01 route is not J1 → J2 → J3 → J3.5 → J4")
     _check(amai is CharacterBody2D, "Segment 01/03 Amai is not a physical CharacterBody2D")
+    _check(amai.has_method("release_segment_three_exit") and amai.has_method("is_segment_three_exit_ready"), "Segment 03 shared Amai exit contract is missing")
+    _check(lower_exit_platform.surface_size.x >= 300.0, "Segment 03 lower exit platform does not support the shared walk to the exit")
     _check(scene.get_platform(&"J5") == null, "J5 still exists")
     _check(not scene.has_signal("parkour_advanced_route_completed"), "Deprecated advanced-route signal still exists")
-    _check(scene.get_node("Background/Art").texture != null, "Segment 01 art failed to load")
+    var segment_01_art: Sprite2D = scene.get_node("Background/Art")
+    _check(segment_01_art.texture != null, "Segment 01 art failed to load")
+    _check(segment_01_art.texture.resource_path == SEGMENT01_ART_PATH, "Segment 01 still uses the superseded layout image")
+    _check(segment_01_art.position == Vector2(960.0, 540.0), "Segment 01 art is not centered in its 1920x1080 segment")
+    _check(segment_01_art.scale.is_equal_approx(Vector2(0.75, 0.75)), "Segment 01 art is not fitted from 2560x1440 to 1920x1080")
+
+    var expected_segment_01_tops := {
+        &"J1": 470.0,
+        &"J2": 677.0,
+        &"J3": 454.0,
+        &"J3_5": 625.0,
+        &"J4": 412.0,
+    }
+    for platform_id in expected_segment_01_tops:
+        var platform = scene.get_platform(platform_id)
+        var platform_shape := platform.body_shape.shape as RectangleShape2D
+        var platform_top: float = platform.global_position.y + platform.static_body.position.y - platform_shape.size.y * 0.5
+        _check(absf(platform_top - expected_segment_01_tops[platform_id]) <= 1.0, "%s is not aligned to the new external Segment 1 authority image" % platform_id)
 
     for index in range(expected_route.size() - 1):
         _check(_jump_is_reachable(scene, expected_route[index], expected_route[index + 1], motor), "%s → %s is outside the unified jump envelope" % [expected_route[index], expected_route[index + 1]])
@@ -155,6 +183,8 @@ func _test_continuous_parkour() -> void:
 
         await scene.debug_jump_to_segment(3)
         _check(scene.current_segment == 3 and camera.position.is_equal_approx(route.get_segment_center(3)), "Eye transition did not enter Segment 03")
+        _check(not amai.is_segment_three_route_locked(), "Amai started Segment 3 before Xiaoling chose a route")
+        _check(amai.segment_three_follow_speed < motor.move_speed, "Amai is not slower than Xiaoling in Segment 3")
         var hazards := [0]
         plant_a.hazard_triggered.connect(func(): hazards[0] += 1, CONNECT_ONE_SHOT)
         plant_a.set_state(plant_a.PlantState.OPEN)
@@ -203,50 +233,79 @@ func _test_continuous_parkour() -> void:
 
 
 func _test_segment_02_geometry(scene: Node, motor: Node, normal_height: float, slide_height: float) -> void:
-    var route_nodes := [
-        "Gameplay/Segment02_Vines/StartPlatform",
-        "Gameplay/Segment02_Vines/RaisedStepA",
-        "Gameplay/Segment02_Vines/LowRunPlatform",
-        "Gameplay/Segment02_Vines/RaisedStepB",
-        "Gameplay/Segment02_Vines/ExitPlatform",
-    ]
-    _check(_surfaces_have_multiple_heights(scene, route_nodes, 5), "Segment 02 does not preserve the Figma high-low platform rhythm")
-    _check(_surface_route_is_reachable(scene, route_nodes, motor), "Segment 02 main route contains an unreachable jump")
-    var shortcut = scene.get_node("Gameplay/Segment02_Vines/OptionalNarrowShortcut") as Node2D
-    var shortcut_size: Vector2 = shortcut.get("surface_size")
-    _check(shortcut_size.x <= 150.0 and _surface_is_reachable(scene.get_node("Gameplay/Segment02_Vines/RaisedStepA"), shortcut, motor), "Segment 02 narrow vine shortcut is missing or unreachable")
+    var segment := scene.get_node("Gameplay/Segment02_Vines")
+    for removed_name in ["StartPlatform", "RaisedStepA", "LowRunPlatform", "RaisedStepB", "ExitPlatform", "OptionalNarrowShortcut"]:
+        _check(segment.get_node_or_null(removed_name) == null, "Segment 02 still contains obsolete platform %s" % removed_name)
+    var roots := scene.get_node("Gameplay/Segment02_Vines/RootObstacles")
+    var segment_art := segment.get_node("Segment02Art")
+    _check(segment_art.get_node("Backdrop").texture.resource_path == SEGMENT02_BACKDROP_ART_PATH, "Segment 02 backdrop art is missing")
+    _check(segment_art.get_node("Roots").texture.resource_path == SEGMENT02_ROOT_ART_PATH, "Segment 02 supplied root art is missing")
+    _check(segment_art.get_node("Foreground").texture.resource_path == SEGMENT02_FOREGROUND_ART_PATH, "Segment 02 foreground art is missing")
+    _check(segment_art.get_node("Foreground").z_index > scene.get_node("Player").z_index, "Segment 02 foreground does not pass in front of the characters")
+    _check(roots.get_child_count() == 5, "Segment 02 must contain five reusable RootObstacle collision instances")
+    var expected_sizes := ["MEDIUM", "SMALL", "LARGE", "MEDIUM", "SMALL"]
+    var previous_right := -INF
+    for index in roots.get_child_count():
+        var root_obstacle := roots.get_child(index) as Node2D
+        var width: float = root_obstacle.get_outer_width()
+        var height: float = root_obstacle.get_outer_height()
+        var size_class := "LARGE" if width >= 200.0 else ("SMALL" if width <= 130.0 else "MEDIUM")
+        _check(size_class == expected_sizes[index], "%s breaks the MEDIUM-SMALL-LARGE rhythm" % root_obstacle.name)
+        var left_edge: float = root_obstacle.global_position.x - width * 0.5
+        _check(left_edge - previous_right >= 65.0, "%s has no independent landing/run-up space" % root_obstacle.name)
+        previous_right = root_obstacle.global_position.x + width * 0.5
+        _check(height >= 70.0, "%s has collapsed into a flat bar" % root_obstacle.name)
+        _check(root_obstacle.scene_file_path == "res://scenes/forest/parkour/root_obstacle.tscn", "%s does not reuse root_obstacle.tscn" % root_obstacle.name)
+        _check(not root_obstacle.visual_enabled, "%s still draws development art over the supplied root layer" % root_obstacle.name)
 
     var floor = scene.get_node("Gameplay/Segment02_Vines/VineRunFloor") as StaticBody2D
     var floor_shape_node: CollisionShape2D = scene.get_node("Gameplay/Segment02_Vines/VineRunFloor/CollisionShape2D")
     var floor_shape := floor_shape_node.shape as RectangleShape2D
-    var gate_shape_node: CollisionShape2D = scene.get_node("Gameplay/Segment02_Vines/Gate01/SlideVine/CollisionShape2D")
-    var gate_shape := gate_shape_node.shape as RectangleShape2D
+    var root_shape_node: CollisionShape2D = scene.get_node("Gameplay/Segment02_Vines/RootObstacles/Root01/UpperCollision/CollisionShape2D")
+    var root_shape := root_shape_node.shape as RectangleShape2D
     var floor_top: float = floor.global_position.y - floor_shape.size.y * 0.5
-    var under_clearance: float = floor_top - (gate_shape_node.global_position.y + gate_shape.size.y * 0.5)
-    _check(normal_height > under_clearance and slide_height < under_clearance, "A Vine gate must block standing movement while allowing the slide collider")
+    var under_clearance: float = floor_top - (root_shape_node.global_position.y + root_shape.size.y * 0.5)
+    _check(normal_height > under_clearance and slide_height < under_clearance, "A Root arch must block standing movement while allowing the slide collider")
+    _check((scene.get_node("Player") as CollisionObject2D).collision_mask & 8 != 0, "Player does not collide with RootObstacle layer")
+    _check((scene.get_node("AmaiEcho") as CollisionObject2D).collision_mask & 8 == 0, "Amai fixed route is blocked by RootObstacle layer")
+    for gate_index in 4:
+        var gate := scene.get_node("Gameplay/Segment02_Vines/Gate%02d" % (gate_index + 1)) as Node2D
+        var root_obstacle := roots.get_child(gate_index) as Node2D
+        _check(is_equal_approx(gate.global_position.x, root_obstacle.global_position.x), "Gate %d is detached from its Root obstacle" % (gate_index + 1))
     _check(scene.get_node("Gameplay/Checkpoints/S2AfterVine") != null, "S2_AFTER_VINE checkpoint is missing")
 
 
 func _test_segment_03_geometry(scene: Node, motor: Node) -> void:
-    var main_route := [
-        "Gameplay/Segment03_PredatorPlant/Flower1Launch",
-        "Gameplay/Segment03_PredatorPlant/LowerGround01",
-        "Gameplay/Segment03_PredatorPlant/LowerGround02",
-        "Gameplay/Segment03_PredatorPlant/LowerGround03",
-        "Gameplay/Segment03_PredatorPlant/Flower3Landing",
+    var lower_route := [
+        "Gameplay/Segment03_PredatorPlant/StartPlatform",
+        "Gameplay/Segment03_PredatorPlant/LowerPlatform01",
+        "Gameplay/Segment03_PredatorPlant/LowerPlatform02",
+        "Gameplay/Segment03_PredatorPlant/LowerPlatform03",
+        "Gameplay/Segment03_PredatorPlant/LowerExitPlatform",
     ]
-    var risk_route := [
-        "Gameplay/Segment03_PredatorPlant/Flower1Launch",
-        "Gameplay/Segment03_PredatorPlant/Flower1Landing",
-        "Gameplay/Segment03_PredatorPlant/Flower2Landing",
-        "Gameplay/Segment03_PredatorPlant/Flower3Launch",
-        "Gameplay/Segment03_PredatorPlant/Flower3Landing",
+    var flower_head_route := [
+        "Gameplay/Segment03_PredatorPlant/StartPlatform",
+        "Gameplay/Segment03_PredatorPlant/UpperApproach",
+        "Gameplay/Segment03_PredatorPlant/PredatorPlant/HeadPlatform",
+        "Gameplay/Segment03_PredatorPlant/UpperPlatform01",
+        "Gameplay/Segment03_PredatorPlant/PredatorPlantB/HeadPlatform",
+        "Gameplay/Segment03_PredatorPlant/UpperPlatform02",
+        "Gameplay/Segment03_PredatorPlant/PredatorPlantC/HeadPlatform",
+        "Gameplay/Segment03_PredatorPlant/UpperExitPlatform",
     ]
-    _check(_surfaces_have_multiple_heights(scene, main_route, 5), "Segment 03 lower route does not preserve the Figma terrain rhythm")
-    _check(_surface_route_is_reachable(scene, main_route, motor), "Segment 03 safe route contains an unreachable jump")
-    _check(_surface_route_is_reachable(scene, risk_route, motor), "Segment 03 risk platforms are unreachable")
+    _check(_surfaces_have_multiple_heights(scene, lower_route, 5), "Segment 03 lower route does not preserve the supplied terrain rhythm")
+    _check(_surface_route_is_reachable(scene, lower_route, motor), "Segment 03 lower route contains an unreachable jump")
+    _check(_surface_route_is_reachable(scene, flower_head_route, motor), "Segment 03 flower-head route contains an unreachable jump")
     _check(scene.get_node("Gameplay/Segment03_PredatorPlant/PredatorPlantB") != null, "Segment 03 is missing Plant B")
     _check(scene.get_node("Gameplay/Segment03_PredatorPlant/PredatorPlantC") != null, "Segment 03 is missing Plant C")
+    for plant_name in ["PredatorPlant", "PredatorPlantB", "PredatorPlantC"]:
+        var head = scene.get_node("Gameplay/Segment03_PredatorPlant/%s/HeadPlatform" % plant_name)
+        _check(head.collision_shape.one_way_collision, "%s head is not a one-way landing surface" % plant_name)
+    var segment_art := scene.get_node("Gameplay/Segment03_PredatorPlant/Segment03Art")
+    _check(segment_art.get_node("BackdropClosed").texture.resource_path == SEGMENT03_CLOSED_ART_PATH, "Segment 03 closed backdrop is missing")
+    _check(segment_art.get_node("BackdropOpen").texture.resource_path == SEGMENT03_OPEN_ART_PATH, "Segment 03 open backdrop is missing")
+    _check(segment_art.get_node("Platforms").texture.resource_path == SEGMENT03_PLATFORM_ART_PATH, "Segment 03 platform art is missing")
+    _check(segment_art.get_node("Foreground").texture.resource_path == SEGMENT03_FOREGROUND_ART_PATH, "Segment 03 foreground art is missing")
     _check(scene.get_node("Gameplay/Checkpoints/S3AfterPlant") != null, "Segment 03 recovery checkpoint is missing")
 
 
@@ -269,24 +328,30 @@ func _test_guide_paths(scene: Node, amai: Node) -> void:
     _check("guide_root" in amai_source and "_guide_points" in amai_source, "Amai is not driven by predefined guide anchors")
     _check("move_and_slide()" in amai_source and "jump_impulse" in amai_source, "Amai fixed guides do not use real jump physics")
     _check("global_position.move_toward" not in amai_source, "Amai still floats directly between guide anchors")
+    _check("segment_three_follow_distance" in amai_source and "segment_three_follow_speed" in amai_source, "Amai lacks the Segment 3 trailing-follow contract")
 
 
 func _test_debug_overlay_coverage(scene: Node) -> void:
     var debug = scene.get_node("ParkourDebug")
     var required_shapes := [
-        ^"../Gameplay/Segment02_Vines/Gate01/SlideVine/CollisionShape2D",
+        ^"../Gameplay/Segment02_Vines/RootObstacles/Root01/UpperCollision/CollisionShape2D",
+        ^"../Gameplay/Segment02_Vines/RootObstacles/Root05/UpperCollision/CollisionShape2D",
         ^"../Gameplay/Segment02_Vines/Gate01/DecisionZone/CollisionShape2D",
         ^"../Gameplay/Segment02_Vines/Gate01/ActionZone/CollisionShape2D",
         ^"../Gameplay/Segment02_Vines/Gate04/PassZone/CollisionShape2D",
         ^"../Gameplay/Segment03_PredatorPlant/PredatorPlant/HazardArea/CollisionShape2D",
+        ^"../Gameplay/Segment03_PredatorPlant/PredatorPlant/HeadPlatform/CollisionShape2D",
         ^"../Gameplay/Segment03_PredatorPlant/PredatorPlantB/HazardArea/CollisionShape2D",
+        ^"../Gameplay/Segment03_PredatorPlant/PredatorPlantB/HeadPlatform/CollisionShape2D",
         ^"../Gameplay/Segment03_PredatorPlant/PredatorPlantC/HazardArea/CollisionShape2D",
+        ^"../Gameplay/Segment03_PredatorPlant/PredatorPlantC/HeadPlatform/CollisionShape2D",
         ^"../Gameplay/Checkpoints/S2AfterVine/CollisionShape2D",
         ^"../Gameplay/Checkpoints/S3AfterPlant/CollisionShape2D",
     ]
     for shape_path in required_shapes:
         _check(shape_path in debug.EXTRA_SHAPE_PATHS, "F4 overlay is missing %s" % shape_path)
-    _check(root.get_tree().get_nodes_in_group("parkour_greybox_surface").size() >= 14, "F4 overlay cannot find the Figma-aligned greybox platforms")
+    _check(root.get_tree().get_nodes_in_group("parkour_greybox_surface").size() >= 5, "F4 overlay cannot find the Segment 01/03 greybox surfaces")
+    _check(root.get_tree().get_nodes_in_group("segment02_root_obstacle").size() == 5, "F4 overlay cannot find all five Segment 02 Root obstacles")
 
 
 func _surfaces_have_multiple_heights(scene: Node, paths: Array, minimum_count: int) -> bool:

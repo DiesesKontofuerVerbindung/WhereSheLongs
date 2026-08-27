@@ -4,7 +4,7 @@
 [ext_resource type="Script" path="res://scenes/forest/parkour/vine_echo/runner_action_controller.gd" id="2_runner"]
 [ext_resource type="PackedScene" path="res://scenes/forest/parkour/vine_echo/vine_decision_gate.tscn" id="3_gate"]
 [ext_resource type="Script" path="res://scenes/forest/parkour/vine_echo/vine_echo_coordinator.gd" id="4_coordinator"]
-[ext_resource type="Texture2D" path="res://scenes/forest/parkour/characters/xiaoling_parkour_side.png" id="5_xiaoling"]
+[ext_resource type="PackedScene" path="res://scenes/forest/parkour/characters/xiaoling_parkour_visual.tscn" id="5_xiaoling"]
 [ext_resource type="Texture2D" path="res://scenes/forest/parkour/characters/amai_parkour_side.png" id="6_xiaomai"]
 
 [sub_resource type="RectangleShape2D" id="Rectangle_ground"]
@@ -96,11 +96,7 @@ z_index = 10
 [node name="Visual" parent="Player" index="0"]
 visible = false
 
-[node name="XiaolingSprite" type="Sprite2D" parent="Player"]
-position = Vector2(0, -11)
-scale = Vector2(0.1, 0.1)
-texture = ExtResource("5_xiaoling")
-flip_h = true
+[node name="XiaolingSprite" parent="Player" instance=ExtResource("5_xiaoling")]
 
 [node name="RunnerActionController" type="Node" parent="Player"]
 script = ExtResource("2_runner")

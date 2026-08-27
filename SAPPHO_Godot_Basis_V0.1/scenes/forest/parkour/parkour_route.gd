@@ -11,45 +11,45 @@ const SEGMENT_CENTERS := {
 }
 const SEGMENT_SPAWNS := {
     1: Vector2(384.0, 840.0),
-    2: Vector2(2284.0, 480.0),
-    3: Vector2(3939.0, 485.0),
+    2: Vector2(2045.0, 584.0),
+    3: Vector2(3970.0, 596.0),
 }
 
 # Position is the fixed route anchor. Collision offset/size is the tunable gameplay layer.
 const FOREST_DATA := {
     &"J1": {
-        "normalized_position": Vector2(0.20, 0.84),
+        "normalized_position": Vector2(0.171875, 0.450925926),
         "collision_offset": Vector2(0.0, 0.0),
-        "collision_size": Vector2(260.0, 34.0),
-        "landing_sensor_size": Vector2(230.0, 14.0),
+        "collision_size": Vector2(240.0, 34.0),
+        "landing_sensor_size": Vector2(210.0, 14.0),
         "checkpoint_enabled": true,
     },
     &"J2": {
-        "normalized_position": Vector2(0.34, 0.69),
-        "collision_offset": Vector2(0.0, 9.0),
-        "collision_size": Vector2(210.0, 28.0),
-        "landing_sensor_size": Vector2(185.0, 14.0),
+        "normalized_position": Vector2(0.341145833, 0.642592593),
+        "collision_offset": Vector2.ZERO,
+        "collision_size": Vector2(310.0, 34.0),
+        "landing_sensor_size": Vector2(280.0, 14.0),
         "checkpoint_enabled": true,
     },
     &"J3": {
-        "normalized_position": Vector2(0.54, 0.82),
-        "collision_offset": Vector2(0.0, -5.0),
-        "collision_size": Vector2(330.0, 40.0),
-        "landing_sensor_size": Vector2(300.0, 14.0),
+        "normalized_position": Vector2(0.5, 0.436111111),
+        "collision_offset": Vector2.ZERO,
+        "collision_size": Vector2(180.0, 34.0),
+        "landing_sensor_size": Vector2(150.0, 14.0),
         "checkpoint_enabled": true,
     },
     &"J3_5": {
-        "normalized_position": Vector2(0.61, 0.63),
-        "collision_offset": Vector2(0.0, -26.0),
-        "collision_size": Vector2(150.0, 28.0),
-        "landing_sensor_size": Vector2(140.0, 14.0),
+        "normalized_position": Vector2(0.682291667, 0.594444444),
+        "collision_offset": Vector2.ZERO,
+        "collision_size": Vector2(300.0, 34.0),
+        "landing_sensor_size": Vector2(270.0, 14.0),
         "checkpoint_enabled": true,
     },
     &"J4": {
-        "normalized_position": Vector2(0.76, 0.54),
-        "collision_offset": Vector2(0.0, 14.0),
-        "collision_size": Vector2(620.0, 34.0),
-        "landing_sensor_size": Vector2(560.0, 14.0),
+        "normalized_position": Vector2(0.859375, 0.397222222),
+        "collision_offset": Vector2.ZERO,
+        "collision_size": Vector2(400.0, 34.0),
+        "landing_sensor_size": Vector2(370.0, 14.0),
         "checkpoint_enabled": true,
     },
 }

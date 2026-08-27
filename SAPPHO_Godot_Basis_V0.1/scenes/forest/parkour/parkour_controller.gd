@@ -42,6 +42,7 @@ var _transitioning := false
 var _parkour_completed_emitted := false
 var _vine_choice: StringName = &""
 var _plant_choice: StringName = &""
+var _segment_three_finish_pending := false
 var _platforms: Dictionary = {}
 var _original_player_shape: Shape2D
 var _slide_player_shape: Shape2D
@@ -90,6 +91,12 @@ func _physics_process(delta: float) -> void:
     if player.global_position.y > kill_y:
         respawn(true)
         return
+    if current_segment == 3:
+        _update_segment_three_shared_exit()
+        if _segment_three_finish_pending:
+            motor.velocity = Vector2.ZERO
+            player.set_external_velocity(Vector2.ZERO)
+            return
     if current_segment == 2 and vine_echo != null and vine_echo.is_active():
         return
 
@@ -171,7 +178,7 @@ func respawn(count_as_fall: bool = true) -> void:
     if current_segment == 2 and vine_echo != null:
         vine_echo.begin_run()
     if amai != null:
-        if current_segment == 1:
+        if current_segment == 1 or current_segment == 3:
             amai.hold_for_player_recovery()
         else:
             amai.reset_to_segment(current_segment)
@@ -243,6 +250,7 @@ func transition_to_segment(next_segment: int) -> void:
         await eye_transition.close_eyes(caption)
 
     current_segment = next_segment
+    _segment_three_finish_pending = false
     if design_camera != null:
         design_camera.position = route.get_segment_center(next_segment)
     var checkpoint_id: StringName = &"S2_START" if next_segment == 2 else &"S3_START"
@@ -270,6 +278,7 @@ func complete_parkour() -> void:
     if route.profile != 0 or _transitioning or _parkour_completed_emitted:
         return
     _transitioning = true
+    _segment_three_finish_pending = false
     _set_slide_state(false)
     player.stop_external_movement()
     motor.velocity = Vector2.ZERO
@@ -303,6 +312,7 @@ func reset_run_for_test() -> void:
     _parkour_completed_emitted = false
     _vine_choice = &""
     _plant_choice = &""
+    _segment_three_finish_pending = false
     if vine_echo != null:
         vine_echo.stop_run(false)
     _set_amai_echo_mode(false)
@@ -478,6 +488,23 @@ func _on_segment_02_exit_entered(body: Node2D) -> void:
 
 func _on_segment_03_finish_entered(body: Node2D) -> void:
     if body == player and current_segment == 3:
+        _segment_three_finish_pending = true
+        _update_segment_three_shared_exit()
+
+
+func _update_segment_three_shared_exit() -> void:
+    if current_segment != 3 or _transitioning:
+        return
+    if amai == null:
+        if _segment_three_finish_pending:
+            _segment_three_finish_pending = false
+            complete_parkour.call_deferred()
+        return
+    if amai.is_route_complete() and not amai.is_segment_three_exit_released():
+        if player.global_position.x >= amai.global_position.x - amai.segment_three_escort_lead:
+            amai.release_segment_three_exit()
+    if _segment_three_finish_pending and amai.is_segment_three_exit_ready():
+        _segment_three_finish_pending = false
         complete_parkour.call_deferred()
 
 
@@ -488,7 +515,10 @@ func _on_s2_checkpoint_entered(body: Node2D) -> void:
 
 func _on_s3_checkpoint_entered(body: Node2D) -> void:
     if body == player and current_segment == 3:
-        _set_checkpoint(&"S3_AFTER_PLANT", Vector2(5080.0, 770.0))
+        if player.global_position.y < 400.0:
+            _set_checkpoint(&"S3_AFTER_PLANT_UPPER", Vector2(5070.0, 285.0))
+        else:
+            _set_checkpoint(&"S3_AFTER_PLANT_LOWER", Vector2(5120.0, 554.0))
 
 
 func _on_vine_choice(choice: StringName) -> void:

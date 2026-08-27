@@ -32,6 +32,25 @@ func _run() -> void:
 
     var reached_mid_route := await _wait_for_guide_index(amai, 2, 360)
     _check(reached_mid_route, "Amai did not reach the Segment 1 mid-route anchor")
+
+    var recovery_anchor_index := amai.get_guide_index()
+    var recovery_anchor := amai.guide_root.get_node("Segment01Guide").get_child(recovery_anchor_index) as Marker2D
+    amai.global_position.y = amai.segment_one_fall_recovery_y + 20.0
+    await physics_frame
+    _check(amai.get_guide_index() == recovery_anchor_index, "Amai lost Segment 1 progress during fall recovery")
+    _check(amai.global_position.distance_to(recovery_anchor.global_position) <= 1.0, "Amai did not recover to its last confirmed Segment 1 landing")
+    _check(amai.get_fall_recovery_count() == 1, "Amai fall recovery was not recorded exactly once")
+    player.global_position.x = 330.0
+    amai.hold_for_player_recovery()
+    for frame in 4:
+        await physics_frame
+    report.append("fall_recovery index=%d p=(%.1f,%.1f) count=%d" % [
+        amai.get_guide_index(),
+        amai.global_position.x,
+        amai.global_position.y,
+        amai.get_fall_recovery_count(),
+    ])
+
     var pre_fall_index := amai.get_guide_index()
     var pre_fall_position := amai.global_position
     var pre_fall_landings := amai.get_landing_history().size()

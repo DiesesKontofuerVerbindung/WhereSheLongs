@@ -1,8 +1,8 @@
 extends SceneTree
 
 const PARKOUR_SCENE := "res://scenes/forest/parkour/parkour_prototype.tscn"
-const MAX_ROUTE_FRAMES := 1200
-const PLAYER_FOLLOW_SPEED := 240.0
+const MAX_ROUTE_FRAMES := 1800
+const PLAYER_FOLLOW_SPEED := 300.0
 const MAX_ALLOWED_LEAD := 700.0
 
 var failures: Array[String] = []
@@ -34,11 +34,11 @@ func _run() -> void:
     var segment_01 := await _run_route(amai, player, 1, &"", 384.0, 1300.0)
     _check_route("Segment01Guide", segment_01, 4, 5)
 
-    var segment_03_safe := await _run_route(amai, player, 3, &"WAIT", 3939.0, 5480.0)
-    _check_route("Segment03SafeGuide", segment_03_safe, 2, 6)
+    var segment_03_safe := await _run_route(amai, player, 3, &"WAIT", 3970.0, 5700.0)
+    _check_route("Segment03SafeGuide", segment_03_safe, 3, 10)
 
-    var segment_03_risk := await _run_route(amai, player, 3, &"RISK_ROUTE", 3939.0, 5480.0)
-    _check_route("Segment03RiskGuide", segment_03_risk, 4, 7)
+    var segment_03_risk := await _run_route(amai, player, 3, &"RISK_ROUTE", 3970.0, 5700.0)
+    _check_route("Segment03RiskGuide", segment_03_risk, 7, 16)
 
     scene.queue_free()
     await process_frame
@@ -82,20 +82,24 @@ func _run_route(
         "landing_count": amai.get_landing_history().size(),
         "landings": amai.get_landing_history(),
         "max_lead": amai.get_max_observed_lead(),
+        "max_trail": amai.get_max_observed_trail(),
         "max_horizontal_speed": amai.get_max_observed_horizontal_speed(),
+        "fall_recoveries": amai.get_fall_recovery_count(),
         "airborne": observed_airborne,
         "rising": observed_rising,
         "falling": observed_falling,
         "final_position": amai.global_position,
         "max_landing_vertical_error": _max_landing_vertical_error(amai, amai.get_landing_history()),
     }
-    report_lines.append("guide=%s complete=%s frame=%d jumps=%d landings=%d max_lead=%.1f max_vx=%.1f max_landing_dy=%.1f final=(%.1f,%.1f)" % [
+    report_lines.append("guide=%s complete=%s frame=%d jumps=%d landings=%d recoveries=%d max_lead=%.1f max_trail=%.1f max_vx=%.1f max_landing_dy=%.1f final=(%.1f,%.1f)" % [
         result["guide"],
         str(result["complete"]),
         result["completion_frame"],
         result["jump_count"],
         result["landing_count"],
+        result["fall_recoveries"],
         result["max_lead"],
+        result["max_trail"],
         result["max_horizontal_speed"],
         result["max_landing_vertical_error"],
         result["final_position"].x,
@@ -123,8 +127,14 @@ func _check_route(guide_name: String, result: Dictionary, expected_jumps: int, e
     _check(result["landing_count"] >= expected_landings, "%s recorded only %d/%d landings" % [guide_name, result["landing_count"], expected_landings])
     _check(result["airborne"] and result["rising"] and result["falling"], "%s did not show a real rise/fall physics arc" % guide_name)
     _check(result["max_horizontal_speed"] <= 300.01, "%s moved faster than Xiaoling's 300 px/s" % guide_name)
-    _check(result["max_lead"] <= MAX_ALLOWED_LEAD, "%s exceeded the one-to-two-cell lead: %.1f" % [guide_name, result["max_lead"]])
+    if guide_name.begins_with("Segment03"):
+        _check(result["max_horizontal_speed"] <= 255.01, "%s ignored the slower Segment 3 follow speed" % guide_name)
+        _check(result["max_lead"] <= 30.01, "%s ran ahead of Xiaoling in Segment 3 by %.1f px" % [guide_name, result["max_lead"]])
+        _check(result["max_trail"] >= 150.0, "%s never formed a visible trailing gap" % guide_name)
+    else:
+        _check(result["max_lead"] <= MAX_ALLOWED_LEAD, "%s exceeded the one-to-two-cell lead: %.1f" % [guide_name, result["max_lead"]])
     _check(result["max_landing_vertical_error"] <= 18.01, "%s landed on the wrong height by %.1f px" % [guide_name, result["max_landing_vertical_error"]])
+    _check(guide_name != "Segment01Guide" or result["fall_recoveries"] == 0, "Segment01Guide needed %d emergency fall recoveries" % result["fall_recoveries"])
 
 
 func _check(condition: bool, message: String) -> void:
@@ -136,7 +146,7 @@ func _finish() -> void:
     for line in report_lines:
         print("[AMAI PHYSICAL ROUTE] %s" % line)
     if failures.is_empty():
-        print("[AMAI PHYSICAL ROUTE PASS] Segment 01 and Segment 03 use fixed real jumps, land on every anchor, and stay within a staggered one-to-two-cell lead.")
+        print("[AMAI PHYSICAL ROUTE PASS] Segment 01 keeps its fixed jump lead; Segment 03 uses fixed real jumps on both routes while Amai follows behind Xiaoling.")
         quit(0)
         return
     for failure in failures:

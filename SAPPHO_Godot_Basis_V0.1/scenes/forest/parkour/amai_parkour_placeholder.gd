@@ -22,8 +22,14 @@ signal fixed_landing_reached(guide_name: StringName, anchor_index: int, position
 @export var landing_vertical_tolerance := 18.0
 @export var lead_gap_pattern := PackedFloat32Array([320.0, 620.0, 320.0, 620.0])
 @export var recovery_release_distance := 160.0
+@export var segment_one_fall_recovery_y := 1080.0
 @export var segment_one_escort_lead := 260.0
 @export var segment_one_exit_x := 1900.0
+@export var segment_three_follow_distance := 150.0
+@export var segment_three_follow_speed := 255.0
+@export var segment_three_fall_recovery_y := 1080.0
+@export var segment_three_escort_lead := 70.0
+@export var segment_three_exit_x := 5735.0
 @export var trace_enabled := true
 @export var trace_path := "res://../tmp/codex_logs/amai_fixed_route_live.log"
 
@@ -44,10 +50,13 @@ var _landing_history: Array[Vector2] = []
 var _last_recorded_guide: StringName = &""
 var _last_recorded_anchor_index := -1
 var _max_observed_lead := 0.0
+var _max_observed_trail := 0.0
 var _max_observed_horizontal_speed := 0.0
 var _segment_three_route_locked := false
 var _waiting_for_player_recovery := false
 var _segment_one_exit_released := false
+var _segment_three_exit_released := false
+var _fall_recovery_count := 0
 var _trace_file: FileAccess
 var _trace_frame := 0
 
@@ -77,6 +86,16 @@ func _physics_process(delta: float) -> void:
         return
 
     _max_observed_lead = maxf(_max_observed_lead, global_position.x - player.global_position.x)
+    if _is_segment_three_guide():
+        _max_observed_trail = maxf(_max_observed_trail, player.global_position.x - global_position.x)
+
+    if (
+        (active_guide == &"Segment01Guide" and global_position.y >= segment_one_fall_recovery_y)
+        or (_is_segment_three_guide() and global_position.y >= segment_three_fall_recovery_y)
+    ):
+        _recover_active_guide_fall()
+        _trace_state()
+        return
 
     if _needs_floor_settle:
         velocity.x = 0.0
@@ -100,9 +119,21 @@ func _physics_process(delta: float) -> void:
             global_position.x,
         ])
 
+    if _is_segment_three_guide() and not _segment_three_route_locked:
+        velocity.x = 0.0
+        _apply_gravity(delta)
+        move_and_slide()
+        _set_state(AmaiState.WAITING)
+        _trace_state()
+        return
+
     if _guide_index >= _guide_points.size() - 1:
         if active_guide == &"Segment01Guide" and _segment_one_exit_released:
             _step_segment_one_escort(delta)
+            _trace_state()
+            return
+        if active_guide in [&"Segment03SafeGuide", &"Segment03RiskGuide"] and _segment_three_exit_released:
+            _step_segment_three_escort(delta)
             _trace_state()
             return
         velocity.x = 0.0
@@ -113,14 +144,22 @@ func _physics_process(delta: float) -> void:
         return
 
     if not _leg_active:
-        var allowed_gap := _get_allowed_lead_gap(_guide_index)
-        if global_position.x - player.global_position.x > allowed_gap:
+        if _is_segment_three_guide() and player.global_position.x - global_position.x < segment_three_follow_distance:
             velocity.x = 0.0
             _apply_gravity(delta)
             move_and_slide()
             _set_state(AmaiState.WAITING)
             _trace_state()
             return
+        if not _is_segment_three_guide():
+            var allowed_gap := _get_allowed_lead_gap(_guide_index)
+            if global_position.x - player.global_position.x > allowed_gap:
+                velocity.x = 0.0
+                _apply_gravity(delta)
+                move_and_slide()
+                _set_state(AmaiState.WAITING)
+                _trace_state()
+                return
         _begin_leg()
 
     _step_active_leg(delta)
@@ -143,11 +182,15 @@ func record_choice(choice: StringName) -> void:
             if _segment_three_route_locked:
                 return
             _segment_three_route_locked = true
+            choice_label.text = "阿麦跟随：下层路线"
+            collision_mask = 1
             _set_guide(&"Segment03SafeGuide")
         &"RISK_ROUTE":
             if _segment_three_route_locked:
                 return
             _segment_three_route_locked = true
+            choice_label.text = "阿麦跟随：花头路线"
+            collision_mask = 9
             _set_guide(&"Segment03RiskGuide")
 
 
@@ -160,17 +203,36 @@ func reset_to_segment(segment_index: int) -> void:
     _jump_count = 0
     _landing_history.clear()
     _max_observed_lead = 0.0
+    _max_observed_trail = 0.0
     _max_observed_horizontal_speed = 0.0
     _segment_three_route_locked = false
     _waiting_for_player_recovery = false
     _segment_one_exit_released = false
+    _segment_three_exit_released = false
+    _fall_recovery_count = 0
+    collision_mask = 1
     _set_guide(guide_name, true)
 
 
 func hold_for_player_recovery() -> void:
-    if active_guide != &"Segment01Guide":
+    if active_guide != &"Segment01Guide" and not _is_segment_three_guide():
         return
     _waiting_for_player_recovery = true
+    if not _guide_points.is_empty() and (_leg_active or not is_on_floor()):
+        var recovery_index := clampi(_guide_index, 0, _guide_points.size() - 1)
+        var interrupted_position := global_position
+        global_position = _guide_points[recovery_index].global_position
+        velocity = Vector2.ZERO
+        _reset_leg()
+        _needs_floor_settle = true
+        _set_state(AmaiState.WAITING)
+        _trace_event("RECOVERY_RESTORE", "index=%d from=(%.1f,%.1f) to=(%.1f,%.1f)" % [
+            recovery_index,
+            interrupted_position.x,
+            interrupted_position.y,
+            global_position.x,
+            global_position.y,
+        ])
     _trace_event("RECOVERY_HOLD", "index=%d p=(%.1f,%.1f) player_x=%.1f" % [
         _guide_index,
         global_position.x,
@@ -198,7 +260,9 @@ func join_waterfall_intro(target_position: Vector2) -> void:
     _reset_leg()
     _waiting_for_player_recovery = false
     _segment_one_exit_released = false
+    _segment_three_exit_released = false
     _needs_floor_settle = true
+    collision_mask = 1
     visible = true
     set_physics_process(true)
     _set_state(AmaiState.WAITING)
@@ -218,6 +282,33 @@ func is_segment_one_exit_released() -> bool:
     return _segment_one_exit_released
 
 
+func release_segment_three_exit() -> void:
+    if active_guide not in [&"Segment03SafeGuide", &"Segment03RiskGuide"] or _segment_three_exit_released:
+        return
+    if not is_route_complete():
+        return
+    _segment_three_exit_released = true
+    _trace_event("SEGMENT03_EXIT_RELEASE", "guide=%s p=(%.1f,%.1f) player=(%.1f,%.1f)" % [
+        str(active_guide),
+        global_position.x,
+        global_position.y,
+        player.global_position.x,
+        player.global_position.y,
+    ])
+
+
+func is_segment_three_exit_released() -> bool:
+    return _segment_three_exit_released
+
+
+func is_segment_three_route_locked() -> bool:
+    return _segment_three_route_locked
+
+
+func is_segment_three_exit_ready() -> bool:
+    return _segment_three_exit_released and global_position.x >= segment_three_exit_x - arrival_tolerance
+
+
 func get_guide_index() -> int:
     return _guide_index
 
@@ -234,8 +325,16 @@ func get_max_observed_lead() -> float:
     return _max_observed_lead
 
 
+func get_max_observed_trail() -> float:
+    return _max_observed_trail
+
+
 func get_max_observed_horizontal_speed() -> float:
     return _max_observed_horizontal_speed
+
+
+func get_fall_recovery_count() -> int:
+    return _fall_recovery_count
 
 
 func is_route_complete() -> bool:
@@ -243,7 +342,7 @@ func is_route_complete() -> bool:
 
 
 func get_debug_state_text() -> String:
-    return "%s i=%d/%d p=(%.1f,%.1f) v=(%.1f,%.1f) floor=%s lead=%.1f jumps=%d recovery=%s exit=%s" % [
+    return "%s i=%d/%d p=(%.1f,%.1f) v=(%.1f,%.1f) floor=%s lead=%.1f trail=%.1f jumps=%d recovery=%s route_locked=%s s1_exit=%s s3_exit=%s" % [
         str(active_guide),
         _guide_index,
         maxi(0, _guide_points.size() - 1),
@@ -253,9 +352,12 @@ func get_debug_state_text() -> String:
         velocity.y,
         str(is_on_floor()),
         global_position.x - player.global_position.x,
+        player.global_position.x - global_position.x,
         _jump_count,
         str(_waiting_for_player_recovery),
+        str(_segment_three_route_locked),
         str(_segment_one_exit_released),
+        str(_segment_three_exit_released),
     ]
 
 
@@ -316,7 +418,7 @@ func _begin_leg() -> void:
     _airborne_seen = false
     _jump_landed = false
     var target := _guide_points[_guide_index + 1].global_position
-    _planned_horizontal_speed = _calculate_ballistic_horizontal_speed(target) if _leg_is_jump else movement_speed
+    _planned_horizontal_speed = _calculate_ballistic_horizontal_speed(target) if _leg_is_jump else _current_movement_speed()
     _set_state(AmaiState.JUMPING if _leg_is_jump else AmaiState.RUNNING)
     _trace_event("LEG_BEGIN", "guide=%s from=%d to=%d kind=%s target=(%.1f,%.1f) speed=%.1f lead_limit=%.1f" % [
         str(active_guide),
@@ -391,6 +493,22 @@ func _step_segment_one_escort(delta: float) -> void:
     move_and_slide()
 
 
+func _step_segment_three_escort(delta: float) -> void:
+    var lead := global_position.x - player.global_position.x
+    if global_position.x >= segment_three_exit_x:
+        velocity.x = 0.0
+        _set_state(AmaiState.WAITING)
+    elif lead > segment_three_escort_lead + arrival_tolerance:
+        velocity.x = 0.0
+        _set_state(AmaiState.WAITING)
+    else:
+        velocity.x = segment_three_follow_speed
+        _set_state(AmaiState.RUNNING)
+    _max_observed_horizontal_speed = maxf(_max_observed_horizontal_speed, absf(velocity.x))
+    _apply_gravity(delta)
+    move_and_slide()
+
+
 func _after_move(target: Vector2) -> void:
     if _leg_is_jump and _jump_launched:
         if not is_on_floor():
@@ -450,11 +568,32 @@ func _reset_leg() -> void:
     _planned_horizontal_speed = 0.0
 
 
+func _recover_active_guide_fall() -> void:
+    if _guide_points.is_empty():
+        return
+    var fall_position := global_position
+    var recovery_index := clampi(_guide_index, 0, _guide_points.size() - 1)
+    global_position = _guide_points[recovery_index].global_position
+    velocity = Vector2.ZERO
+    _reset_leg()
+    _needs_floor_settle = true
+    _fall_recovery_count += 1
+    _set_state(AmaiState.WAITING)
+    _trace_event("FALL_RECOVER", "index=%d from=(%.1f,%.1f) to=(%.1f,%.1f) count=%d" % [
+        recovery_index,
+        fall_position.x,
+        fall_position.y,
+        global_position.x,
+        global_position.y,
+        _fall_recovery_count,
+    ])
+
+
 func _ground_approach_velocity(target_x: float) -> float:
     var delta_x := target_x - global_position.x
     if absf(delta_x) <= arrival_tolerance:
         return 0.0
-    return signf(delta_x) * movement_speed
+    return signf(delta_x) * _current_movement_speed()
 
 
 func _apply_gravity(delta: float) -> void:
@@ -469,11 +608,11 @@ func _calculate_ballistic_horizontal_speed(target: Vector2) -> float:
     var delta_y := target.y - global_position.y
     var discriminant := jump_impulse * jump_impulse + 2.0 * gravity * delta_y
     if discriminant <= 0.0:
-        return movement_speed
+        return _current_movement_speed()
     var flight_time := (jump_impulse + sqrt(discriminant)) / gravity
     if flight_time <= 0.01:
-        return movement_speed
-    return clampf(absf(target.x - global_position.x) / flight_time, 90.0, movement_speed)
+        return _current_movement_speed()
+    return clampf(absf(target.x - global_position.x) / flight_time, 90.0, _current_movement_speed())
 
 
 func _is_fixed_jump_leg(leg_index: int) -> bool:
@@ -481,9 +620,11 @@ func _is_fixed_jump_leg(leg_index: int) -> bool:
         &"Segment01Guide":
             return leg_index in [0, 1, 2, 3]
         &"Segment03SafeGuide":
-            return leg_index in [0, 3]
+            # The middle descent is a running drop. The closing lower jump lands
+            # left of the narrowed upper-exit collider, preserving both routes.
+            return leg_index in [1, 3, 7]
         &"Segment03RiskGuide":
-            return leg_index in [0, 1, 2, 4]
+            return leg_index in [1, 3, 5, 7, 9, 11, 13]
         _:
             return false
 
@@ -492,6 +633,14 @@ func _get_allowed_lead_gap(leg_index: int) -> float:
     if lead_gap_pattern.is_empty():
         return 320.0
     return lead_gap_pattern[leg_index % lead_gap_pattern.size()]
+
+
+func _current_movement_speed() -> float:
+    return segment_three_follow_speed if _is_segment_three_guide() else movement_speed
+
+
+func _is_segment_three_guide() -> bool:
+    return active_guide in [&"Segment03SafeGuide", &"Segment03RiskGuide"]
 
 
 func _set_state(next_state: int) -> void:
