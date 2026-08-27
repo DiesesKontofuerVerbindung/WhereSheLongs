@@ -11,6 +11,7 @@ config/features=PackedStringArray("4.7", "Forward Plus")
 [autoload]
 
 BlinkSystem="*res://addons/blink_trigger_scene_switch/blink_system.gd"
+ClosedEyeSystem="*res://addons/closed_eye_trigger_scene_switch/closed_eye_system.gd"
 
 [display]
 
@@ -21,7 +22,7 @@ window/stretch/aspect="expand"
 
 [editor_plugins]
 
-enabled=PackedStringArray("blink_trigger_scene_switch")
+enabled=PackedStringArray("blink_trigger_scene_switch", "closed_eye_trigger_scene_switch")
 
 [rendering]
 

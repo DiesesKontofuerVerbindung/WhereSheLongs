@@ -6,3 +6,5 @@ export_presets.cfg
 Thumbs.db
 node_modules/
 *.exe
+*.task
+native_webcam.log
