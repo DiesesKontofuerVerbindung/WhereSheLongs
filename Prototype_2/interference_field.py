@@ -217,6 +217,7 @@ class InterferenceField:
         self.entities: list[TextEntity] = []
         self.elapsed = 0.0
         self.hand_force_active = False
+        self.local_force_strength = 0.0
         self.texts_inside_influence_area = 0
         self.last_impulse_strength = 0.0
         self.last_impulse_stroke_id = 0
@@ -295,6 +296,7 @@ class InterferenceField:
             ))
         self.elapsed = 0.0
         self.hand_force_active = False
+        self.local_force_strength = 0.0
         self.texts_inside_influence_area = 0
         self.last_impulse_strength = 0.0
         self.last_impulse_stroke_id = 0
@@ -311,14 +313,22 @@ class InterferenceField:
         active_palm = palm is not None and palm.stroke_phase == "active"
         influence = self._influence_falloffs(palm) if active_palm else {}
         self.texts_inside_influence_area = len(influence)
-        palm_speed = 0.0 if palm is None else abs(palm.velocity_x) + abs(palm.velocity_y)
-        self.hand_force_active = active_palm and bool(influence) and palm_speed >= config.HAND_MIN_FORCE_VELOCITY
+        self.local_force_strength = self._local_force_motion_strength(palm) if active_palm else 0.0
+        self.hand_force_active = (
+            active_palm
+            and bool(influence)
+            and self.local_force_strength > 0.0
+        )
         motion_strength = self._auto_dispersion_motion_strength(palm)
         self.auto_dispersion_strength = max(
             motion_strength,
             self.auto_dispersion_strength * exp(-config.AUTO_DISPERSION_DECAY * delta_time),
         )
-        impulse_strength_ratio = self._impulse_strength_ratio(palm, bool(influence))
+        impulse_strength_ratio = self._impulse_strength_ratio(
+            palm,
+            bool(influence),
+            self.local_force_strength,
+        )
         applied_impulse_strength = 0.0
 
         for entity in self.entities:
@@ -333,9 +343,11 @@ class InterferenceField:
                     0.0,
                 )
             falloff = influence.get(id(entity), 0.0)
-            if palm is not None and falloff > 0.0:
-                force_x = palm.velocity_x * config.HAND_HORIZONTAL_FORCE_GAIN * falloff
-                force_y = palm.velocity_y * config.HAND_VERTICAL_FORCE_GAIN * falloff
+            if palm is not None and falloff > 0.0 and self.local_force_strength > 0.0:
+                force_velocity_x = self._effective_force_velocity(palm.velocity_x)
+                force_velocity_y = palm.velocity_y * self.local_force_strength
+                force_x = force_velocity_x * config.HAND_HORIZONTAL_FORCE_GAIN * falloff
+                force_y = force_velocity_y * config.HAND_VERTICAL_FORCE_GAIN * falloff
                 self.apply_force(entity, force_x, force_y)
                 if impulse_strength_ratio > 0.0:
                     impulse_x = (
@@ -375,6 +387,26 @@ class InterferenceField:
             1.0,
         )
 
+    @staticmethod
+    def _local_force_motion_strength(palm: PalmPhysicsInput | None) -> float:
+        if palm is None:
+            return 0.0
+        span = max(
+            1e-6,
+            config.HAND_FORCE_FULL_VELOCITY - config.HAND_MIN_FORCE_VELOCITY,
+        )
+        progress = _clamp(
+            (abs(palm.velocity_x) - config.HAND_MIN_FORCE_VELOCITY) / span,
+            0.0,
+            1.0,
+        )
+        return progress * progress * (3.0 - 2.0 * progress)
+
+    def _effective_force_velocity(self, velocity_x: float) -> float:
+        capped_speed = min(abs(velocity_x), config.HAND_FORCE_MAX_EFFECTIVE_SPEED)
+        direction = _sign(velocity_x)
+        return direction * capped_speed * self.local_force_strength
+
     def _influence_falloffs(self, palm: PalmPhysicsInput | None) -> dict[int, float]:
         if palm is None:
             return {}
@@ -398,16 +430,28 @@ class InterferenceField:
                 falloffs[id(entity)] = 1.0
         return falloffs
 
-    def _impulse_strength_ratio(self, palm: PalmPhysicsInput | None, letters_in_range: bool) -> float:
+    def _impulse_strength_ratio(
+        self,
+        palm: PalmPhysicsInput | None,
+        letters_in_range: bool,
+        local_force_strength: float,
+    ) -> float:
         if (
             palm is None
             or palm.stroke_phase != "active"
             or not letters_in_range
+            or local_force_strength <= 0.0
             or palm.stroke_id <= self.last_impulse_stroke_id
         ):
             return 0.0
         speed_x = abs(palm.velocity_x)
-        if speed_x < config.HAND_IMPULSE_MIN_VELOCITY:
+        previous_x = palm.x if palm.previous_x is None else palm.previous_x
+        previous_y = palm.y if palm.previous_y is None else palm.previous_y
+        segment_distance = ((palm.x - previous_x) ** 2 + (palm.y - previous_y) ** 2) ** 0.5
+        if (
+            speed_x < config.HAND_IMPULSE_MIN_VELOCITY
+            or segment_distance < config.HAND_IMPULSE_MIN_SEGMENT_DISTANCE
+        ):
             return 0.0
         velocity_range = max(
             1e-6,

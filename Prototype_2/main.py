@@ -226,7 +226,7 @@ class PrototypeApp:
             f"Fan Strength: {self.detector.fan_strength:.3f}    Expected: {self.state.expected_type.upper()}",
             f"Raw dx / Physics dx: {signal.raw_delta_x:7.1f} / {signal.physics_delta_x:7.1f} px    Physics velocity X/Y: {signal.velocity_x:8.1f} / {signal.velocity_y:8.1f} px/s",
             f"Profile: {self.signal_processor.profile.upper()}    X gain: {signal.physics_gain:.2f}    Physics deadzone: {config.PHYSICS_DEADZONE:.1f}px    Input: {'ACTIVE' if signal.active and signal.open_palm else 'IDLE'}",
-            f"Text entities active: {len(self.interference.entities) - self.interference.dispersed_count}    Texts inside influence: {self.interference.texts_inside_influence_area}    Hand force: {'YES' if self.interference.hand_force_active else 'NO'}",
+            f"Text entities active: {len(self.interference.entities) - self.interference.dispersed_count}    Texts inside influence: {self.interference.texts_inside_influence_area}    Hand force: {'YES' if self.interference.hand_force_active else 'NO'}    Force ramp: {self.interference.local_force_strength:.2f}",
             f"Last impulse: {self.interference.last_impulse_strength:.1f}    Hit stroke: {self.interference.last_impulse_stroke_id}",
             f"Gravity: {config.LETTER_GRAVITY:.1f} px/s2    Mean text vx/vy: {self.interference.mean_velocity_x:7.1f} / {self.interference.mean_velocity_y:7.1f}    Auto assist: {self.interference.auto_dispersion_strength:.2f}",
             f"Texts dispersed: {self.interference.dispersed_count}/{len(self.interference.entities)}    Clear: {self.interference.dispersed_ratio * 100:5.1f}%",

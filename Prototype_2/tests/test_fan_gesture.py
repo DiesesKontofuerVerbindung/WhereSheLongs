@@ -136,6 +136,19 @@ class FanGestureTests(unittest.TestCase):
         self.assertEqual(far.acceleration_x, 0.0)
         self.assertEqual(field.texts_inside_influence_area, 1)
 
+    def test_light_motion_inside_text_hitbox_does_not_apply_force(self) -> None:
+        text = text_entity(x=500.0, y=400.0)
+        field = physics_field(text)
+        field.update(
+            0.02,
+            PalmPhysicsInput(500.0, 400.0, config.HAND_MIN_FORCE_VELOCITY - 1.0, 0.0),
+        )
+        self.assertEqual(field.texts_inside_influence_area, 1)
+        self.assertFalse(field.hand_force_active)
+        self.assertEqual(field.local_force_strength, 0.0)
+        self.assertEqual(text.acceleration_x, 0.0)
+        self.assertEqual(text.velocity_x, 0.0)
+
     def test_text_bounds_and_mass_follow_phrase_width(self) -> None:
         field = InterferenceField(seed=1)
         short_width, short_height = field._text_bounds("这样不好吗", 36)
@@ -176,11 +189,11 @@ class FanGestureTests(unittest.TestCase):
 
     def test_progressive_impulse_responds_to_medium_and_fast_strokes(self) -> None:
         slow = physics_field(text_entity(x=500.0, y=400.0))
-        slow.update(0.01, PalmPhysicsInput(500.0, 400.0, 200.0, 0.0))
+        slow.update(0.01, PalmPhysicsInput(500.0, 400.0, 450.0, 0.0, 440.0, 400.0))
         medium = physics_field(text_entity(x=500.0, y=400.0))
-        medium.update(0.01, PalmPhysicsInput(500.0, 400.0, 450.0, 0.0))
+        medium.update(0.01, PalmPhysicsInput(500.0, 400.0, 700.0, 0.0, 430.0, 400.0))
         fast = physics_field(text_entity(x=500.0, y=400.0))
-        fast.update(0.01, PalmPhysicsInput(500.0, 400.0, 900.0, 0.0))
+        fast.update(0.01, PalmPhysicsInput(500.0, 400.0, 1000.0, 0.0, 400.0, 400.0))
         self.assertEqual(slow.last_impulse_strength, 0.0)
         self.assertGreater(medium.last_impulse_strength, 0.0)
         self.assertGreater(fast.last_impulse_strength, 0.0)
@@ -293,7 +306,20 @@ class FanGestureTests(unittest.TestCase):
         field = physics_field(left, right)
         field.update(
             0.02,
-            PalmPhysicsInput(500.0, 400.0, 350.0, 0.0, auto_dispersion=True),
+            PalmPhysicsInput(
+                500.0,
+                400.0,
+                config.AUTO_DISPERSION_MOTION_THRESHOLD - 1.0,
+                0.0,
+                auto_dispersion=True,
+            ),
+        )
+        self.assertEqual(field.auto_dispersion_strength, 0.0)
+        self.assertEqual(left.velocity_x, 0.0)
+        self.assertEqual(right.velocity_x, 0.0)
+        field.update(
+            0.02,
+            PalmPhysicsInput(500.0, 400.0, 850.0, 0.0, auto_dispersion=True),
         )
         self.assertGreater(field.auto_dispersion_strength, 0.0)
         self.assertLess(left.velocity_x, 0.0)
@@ -356,7 +382,11 @@ class FanGestureTests(unittest.TestCase):
         velocity_added_second_frame = field.entities[0].velocity_x - velocity_after_first
         self.assertGreater(first_impulse, 0.0)
         self.assertEqual(field.last_impulse_stroke_id, 4)
-        self.assertLess(velocity_added_second_frame, first_impulse * 0.25)
+        expected_continuous_force_only = (
+            velocity_after_first
+            + palm.velocity_x * config.HAND_HORIZONTAL_FORCE_GAIN / field.entities[0].mass * 0.01
+        ) * math.exp(-config.LETTER_AIR_DRAG * 0.01) - velocity_after_first
+        self.assertAlmostEqual(velocity_added_second_frame, expected_continuous_force_only, places=5)
 
     def test_same_force_accelerates_lighter_text_more(self) -> None:
         light = text_entity(x=500.0, y=400.0, mass=0.8)
