@@ -48,6 +48,7 @@ func _run() -> void:
     _test_first_input_wins(coordinator)
     _test_pre_gate_input_buffer(coordinator)
     _test_action_waits_for_execution_line(coordinator)
+    _test_same_gate_reentry_preserves_and_repeats_action(coordinator, player_runner)
     _test_airborne_action_buffer(xiaomai, xiaomai_runner)
     _test_gate_index_survives_pause_and_frame_variation(coordinator)
 
@@ -116,6 +117,23 @@ func _test_action_waits_for_execution_line(coordinator: Node) -> void:
     coordinator.debug_execute_gate(0)
     _check(coordinator.get_player_history() == [1], "UP did not execute at the action line")
     _check(coordinator.get_xiaomai_history() == [0], "Gate 01 action line did not preserve Amai NONE")
+
+
+func _test_same_gate_reentry_preserves_and_repeats_action(coordinator: Node, player_runner: Node) -> void:
+    coordinator.reset_rounds()
+    coordinator.debug_enter_gate(0)
+    coordinator.debug_submit_action(VINE_ECHO_COORDINATOR_SCRIPT.RunnerAction.DOWN)
+    coordinator.debug_execute_gate(0)
+    var history_before: Array[int] = coordinator.get_player_history()
+    coordinator.debug_enter_gate(0)
+    _check(coordinator.action_locked, "Re-entering the same DecisionZone cleared the locked DOWN action")
+    _check(coordinator.get_player_history() == history_before, "Re-entering the same DecisionZone duplicated Player history")
+    player_runner.debug_set_slide(false)
+    coordinator.debug_execute_gate(0)
+    _check(player_runner.is_sliding, "Re-entering the ActionZone did not repeat the locked DOWN slide")
+    _check(coordinator.get_player_history() == history_before, "Repeated physical DOWN execution duplicated Gate history")
+    coordinator.debug_pass_gate(0)
+    _check(coordinator.current_gate_index == 1, "Same-Gate re-entry prevented the Gate from finishing")
 
 
 func _test_airborne_action_buffer(xiaomai: CharacterBody2D, runner: Node) -> void:

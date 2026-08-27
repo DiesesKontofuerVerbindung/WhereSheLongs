@@ -175,8 +175,8 @@ func _set_slide(enabled: bool) -> void:
     if _normal_shape == null or _slide_shape == null:
         return
     is_sliding = enabled
-    collision_shape.shape = _slide_shape if enabled else _normal_shape
-    collision_shape.position = _slide_collision_position if enabled else _normal_collision_position
+    collision_shape.set_deferred("shape", _slide_shape if enabled else _normal_shape)
+    collision_shape.set_deferred("position", _slide_collision_position if enabled else _normal_collision_position)
     if _visual != null:
         _visual.position = _normal_visual_position + slide_visual_offset if enabled else _normal_visual_position
         _visual.scale = Vector2(_normal_visual_scale.x, _normal_visual_scale.y * slide_visual_scale_y) if enabled else _normal_visual_scale

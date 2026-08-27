@@ -180,6 +180,8 @@ func debug_enter_gate(gate_index: int) -> void:
         return
     if gate_index != current_gate_index:
         return
+    if _awaiting_action:
+        return
     _awaiting_action = true
     action_locked = false
     _action_pending = false
@@ -202,7 +204,7 @@ func debug_execute_gate(gate_index: int) -> void:
     if gate_index != current_gate_index:
         return
     _player_in_action_zone = true
-    _execute_locked_action()
+    _execute_or_repeat_locked_action()
 
 
 func debug_pass_gate(gate_index: int) -> void:
@@ -260,7 +262,7 @@ func _on_gate_action_execution_requested(gate_index: int, body: Node2D) -> void:
     if not _running or body != player or gate_index != current_gate_index:
         return
     _player_in_action_zone = true
-    _execute_locked_action()
+    _execute_or_repeat_locked_action()
 
 
 func _on_gate_passed(gate_index: int, body: Node2D) -> void:
@@ -278,8 +280,18 @@ func _commit_pending_action() -> void:
     _locked_player_action = current_action
     action_locked = true
     if _player_in_action_zone:
-        _execute_locked_action()
+        _execute_or_repeat_locked_action()
     _update_debug_label()
+
+
+func _execute_or_repeat_locked_action() -> void:
+    if not action_locked or _locked_player_action == RunnerAction.NONE:
+        return
+    if _action_executed:
+        player_runner.perform_action(_locked_player_action)
+        _update_debug_label()
+        return
+    _execute_locked_action()
 
 
 func _execute_locked_action() -> void:
