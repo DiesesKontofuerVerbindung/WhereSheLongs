@@ -12,7 +12,7 @@ import config
 from fan_detector import FanDetector, Point
 from fan_state import FanState
 from hand_tracker import HandTracker, TrackingFrame
-from interference_field import InterferenceField
+from interference_field import InterferenceField, PalmMotionTracker, PalmPhysicsInput
 from test_logger import ExpectedType, TestLogger, calculate_metrics
 
 
@@ -28,6 +28,8 @@ class PrototypeApp:
         self.state = AppState()
         self.detector = FanDetector()
         self.interference = InterferenceField()
+        self.palm_motion = PalmMotionTracker()
+        self.physics_palm: PalmPhysicsInput | None = None
         self.tracker = HandTracker()
         self.logger = TestLogger(results_root or config.RESULTS_DIR)
         self.fps = 0.0
@@ -41,6 +43,8 @@ class PrototypeApp:
             self.logger.finish_trial("aborted", reason, now)
         self.detector.reset()
         self.interference.reset()
+        self.palm_motion.reset()
+        self.physics_palm = None
         self._last_entity_time = now
         self.state.status_message = "Gesture reset"
 
@@ -61,7 +65,10 @@ class PrototypeApp:
         if frame.palm_center is not None:
             point = Point(float(frame.palm_center.screen_x), float(frame.palm_center.screen_y))
         event = self.detector.update(point, frame.open_palm, now)
-        self.interference.update(entity_delta)
+        palm_x = None if frame.palm_center is None else float(frame.palm_center.screen_x)
+        palm_y = None if frame.palm_center is None else float(frame.palm_center.screen_y)
+        self.physics_palm = self.palm_motion.update(palm_x, palm_y, now, frame.open_palm)
+        self.interference.update(entity_delta, self.physics_palm)
 
         if event.started:
             self.logger.start_trial(self.state.expected_type, now)
@@ -137,6 +144,9 @@ class PrototypeApp:
             f"Direction: {self.detector.direction.upper()}    Sweep Count: {self.detector.sweep_count}",
             f"Amplitude: {self.detector.horizontal_amplitude:7.1f}px    Horizontal Velocity: {self.detector.horizontal_velocity:8.1f}px/s",
             f"Fan Strength: {self.detector.fan_strength:.3f}    Expected: {self.state.expected_type.upper()}",
+            f"Palm velocity X/Y: {self.palm_motion.velocity_x:8.1f} / {self.palm_motion.velocity_y:8.1f} px/s",
+            f"Hand force active: {'YES' if self.interference.hand_force_active else 'NO'}    Letters in radius: {self.interference.letters_inside_influence_radius}    Last impulse: {self.interference.last_impulse_strength:.1f}",
+            f"Gravity: {config.LETTER_GRAVITY:.1f} px/s2    Mean letter vx/vy: {self.interference.mean_velocity_x:7.1f} / {self.interference.mean_velocity_y:7.1f}",
             f"Letters dispersed: {self.interference.dispersed_count}/{len(self.interference.entities)}    Clear: {self.interference.dispersed_ratio * 100:5.1f}%",
             f"Trials: {self.logger.completed_trials}/{self.logger.target_total}    TP/TN/FP/FN: {metrics['tp']}/{metrics['tn']}/{metrics['fp']}/{metrics['fn']}    Acc: {accuracy_text}",
             f"Camera: {self.tracker.error or 'ready'}",

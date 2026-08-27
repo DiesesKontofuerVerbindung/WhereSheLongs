@@ -17,6 +17,70 @@ LATIN_GLYPHS = tuple("ABCDEFGHIKLMNOPRSTUVXYZ")
 CYRILLIC_GLYPHS = tuple("БГДЖЗЛФЦЧШЩЭЮЯ")
 
 
+@dataclass(frozen=True)
+class PalmPhysicsInput:
+    x: float
+    y: float
+    velocity_x: float
+    velocity_y: float
+
+
+class PalmMotionTracker:
+    """Convert valid open-palm positions into bounded, smoothed velocity."""
+
+    def __init__(self) -> None:
+        self._last_x: float | None = None
+        self._last_y: float | None = None
+        self._last_time: float | None = None
+        self.velocity_x = 0.0
+        self.velocity_y = 0.0
+
+    def update(
+        self,
+        x: float | None,
+        y: float | None,
+        now: float,
+        open_palm: bool,
+    ) -> PalmPhysicsInput | None:
+        if x is None or y is None or not open_palm:
+            self.clear_tracking()
+            return None
+        x = float(x)
+        y = float(y)
+        if self._last_x is not None and self._last_y is not None and self._last_time is not None:
+            delta_time = max(1e-6, float(now) - self._last_time)
+            raw_velocity_x = _clamp(
+                (x - self._last_x) / delta_time,
+                -config.PALM_VELOCITY_MAX,
+                config.PALM_VELOCITY_MAX,
+            )
+            raw_velocity_y = _clamp(
+                (y - self._last_y) / delta_time,
+                -config.PALM_VELOCITY_MAX,
+                config.PALM_VELOCITY_MAX,
+            )
+            factor = config.PALM_VELOCITY_SMOOTHING
+            self.velocity_x += factor * (raw_velocity_x - self.velocity_x)
+            self.velocity_y += factor * (raw_velocity_y - self.velocity_y)
+        else:
+            self.velocity_x = 0.0
+            self.velocity_y = 0.0
+        self._last_x = x
+        self._last_y = y
+        self._last_time = float(now)
+        return PalmPhysicsInput(x, y, self.velocity_x, self.velocity_y)
+
+    def clear_tracking(self) -> None:
+        self._last_x = None
+        self._last_y = None
+        self._last_time = None
+        self.velocity_x = 0.0
+        self.velocity_y = 0.0
+
+    def reset(self) -> None:
+        self.clear_tracking()
+
+
 @dataclass
 class LetterEntity:
     glyph: str
@@ -54,6 +118,13 @@ class InterferenceField:
         self.height = int(height)
         self.seed = int(seed)
         self.entities: list[LetterEntity] = []
+        self.elapsed = 0.0
+        self.hand_force_active = False
+        self.letters_inside_influence_radius = 0
+        self.last_impulse_strength = 0.0
+        self._last_impulse_at = -float("inf")
+        self._last_impulse_direction = 0
+        self._high_speed_active = False
         self._font_cache: dict[int, ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
         self.reset()
 
@@ -100,15 +171,40 @@ class InterferenceField:
                 size=size,
                 color=random.choice(self._colors),
             ))
+        self.elapsed = 0.0
+        self.hand_force_active = False
+        self.letters_inside_influence_radius = 0
+        self.last_impulse_strength = 0.0
+        self._last_impulse_at = -float("inf")
+        self._last_impulse_direction = 0
+        self._high_speed_active = False
 
-    def update(self, delta_time: float) -> None:
+    def update(self, delta_time: float, palm: PalmPhysicsInput | None = None) -> None:
         delta_time = max(0.0, min(config.LETTER_PHYSICS_MAX_DT, float(delta_time)))
+        self.elapsed += delta_time
         drag = exp(-config.LETTER_AIR_DRAG * delta_time)
+        influence = self._influence_falloffs(palm)
+        self.letters_inside_influence_radius = len(influence)
+        palm_speed = 0.0 if palm is None else abs(palm.velocity_x) + abs(palm.velocity_y)
+        self.hand_force_active = bool(influence) and palm_speed >= config.HAND_MIN_FORCE_VELOCITY
+        impulse_triggered = self._should_trigger_impulse(palm, bool(influence))
+        applied_impulse_strength = 0.0
+
         for entity in self.entities:
             if entity.dispersed:
                 continue
             entity.acceleration_x = 0.0
             entity.acceleration_y = config.LETTER_GRAVITY
+            falloff = influence.get(id(entity), 0.0)
+            if palm is not None and falloff > 0.0:
+                force_x = palm.velocity_x * config.HAND_HORIZONTAL_FORCE_GAIN * falloff
+                force_y = palm.velocity_y * config.HAND_VERTICAL_FORCE_GAIN * falloff
+                self.apply_force(entity, force_x, force_y)
+                if impulse_triggered:
+                    impulse_x = palm.velocity_x * config.HAND_IMPULSE_GAIN * falloff
+                    entity.velocity_x += impulse_x / entity.mass
+                    entity.velocity_y -= abs(impulse_x) * config.HAND_IMPULSE_LIFT_RATIO / entity.mass
+                    applied_impulse_strength = max(applied_impulse_strength, abs(impulse_x))
             entity.velocity_x += entity.acceleration_x * delta_time
             entity.velocity_y += entity.acceleration_y * delta_time
             entity.velocity_x *= drag
@@ -120,6 +216,44 @@ class InterferenceField:
                 entity.x < -config.INTERFERENCE_DISPERSED_MARGIN
                 or entity.x > self.width + config.INTERFERENCE_DISPERSED_MARGIN
             )
+        if applied_impulse_strength > 0.0:
+            self.last_impulse_strength = applied_impulse_strength
+
+    def _influence_falloffs(self, palm: PalmPhysicsInput | None) -> dict[int, float]:
+        if palm is None:
+            return {}
+        falloffs: dict[int, float] = {}
+        radius = config.HAND_FORCE_RADIUS
+        for entity in self.entities:
+            if entity.dispersed:
+                continue
+            distance = ((entity.x - palm.x) ** 2 + (entity.y - palm.y) ** 2) ** 0.5
+            if distance <= radius:
+                linear = 1.0 - distance / radius
+                falloffs[id(entity)] = linear * linear
+        return falloffs
+
+    def _should_trigger_impulse(self, palm: PalmPhysicsInput | None, letters_in_range: bool) -> bool:
+        if palm is None or not letters_in_range:
+            self._high_speed_active = False
+            return False
+        speed_x = abs(palm.velocity_x)
+        threshold = config.HAND_IMPULSE_VELOCITY_THRESHOLD
+        if speed_x < threshold * config.HAND_IMPULSE_REARM_RATIO:
+            self._high_speed_active = False
+        direction = 1 if palm.velocity_x > 0.0 else -1 if palm.velocity_x < 0.0 else 0
+        direction_changed = direction != 0 and direction != self._last_impulse_direction
+        cooldown_ready = self.elapsed - self._last_impulse_at >= config.HAND_IMPULSE_COOLDOWN
+        should_trigger = (
+            speed_x >= threshold
+            and cooldown_ready
+            and (not self._high_speed_active or direction_changed)
+        )
+        if should_trigger:
+            self._high_speed_active = True
+            self._last_impulse_at = self.elapsed
+            self._last_impulse_direction = direction
+        return should_trigger
 
     @staticmethod
     def apply_force(entity: LetterEntity, force_x: float, force_y: float) -> None:
@@ -182,3 +316,7 @@ def resolve_unicode_font() -> Path | None:
         if path.exists():
             return path
     return None
+
+
+def _clamp(value: float, minimum: float, maximum: float) -> float:
+    return max(minimum, min(maximum, value))
