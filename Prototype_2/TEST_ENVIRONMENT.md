@@ -1,4 +1,4 @@
-# Prototype 2 — Test Environment
+# Fan Gesture Prototype 2 — Test Environment
 
 自动生成的 `environment.json`、`config_snapshot.json` 与本表共同构成一次 Run 的记录。
 
@@ -13,11 +13,13 @@ Window resolution: 1000x700
 Lighting condition:
 Camera-to-user distance:
 Hand used:
-Finger mode tested: ONE_FINGER / TWO_FINGER
+Palm orientation:
 
 Positive trials:
 Negative trials:
-Candidate rejects:
+Negative action types:
+Observed false sweeps:
+Mean / peak fan strength:
 
 Git commit:
 Git branch:
