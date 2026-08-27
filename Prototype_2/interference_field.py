@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import exp
 from pathlib import Path
 from random import Random
 
@@ -64,6 +65,16 @@ class InterferenceField:
     def dispersed_ratio(self) -> float:
         return 0.0 if not self.entities else self.dispersed_count / len(self.entities)
 
+    @property
+    def mean_velocity_x(self) -> float:
+        active = [entity.velocity_x for entity in self.entities if not entity.dispersed]
+        return 0.0 if not active else sum(active) / len(active)
+
+    @property
+    def mean_velocity_y(self) -> float:
+        active = [entity.velocity_y for entity in self.entities if not entity.dispersed]
+        return 0.0 if not active else sum(active) / len(active)
+
     def reset(self) -> None:
         random = Random(self.seed)
         glyphs = list(LATIN_GLYPHS + CYRILLIC_GLYPHS)
@@ -91,20 +102,42 @@ class InterferenceField:
             ))
 
     def update(self, delta_time: float) -> None:
-        delta_time = max(0.0, min(0.10, float(delta_time)))
+        delta_time = max(0.0, min(config.LETTER_PHYSICS_MAX_DT, float(delta_time)))
+        drag = exp(-config.LETTER_AIR_DRAG * delta_time)
         for entity in self.entities:
             if entity.dispersed:
                 continue
+            entity.acceleration_x = 0.0
+            entity.acceleration_y = config.LETTER_GRAVITY
             entity.velocity_x += entity.acceleration_x * delta_time
             entity.velocity_y += entity.acceleration_y * delta_time
+            entity.velocity_x *= drag
+            entity.velocity_y *= drag
             entity.x += entity.velocity_x * delta_time
             entity.y += entity.velocity_y * delta_time
-            entity.acceleration_x = 0.0
-            entity.acceleration_y = 0.0
+            self._resolve_floor_collision(entity, delta_time)
             entity.dispersed = (
                 entity.x < -config.INTERFERENCE_DISPERSED_MARGIN
                 or entity.x > self.width + config.INTERFERENCE_DISPERSED_MARGIN
             )
+
+    @staticmethod
+    def apply_force(entity: LetterEntity, force_x: float, force_y: float) -> None:
+        entity.acceleration_x += force_x / entity.mass
+        entity.acceleration_y += force_y / entity.mass
+
+    @staticmethod
+    def _resolve_floor_collision(entity: LetterEntity, delta_time: float) -> None:
+        floor_center_y = config.LETTER_FLOOR_Y - entity.radius
+        if entity.y < floor_center_y:
+            return
+        entity.y = floor_center_y
+        if entity.velocity_y > 0.0:
+            if entity.velocity_y < config.LETTER_SETTLE_VERTICAL_SPEED:
+                entity.velocity_y = 0.0
+            else:
+                entity.velocity_y = -entity.velocity_y * config.LETTER_RESTITUTION
+        entity.velocity_x *= exp(-config.LETTER_FLOOR_FRICTION * delta_time)
 
     def render(self, canvas: np.ndarray) -> np.ndarray:
         """Draw real Latin and Cyrillic glyphs onto an OpenCV BGR canvas."""
