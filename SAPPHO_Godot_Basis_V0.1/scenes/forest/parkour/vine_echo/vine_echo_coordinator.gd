@@ -228,6 +228,10 @@ func get_xiaomai_history() -> Array[int]:
     return _xiaomai_history.duplicate()
 
 
+func get_buffered_action() -> int:
+    return _buffered_action
+
+
 func get_echo_fixed_route() -> PackedVector2Array:
     return echo_fixed_route.duplicate()
 
