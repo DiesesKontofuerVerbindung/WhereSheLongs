@@ -144,14 +144,18 @@ class FanGestureTests(unittest.TestCase):
         self.assertGreater(right.entities[0].velocity_x, 0.0)
         self.assertLess(left.entities[0].velocity_x, 0.0)
 
-    def test_fast_palm_triggers_impulse_but_slow_palm_does_not(self) -> None:
+    def test_progressive_impulse_responds_to_medium_and_fast_strokes(self) -> None:
         slow = physics_field(letter_entity(x=500.0, y=400.0))
-        slow.update(0.01, PalmPhysicsInput(500.0, 400.0, 300.0, 0.0))
+        slow.update(0.01, PalmPhysicsInput(500.0, 400.0, 200.0, 0.0))
+        medium = physics_field(letter_entity(x=500.0, y=400.0))
+        medium.update(0.01, PalmPhysicsInput(500.0, 400.0, 450.0, 0.0))
         fast = physics_field(letter_entity(x=500.0, y=400.0))
         fast.update(0.01, PalmPhysicsInput(500.0, 400.0, 900.0, 0.0))
         self.assertEqual(slow.last_impulse_strength, 0.0)
+        self.assertGreater(medium.last_impulse_strength, 0.0)
         self.assertGreater(fast.last_impulse_strength, 0.0)
-        self.assertGreater(fast.entities[0].velocity_x, slow.entities[0].velocity_x)
+        self.assertGreater(fast.last_impulse_strength, medium.last_impulse_strength)
+        self.assertGreater(fast.entities[0].velocity_x, medium.entities[0].velocity_x)
 
     def test_fast_palm_sweep_hits_letter_between_sampled_positions(self) -> None:
         letter = letter_entity(x=500.0, y=400.0)
@@ -171,7 +175,7 @@ class FanGestureTests(unittest.TestCase):
 
     def test_brief_open_palm_flicker_keeps_current_sweep_segment(self) -> None:
         tracker = PalmMotionTracker()
-        tracker.update(300.0, 400.0, 0.0, True)
+        tracker.update(config.INTERFERENCE_CENTER_X, 400.0, 0.0, True)
         palm = tracker.update(
             700.0,
             400.0,
@@ -180,9 +184,13 @@ class FanGestureTests(unittest.TestCase):
         )
         self.assertIsNotNone(palm)
         assert palm is not None
-        self.assertEqual(palm.previous_x, 300.0)
+        self.assertEqual(
+            palm.previous_x,
+            config.INTERFERENCE_CENTER_X + config.HAND_NEUTRAL_HALF_WIDTH,
+        )
         self.assertEqual(palm.x, 700.0)
-        self.assertGreater(palm.velocity_x, config.HAND_IMPULSE_VELOCITY_THRESHOLD)
+        self.assertEqual(palm.stroke_phase, "active")
+        self.assertGreater(palm.velocity_x, config.HAND_IMPULSE_MIN_VELOCITY)
 
     def test_expired_open_palm_grace_disables_hand_physics(self) -> None:
         tracker = PalmMotionTracker()
@@ -207,16 +215,106 @@ class FanGestureTests(unittest.TestCase):
 
     def test_open_palm_loss_uses_grace_without_resetting_physical_world(self) -> None:
         tracker = PalmMotionTracker()
-        tracker.update(480.0, 400.0, 0.0, True)
-        palm = tracker.update(520.0, 400.0, 0.05, True)
-        field = physics_field(letter_entity(x=500.0, y=400.0))
+        tracker.update(config.INTERFERENCE_CENTER_X, 400.0, 0.0, True)
+        palm = tracker.update(700.0, 400.0, 0.05, True)
+        field = physics_field(letter_entity(x=620.0, y=400.0))
         field.update(0.03, palm)
         pushed_x = field.entities[0].x
-        missing = tracker.update(520.0, 400.0, 0.08, False)
+        missing = tracker.update(720.0, 400.0, 0.08, False)
         field.update(0.03, missing)
         self.assertIsNotNone(missing)
         self.assertEqual(len(field.entities), 1)
         self.assertGreater(field.entities[0].x, pushed_x)
+
+    def test_outward_stroke_is_active_and_return_to_center_is_recovery(self) -> None:
+        tracker = PalmMotionTracker()
+        tracker.update(config.INTERFERENCE_CENTER_X, 400.0, 0.0, True)
+        outward = tracker.update(700.0, 400.0, 0.10, True)
+        recovery = tracker.update(620.0, 400.0, 0.20, True)
+        self.assertIsNotNone(outward)
+        self.assertIsNotNone(recovery)
+        assert outward is not None and recovery is not None
+        self.assertEqual(outward.stroke_phase, "active")
+        self.assertEqual(outward.stroke_direction, 1)
+        self.assertEqual(recovery.stroke_phase, "recovery")
+
+    def test_recovery_stroke_does_not_push_letter_back(self) -> None:
+        letter = letter_entity(x=650.0, y=400.0, velocity_x=300.0)
+        field = physics_field(letter)
+        recovery = PalmPhysicsInput(
+            620.0,
+            400.0,
+            -900.0,
+            0.0,
+            700.0,
+            400.0,
+            stroke_phase="recovery",
+            stroke_direction=1,
+            stroke_id=1,
+        )
+        field.update(0.02, recovery)
+        self.assertFalse(field.hand_force_active)
+        self.assertEqual(field.letters_inside_influence_radius, 0)
+        self.assertGreater(letter.velocity_x, 0.0)
+
+    def test_crossing_center_arms_opposite_outward_half_stroke(self) -> None:
+        tracker = PalmMotionTracker()
+        tracker.update(config.INTERFERENCE_CENTER_X, 400.0, 0.0, True)
+        right = tracker.update(720.0, 400.0, 0.10, True)
+        left = tracker.update(280.0, 400.0, 0.30, True)
+        self.assertIsNotNone(right)
+        self.assertIsNotNone(left)
+        assert right is not None and left is not None
+        self.assertEqual(right.stroke_id, 1)
+        self.assertEqual(left.stroke_phase, "active")
+        self.assertEqual(left.stroke_direction, -1)
+        self.assertEqual(left.stroke_id, 2)
+        self.assertEqual(
+            left.previous_x,
+            config.INTERFERENCE_CENTER_X - config.HAND_NEUTRAL_HALF_WIDTH,
+        )
+
+    def test_same_side_repeat_requires_return_to_neutral(self) -> None:
+        tracker = PalmMotionTracker()
+        tracker.update(config.INTERFERENCE_CENTER_X, 400.0, 0.0, True)
+        first = tracker.update(700.0, 400.0, 0.10, True)
+        tracker.update(620.0, 400.0, 0.20, True)
+        blocked_repeat = tracker.update(720.0, 400.0, 0.30, True)
+        ready = tracker.update(config.INTERFERENCE_CENTER_X, 400.0, 0.40, True)
+        second = tracker.update(700.0, 400.0, 0.50, True)
+        self.assertIsNotNone(first)
+        self.assertIsNotNone(blocked_repeat)
+        self.assertIsNotNone(ready)
+        self.assertIsNotNone(second)
+        assert first is not None and blocked_repeat is not None
+        assert ready is not None and second is not None
+        self.assertEqual(first.stroke_id, 1)
+        self.assertEqual(blocked_repeat.stroke_phase, "recovery")
+        self.assertEqual(ready.stroke_phase, "ready")
+        self.assertEqual(second.stroke_phase, "active")
+        self.assertEqual(second.stroke_id, 2)
+
+    def test_impulse_fires_only_once_per_active_stroke(self) -> None:
+        field = physics_field(letter_entity(x=650.0, y=400.0))
+        palm = PalmPhysicsInput(
+            700.0,
+            400.0,
+            700.0,
+            0.0,
+            555.0,
+            400.0,
+            stroke_phase="active",
+            stroke_direction=1,
+            stroke_id=4,
+        )
+        field.update(0.01, palm)
+        velocity_after_first = field.entities[0].velocity_x
+        first_impulse = field.last_impulse_strength
+        field.update(0.01, palm)
+        velocity_added_second_frame = field.entities[0].velocity_x - velocity_after_first
+        self.assertGreater(first_impulse, 0.0)
+        self.assertEqual(field.last_impulse_stroke_id, 4)
+        self.assertLess(velocity_added_second_frame, first_impulse * 0.25)
 
     def test_same_force_accelerates_lighter_letter_more(self) -> None:
         light = letter_entity(x=500.0, y=400.0, mass=0.8)

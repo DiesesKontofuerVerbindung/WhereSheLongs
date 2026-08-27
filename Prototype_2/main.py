@@ -106,8 +106,12 @@ class PrototypeApp:
     def render(self) -> np.ndarray:
         canvas = np.full((config.WINDOW_HEIGHT, config.WINDOW_WIDTH, 3), (10, 12, 18), dtype=np.uint8)
         split_x = int(config.INTERFERENCE_CENTER_X)
+        neutral_left = int(config.INTERFERENCE_CENTER_X - config.HAND_NEUTRAL_HALF_WIDTH)
+        neutral_right = int(config.INTERFERENCE_CENTER_X + config.HAND_NEUTRAL_HALF_WIDTH)
         for y in range(285, config.WINDOW_HEIGHT - 30, 22):
             cv2.line(canvas, (split_x, y), (split_x, min(y + 10, config.WINDOW_HEIGHT - 30)), (42, 48, 62), 1, cv2.LINE_AA)
+        cv2.line(canvas, (neutral_left, 285), (neutral_left, config.WINDOW_HEIGHT - 30), (55, 82, 105), 1, cv2.LINE_AA)
+        cv2.line(canvas, (neutral_right, 285), (neutral_right, config.WINDOW_HEIGHT - 30), (55, 82, 105), 1, cv2.LINE_AA)
         cv2.putText(canvas, "< DISPERSE", (40, config.WINDOW_HEIGHT - 24), cv2.FONT_HERSHEY_SIMPLEX, 0.60, (125, 150, 185), 1, cv2.LINE_AA)
         cv2.putText(canvas, "DISPERSE >", (config.WINDOW_WIDTH - 170, config.WINDOW_HEIGHT - 24), cv2.FONT_HERSHEY_SIMPLEX, 0.60, (125, 150, 185), 1, cv2.LINE_AA)
         center_y = int(self.detector.anchor_y if self.detector.anchor_y is not None else config.WINDOW_HEIGHT / 2)
@@ -158,7 +162,8 @@ class PrototypeApp:
             f"Amplitude: {self.detector.horizontal_amplitude:7.1f}px    Horizontal Velocity: {self.detector.horizontal_velocity:8.1f}px/s",
             f"Fan Strength: {self.detector.fan_strength:.3f}    Expected: {self.state.expected_type.upper()}",
             f"Palm velocity X/Y: {self.palm_motion.velocity_x:8.1f} / {self.palm_motion.velocity_y:8.1f} px/s",
-            f"Hand force active: {'YES' if self.interference.hand_force_active else 'NO'}    Letters in radius: {self.interference.letters_inside_influence_radius}    Last impulse: {self.interference.last_impulse_strength:.1f}",
+            f"Stroke: {self.interference.stroke_phase.upper()} {self.interference.stroke_direction:+d}    Neutral: {neutral_left}-{neutral_right}    Hand force: {'YES' if self.interference.hand_force_active else 'NO'}    Letters hit: {self.interference.letters_inside_influence_radius}",
+            f"Last impulse: {self.interference.last_impulse_strength:.1f}    Hit stroke: {self.interference.last_impulse_stroke_id}",
             f"Gravity: {config.LETTER_GRAVITY:.1f} px/s2    Mean letter vx/vy: {self.interference.mean_velocity_x:7.1f} / {self.interference.mean_velocity_y:7.1f}",
             f"Letters dispersed: {self.interference.dispersed_count}/{len(self.interference.entities)}    Clear: {self.interference.dispersed_ratio * 100:5.1f}%",
             f"Trials: {self.logger.completed_trials}/{self.logger.target_total}    TP/TN/FP/FN: {metrics['tp']}/{metrics['tn']}/{metrics['fp']}/{metrics['fn']}    Acc: {accuracy_text}",

@@ -25,6 +25,9 @@ class PalmPhysicsInput:
     velocity_y: float
     previous_x: float | None = None
     previous_y: float | None = None
+    stroke_phase: str = "active"
+    stroke_direction: int = 0
+    stroke_id: int = 1
 
 
 class PalmMotionTracker:
@@ -35,6 +38,11 @@ class PalmMotionTracker:
         self._last_y: float | None = None
         self._last_time: float | None = None
         self._last_open_palm_at: float | None = None
+        self._neutral_armed = False
+        self._active_direction = 0
+        self._stroke_id = 0
+        self.stroke_phase = "waiting"
+        self.stroke_direction = 0
         self.velocity_x = 0.0
         self.velocity_y = 0.0
 
@@ -82,25 +90,92 @@ class PalmMotionTracker:
         self._last_x = x
         self._last_y = y
         self._last_time = now
+        (
+            self.stroke_phase,
+            self.stroke_direction,
+            active_previous_x,
+            active_previous_y,
+        ) = self._classify_stroke(
+            x,
+            y,
+            x if previous_x is None else previous_x,
+            y if previous_y is None else previous_y,
+        )
         return PalmPhysicsInput(
             x,
             y,
             self.velocity_x,
             self.velocity_y,
-            x if previous_x is None else previous_x,
-            y if previous_y is None else previous_y,
+            active_previous_x,
+            active_previous_y,
+            self.stroke_phase,
+            self.stroke_direction,
+            self._stroke_id,
         )
+
+    def _classify_stroke(
+        self,
+        x: float,
+        y: float,
+        previous_x: float,
+        previous_y: float,
+    ) -> tuple[str, int, float, float]:
+        center = config.INTERFERENCE_CENTER_X
+        left_boundary = center - config.HAND_NEUTRAL_HALF_WIDTH
+        right_boundary = center + config.HAND_NEUTRAL_HALF_WIDTH
+        if left_boundary <= x <= right_boundary:
+            self._neutral_armed = True
+            self._active_direction = 0
+            return "ready", 0, x, y
+
+        side = -1 if x < left_boundary else 1
+        velocity_direction = _sign(self.velocity_x)
+        moving_outward = (
+            velocity_direction == side
+            and abs(self.velocity_x) >= config.HAND_ACTIVE_STROKE_MIN_VELOCITY
+        )
+        crossed_neutral = (
+            side < 0 and previous_x >= left_boundary
+            or side > 0 and previous_x <= right_boundary
+        )
+        if moving_outward and (
+            self._active_direction == side
+            or self._neutral_armed
+            or crossed_neutral
+        ):
+            if self._active_direction != side:
+                self._stroke_id += 1
+            self._active_direction = side
+            self._neutral_armed = False
+            clipped_x, clipped_y = _clip_segment_to_outward_boundary(
+                previous_x,
+                previous_y,
+                x,
+                y,
+                left_boundary if side < 0 else right_boundary,
+                side,
+            )
+            return "active", side, clipped_x, clipped_y
+
+        if velocity_direction != self._active_direction:
+            self._active_direction = 0
+        return "recovery", side, x, y
 
     def clear_tracking(self) -> None:
         self._last_x = None
         self._last_y = None
         self._last_time = None
         self._last_open_palm_at = None
+        self._neutral_armed = False
+        self._active_direction = 0
+        self.stroke_phase = "waiting"
+        self.stroke_direction = 0
         self.velocity_x = 0.0
         self.velocity_y = 0.0
 
     def reset(self) -> None:
         self.clear_tracking()
+        self._stroke_id = 0
 
 
 @dataclass
@@ -144,9 +219,9 @@ class InterferenceField:
         self.hand_force_active = False
         self.letters_inside_influence_radius = 0
         self.last_impulse_strength = 0.0
-        self._last_impulse_at = -float("inf")
-        self._last_impulse_direction = 0
-        self._high_speed_active = False
+        self.last_impulse_stroke_id = 0
+        self.stroke_phase = "waiting"
+        self.stroke_direction = 0
         self._font_cache: dict[int, ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
         self._glyph_cache: dict[
             tuple[str, int, tuple[int, int, int]],
@@ -201,19 +276,22 @@ class InterferenceField:
         self.hand_force_active = False
         self.letters_inside_influence_radius = 0
         self.last_impulse_strength = 0.0
-        self._last_impulse_at = -float("inf")
-        self._last_impulse_direction = 0
-        self._high_speed_active = False
+        self.last_impulse_stroke_id = 0
+        self.stroke_phase = "waiting"
+        self.stroke_direction = 0
 
     def update(self, delta_time: float, palm: PalmPhysicsInput | None = None) -> None:
         delta_time = max(0.0, min(config.LETTER_PHYSICS_MAX_DT, float(delta_time)))
         self.elapsed += delta_time
         drag = exp(-config.LETTER_AIR_DRAG * delta_time)
-        influence = self._influence_falloffs(palm)
+        self.stroke_phase = "waiting" if palm is None else palm.stroke_phase
+        self.stroke_direction = 0 if palm is None else palm.stroke_direction
+        active_palm = palm is not None and palm.stroke_phase == "active"
+        influence = self._influence_falloffs(palm) if active_palm else {}
         self.letters_inside_influence_radius = len(influence)
         palm_speed = 0.0 if palm is None else abs(palm.velocity_x) + abs(palm.velocity_y)
-        self.hand_force_active = bool(influence) and palm_speed >= config.HAND_MIN_FORCE_VELOCITY
-        impulse_triggered = self._should_trigger_impulse(palm, bool(influence))
+        self.hand_force_active = active_palm and bool(influence) and palm_speed >= config.HAND_MIN_FORCE_VELOCITY
+        impulse_strength_ratio = self._impulse_strength_ratio(palm, bool(influence))
         applied_impulse_strength = 0.0
 
         for entity in self.entities:
@@ -226,8 +304,13 @@ class InterferenceField:
                 force_x = palm.velocity_x * config.HAND_HORIZONTAL_FORCE_GAIN * falloff
                 force_y = palm.velocity_y * config.HAND_VERTICAL_FORCE_GAIN * falloff
                 self.apply_force(entity, force_x, force_y)
-                if impulse_triggered:
-                    impulse_x = palm.velocity_x * config.HAND_IMPULSE_GAIN * falloff
+                if impulse_strength_ratio > 0.0:
+                    impulse_x = (
+                        palm.velocity_x
+                        * config.HAND_IMPULSE_GAIN
+                        * impulse_strength_ratio
+                        * falloff
+                    )
                     entity.velocity_x += impulse_x / entity.mass
                     entity.velocity_y -= abs(impulse_x) * config.HAND_IMPULSE_LIFT_RATIO / entity.mass
                     applied_impulse_strength = max(applied_impulse_strength, abs(impulse_x))
@@ -269,27 +352,32 @@ class InterferenceField:
                 falloffs[id(entity)] = linear ** config.HAND_FORCE_FALLOFF_EXPONENT
         return falloffs
 
-    def _should_trigger_impulse(self, palm: PalmPhysicsInput | None, letters_in_range: bool) -> bool:
-        if palm is None or not letters_in_range:
-            self._high_speed_active = False
-            return False
+    def _impulse_strength_ratio(self, palm: PalmPhysicsInput | None, letters_in_range: bool) -> float:
+        if (
+            palm is None
+            or palm.stroke_phase != "active"
+            or not letters_in_range
+            or palm.stroke_id <= self.last_impulse_stroke_id
+        ):
+            return 0.0
         speed_x = abs(palm.velocity_x)
-        threshold = config.HAND_IMPULSE_VELOCITY_THRESHOLD
-        if speed_x < threshold * config.HAND_IMPULSE_REARM_RATIO:
-            self._high_speed_active = False
-        direction = 1 if palm.velocity_x > 0.0 else -1 if palm.velocity_x < 0.0 else 0
-        direction_changed = direction != 0 and direction != self._last_impulse_direction
-        cooldown_ready = self.elapsed - self._last_impulse_at >= config.HAND_IMPULSE_COOLDOWN
-        should_trigger = (
-            speed_x >= threshold
-            and cooldown_ready
-            and (not self._high_speed_active or direction_changed)
+        if speed_x < config.HAND_IMPULSE_MIN_VELOCITY:
+            return 0.0
+        velocity_range = max(
+            1e-6,
+            config.HAND_IMPULSE_FULL_VELOCITY - config.HAND_IMPULSE_MIN_VELOCITY,
         )
-        if should_trigger:
-            self._high_speed_active = True
-            self._last_impulse_at = self.elapsed
-            self._last_impulse_direction = direction
-        return should_trigger
+        progress = _clamp(
+            (speed_x - config.HAND_IMPULSE_MIN_VELOCITY) / velocity_range,
+            0.0,
+            1.0,
+        )
+        smooth_progress = progress * progress * (3.0 - 2.0 * progress)
+        self.last_impulse_stroke_id = palm.stroke_id
+        return (
+            config.HAND_IMPULSE_MIN_STRENGTH_RATIO
+            + (1.0 - config.HAND_IMPULSE_MIN_STRENGTH_RATIO) * smooth_progress
+        )
 
     @staticmethod
     def apply_force(entity: LetterEntity, force_x: float, force_y: float) -> None:
@@ -399,6 +487,25 @@ def resolve_unicode_font() -> Path | None:
 
 def _clamp(value: float, minimum: float, maximum: float) -> float:
     return max(minimum, min(maximum, value))
+
+
+def _sign(value: float) -> int:
+    return 1 if value > 0.0 else -1 if value < 0.0 else 0
+
+
+def _clip_segment_to_outward_boundary(
+    start_x: float,
+    start_y: float,
+    end_x: float,
+    end_y: float,
+    boundary_x: float,
+    direction: int,
+) -> tuple[float, float]:
+    already_outside = start_x <= boundary_x if direction < 0 else start_x >= boundary_x
+    if already_outside or abs(end_x - start_x) <= 1e-9:
+        return start_x, start_y
+    ratio = _clamp((boundary_x - start_x) / (end_x - start_x), 0.0, 1.0)
+    return boundary_x, start_y + ratio * (end_y - start_y)
 
 
 def _distance_to_segment(
