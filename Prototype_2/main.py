@@ -61,11 +61,7 @@ class PrototypeApp:
         if frame.palm_center is not None:
             point = Point(float(frame.palm_center.screen_x), float(frame.palm_center.screen_y))
         event = self.detector.update(point, frame.open_palm, now)
-        if event.reset:
-            self.interference.reset()
-        else:
-            entity_strength = event.fan_strength if event.state == FanState.FANNING else 0.0
-            self.interference.update(entity_delta, entity_strength, event.direction, event.sweep_count)
+        self.interference.update(entity_delta)
 
         if event.started:
             self.logger.start_trial(self.state.expected_type, now)

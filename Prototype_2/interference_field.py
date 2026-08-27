@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import sin
 from pathlib import Path
 from random import Random
 
@@ -22,17 +21,19 @@ class LetterEntity:
     glyph: str
     x: float
     y: float
-    side: int
+    mass: float
+    radius: float
     size: int
     color: tuple[int, int, int]
-    phase: float
     velocity_x: float = 0.0
     velocity_y: float = 0.0
+    acceleration_x: float = 0.0
+    acceleration_y: float = 0.0
     dispersed: bool = False
 
 
 class InterferenceField:
-    """Maintain a deterministic central cluster and push it to both sides."""
+    """Maintain deterministic Unicode letter entities with force state."""
 
     _colors = (
         (235, 104, 115),
@@ -52,8 +53,6 @@ class InterferenceField:
         self.height = int(height)
         self.seed = int(seed)
         self.entities: list[LetterEntity] = []
-        self.elapsed = 0.0
-        self._last_sweep_count = 0
         self._font_cache: dict[int, ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
         self.reset()
 
@@ -72,6 +71,7 @@ class InterferenceField:
         self.entities = []
         for index in range(config.INTERFERENCE_ENTITY_COUNT):
             glyph = glyphs[index % len(glyphs)]
+            size = random.randint(config.INTERFERENCE_MIN_FONT_SIZE, config.INTERFERENCE_MAX_FONT_SIZE)
             x = config.INTERFERENCE_CENTER_X + random.uniform(
                 -config.INTERFERENCE_CLUSTER_WIDTH / 2,
                 config.INTERFERENCE_CLUSTER_WIDTH / 2,
@@ -84,46 +84,23 @@ class InterferenceField:
                 glyph=glyph,
                 x=x,
                 y=y,
-                side=-1 if index % 2 == 0 else 1,
-                size=random.randint(config.INTERFERENCE_MIN_FONT_SIZE, config.INTERFERENCE_MAX_FONT_SIZE),
+                mass=random.uniform(config.LETTER_MASS_MIN, config.LETTER_MASS_MAX),
+                radius=size * config.LETTER_RADIUS_SCALE,
+                size=size,
                 color=random.choice(self._colors),
-                phase=random.uniform(0.0, 6.283185307),
             ))
-        self.elapsed = 0.0
-        self._last_sweep_count = 0
 
-    def update(self, delta_time: float, fan_strength: float, direction: str, sweep_count: int) -> None:
+    def update(self, delta_time: float) -> None:
         delta_time = max(0.0, min(0.10, float(delta_time)))
-        strength = max(0.0, min(1.0, float(fan_strength)))
-        self.elapsed += delta_time
-        new_sweeps = max(0, int(sweep_count) - self._last_sweep_count)
-        self._last_sweep_count = int(sweep_count)
-        direction_sign = 1 if direction == "right" else -1 if direction == "left" else 0
-        active = strength >= config.INTERFERENCE_ACTIVE_STRENGTH
-        drag = config.INTERFERENCE_DRAG_PER_30FPS_FRAME ** (delta_time * 30.0)
-
         for entity in self.entities:
             if entity.dispersed:
                 continue
-            if active:
-                outward = entity.side * config.INTERFERENCE_OUTWARD_ACCELERATION * strength
-                directional = direction_sign * config.INTERFERENCE_DIRECTION_BIAS * strength
-                entity.velocity_x += (outward + directional) * delta_time
-                if new_sweeps:
-                    entity.velocity_x += (
-                        entity.side
-                        * config.INTERFERENCE_SWEEP_IMPULSE
-                        * new_sweeps
-                        * (0.35 + strength)
-                    )
-            entity.velocity_x *= drag
-            entity.velocity_y *= drag
+            entity.velocity_x += entity.acceleration_x * delta_time
+            entity.velocity_y += entity.acceleration_y * delta_time
             entity.x += entity.velocity_x * delta_time
-            entity.y += (
-                entity.velocity_y
-                + sin(self.elapsed * 1.8 + entity.phase) * config.INTERFERENCE_VERTICAL_WAVE_SPEED
-            ) * delta_time
-            entity.y = max(285.0, min(self.height - 45.0, entity.y))
+            entity.y += entity.velocity_y * delta_time
+            entity.acceleration_x = 0.0
+            entity.acceleration_y = 0.0
             entity.dispersed = (
                 entity.x < -config.INTERFERENCE_DISPERSED_MARGIN
                 or entity.x > self.width + config.INTERFERENCE_DISPERSED_MARGIN
