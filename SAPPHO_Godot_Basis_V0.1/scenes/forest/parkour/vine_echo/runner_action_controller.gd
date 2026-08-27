@@ -16,13 +16,18 @@ signal action_performed(action: int)
 @export var gravity := 1700.0
 @export var jump_impulse := 900.0
 @export var slide_duration := 1.05
+@export var ground_action_buffer_duration := 0.32
 @export var suspend_runner_physics := false
 @export var slide_visual_offset := Vector2(0.0, 8.0)
 @export_range(0.4, 1.0, 0.01) var slide_visual_scale_y := 0.72
+@export_range(0.5, 0.9, 0.01) var slide_collider_height_ratio := 0.56
+@export_range(0.5, 1.0, 0.01) var slide_collider_radius_ratio := 0.78
 
 var is_running := false
 var is_sliding := false
 var _slide_remaining := 0.0
+var _queued_ground_action = RunnerAction.NONE
+var _ground_action_buffer_remaining := 0.0
 var _horizontal_input := 0.0
 var _normal_shape: Shape2D
 var _slide_shape: Shape2D
@@ -60,6 +65,8 @@ func stop_auto_run() -> void:
 func stop_run() -> void:
     is_running = false
     _horizontal_input = 0.0
+    _queued_ground_action = RunnerAction.NONE
+    _ground_action_buffer_remaining = 0.0
     _set_slide(false)
     runner.velocity = Vector2.ZERO
     if suspend_runner_physics:
@@ -77,15 +84,18 @@ func set_horizontal_input(next_horizontal_input: float) -> void:
 
 
 func perform_action(action: int) -> void:
-    match action:
-        RunnerAction.UP:
-            if runner.is_on_floor():
-                runner.velocity.y = -jump_impulse
-        RunnerAction.DOWN:
-            if runner.is_on_floor():
-                _slide_remaining = slide_duration
-                _set_slide(true)
+    if action != RunnerAction.UP and action != RunnerAction.DOWN:
+        return
+    if runner.is_on_floor():
+        _execute_ground_action(action)
+    else:
+        _queued_ground_action = action
+        _ground_action_buffer_remaining = ground_action_buffer_duration
     action_performed.emit(action)
+
+
+func get_queued_ground_action() -> int:
+    return _queued_ground_action
 
 
 func debug_set_slide(enabled: bool) -> void:
@@ -97,7 +107,17 @@ func _physics_process(delta: float) -> void:
     if not is_running or get_tree().paused:
         return
 
-    if runner.is_on_floor() and runner.velocity.y > 0.0:
+    if _queued_ground_action != RunnerAction.NONE:
+        _ground_action_buffer_remaining = maxf(0.0, _ground_action_buffer_remaining - delta)
+        if is_zero_approx(_ground_action_buffer_remaining):
+            _queued_ground_action = RunnerAction.NONE
+
+    if runner.is_on_floor() and _queued_ground_action != RunnerAction.NONE:
+        var buffered_action: int = _queued_ground_action
+        _queued_ground_action = RunnerAction.NONE
+        _ground_action_buffer_remaining = 0.0
+        _execute_ground_action(buffered_action)
+    elif runner.is_on_floor() and runner.velocity.y > 0.0:
         runner.velocity.y = 0.0
     else:
         runner.velocity.y = minf(runner.velocity.y + gravity * delta, 1100.0)
@@ -111,6 +131,15 @@ func _physics_process(delta: float) -> void:
     runner.move_and_slide()
 
 
+func _execute_ground_action(action: int) -> void:
+    match action:
+        RunnerAction.UP:
+            runner.velocity.y = -jump_impulse
+        RunnerAction.DOWN:
+            _slide_remaining = slide_duration
+            _set_slide(true)
+
+
 func _cache_collision_shapes() -> void:
     _normal_collision_position = collision_shape.position
     _normal_shape = collision_shape.shape.duplicate()
@@ -118,7 +147,8 @@ func _cache_collision_shapes() -> void:
     if _normal_shape is CapsuleShape2D and _slide_shape is CapsuleShape2D:
         var normal_capsule := _normal_shape as CapsuleShape2D
         var slide_capsule := _slide_shape as CapsuleShape2D
-        slide_capsule.height = maxf(slide_capsule.radius * 2.0, normal_capsule.height - 10.0)
+        slide_capsule.radius = normal_capsule.radius * slide_collider_radius_ratio
+        slide_capsule.height = maxf(slide_capsule.radius * 2.0, normal_capsule.height * slide_collider_height_ratio)
         _slide_collision_position = _normal_collision_position + Vector2(0.0, (normal_capsule.height - slide_capsule.height) * 0.5)
     elif _normal_shape is RectangleShape2D and _slide_shape is RectangleShape2D:
         var normal_rectangle := _normal_shape as RectangleShape2D

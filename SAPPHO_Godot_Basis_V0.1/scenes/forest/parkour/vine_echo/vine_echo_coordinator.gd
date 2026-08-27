@@ -22,6 +22,7 @@ signal gate_action_locked(gate_index: int, player_action: int, xiaomai_action: i
 @export var echo_fixed_route := PackedVector2Array()
 @export var echo_anchor_tolerance := 4.0
 @export var echo_ground_snap_tolerance := 20.0
+@export var decision_input_buffer_duration := 0.35
 
 var previous_player_action = RunnerAction.NONE
 var current_gate_index = 0
@@ -30,6 +31,8 @@ var action_locked := false
 var _awaiting_action := false
 var _action_pending := false
 var _pending_action = RunnerAction.NONE
+var _buffered_action = RunnerAction.NONE
+var _buffered_action_remaining := 0.0
 var _running := false
 var _echo_crossing_gate := false
 var _gates: Array[Node2D] = []
@@ -62,22 +65,23 @@ func _ready() -> void:
 
 
 func _input(event: InputEvent) -> void:
-    if not _awaiting_action or action_locked or _action_pending:
+    if not _running or action_locked or _action_pending:
         return
     if event.is_action_pressed(&"jump"):
-        submit_action(RunnerAction.UP)
+        buffer_action(RunnerAction.UP)
         get_viewport().set_input_as_handled()
     elif event.is_action_pressed(&"move_down") or _is_page_down(event):
-        submit_action(RunnerAction.DOWN)
+        buffer_action(RunnerAction.DOWN)
         get_viewport().set_input_as_handled()
 
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
     if _running:
         var player_horizontal_input := 1.0 if automatic_forward else Input.get_axis("move_left", "move_right")
         player_runner.set_horizontal_input(player_horizontal_input)
         _settle_echo_on_fixed_route()
         xiaomai_runner.set_horizontal_input(_get_echo_horizontal_input(player_horizontal_input))
+    _tick_decision_input_buffer(delta)
     _capture_held_decision_input()
     if _action_pending:
         _commit_pending_action()
@@ -125,6 +129,8 @@ func reset_rounds() -> void:
     _awaiting_action = false
     _action_pending = false
     _pending_action = RunnerAction.NONE
+    _buffered_action = RunnerAction.NONE
+    _buffered_action_remaining = 0.0
     _echo_crossing_gate = false
     _player_history.clear()
     _xiaomai_history.clear()
@@ -143,6 +149,25 @@ func submit_action(action: int) -> bool:
     return true
 
 
+func buffer_action(action: int) -> bool:
+    if not _running or action_locked or _action_pending:
+        return false
+    if action != RunnerAction.UP and action != RunnerAction.DOWN:
+        return false
+    if _awaiting_action:
+        return submit_action(action)
+    if _buffered_action != RunnerAction.NONE:
+        return false
+    _buffered_action = action
+    _buffered_action_remaining = decision_input_buffer_duration
+    _update_debug_label()
+    return true
+
+
+func debug_buffer_action(action: int) -> bool:
+    return buffer_action(action)
+
+
 func debug_enter_gate(gate_index: int) -> void:
     if not _running and not start_on_ready:
         return
@@ -152,6 +177,7 @@ func debug_enter_gate(gate_index: int) -> void:
     action_locked = false
     _action_pending = false
     _pending_action = RunnerAction.NONE
+    _consume_buffered_action()
     _update_debug_label()
 
 
@@ -252,6 +278,27 @@ func _capture_held_decision_input() -> void:
         submit_action(RunnerAction.DOWN)
 
 
+func _tick_decision_input_buffer(delta: float) -> void:
+    if _buffered_action == RunnerAction.NONE:
+        return
+    _buffered_action_remaining = maxf(0.0, _buffered_action_remaining - delta)
+    if is_zero_approx(_buffered_action_remaining):
+        _buffered_action = RunnerAction.NONE
+        _update_debug_label()
+        return
+    if _awaiting_action:
+        _consume_buffered_action()
+
+
+func _consume_buffered_action() -> void:
+    if _buffered_action == RunnerAction.NONE or not _awaiting_action:
+        return
+    var action: int = _buffered_action
+    _buffered_action = RunnerAction.NONE
+    _buffered_action_remaining = 0.0
+    submit_action(action)
+
+
 func _get_echo_horizontal_input(player_horizontal_input: float) -> float:
     if automatic_forward:
         return 1.0
@@ -330,6 +377,8 @@ func _update_debug_label() -> void:
         player_current = _player_history[-1]
         xiaomai_echo = _xiaomai_history[-1]
     var decision_text := "READY · Space=UP / S↓PgDn=DOWN" if _awaiting_action and not action_locked else "Move right to the next Gate"
+    if _buffered_action != RunnerAction.NONE:
+        decision_text = "BUFFERED %s · %.2fs" % [action_name(_buffered_action), _buffered_action_remaining]
     var echo_text := "CROSSING" if _echo_crossing_gate else "WAITING AT GATE"
     debug_label.text = "Gate: %d\nDecision: %s\nPlayer Current: %s\nAmai Echo: %s (%s)\nPrevious Player: %s\nLocked: %s" % [
         current_gate_index + 1,

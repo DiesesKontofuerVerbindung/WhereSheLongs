@@ -46,13 +46,15 @@ func _run() -> void:
     _test_sequence_one(coordinator)
     _test_sequence_two(coordinator)
     _test_first_input_wins(coordinator)
+    _test_pre_gate_input_buffer(coordinator)
+    _test_airborne_action_buffer(xiaomai, xiaomai_runner)
     _test_gate_index_survives_pause_and_frame_variation(coordinator)
 
     scene.queue_free()
     await process_frame
 
     if failures.is_empty():
-        print("[VINE ECHO SMOKE PASS] Gate-indexed one-round Xiaomai echo, first-gate NONE bypass, input lock, and pause/frame stability passed.")
+        print("[VINE ECHO SMOKE PASS] Gate-indexed echo, pre-gate/airborne input buffers, first-input lock, and pause/frame stability passed.")
         quit(0)
         return
     for failure in failures:
@@ -89,6 +91,31 @@ func _test_first_input_wins(coordinator: Node) -> void:
     _check(not coordinator.debug_submit_action(VINE_ECHO_COORDINATOR_SCRIPT.RunnerAction.DOWN), "Gate accepted DOWN after it had already locked UP")
     _check(coordinator.get_player_history() == [1], "Fast UP then DOWN did not preserve the first action")
     _check(coordinator.get_xiaomai_history() == [0], "First gate echo must remain NONE")
+
+
+func _test_pre_gate_input_buffer(coordinator: Node) -> void:
+    coordinator.reset_rounds()
+    _check(coordinator.debug_buffer_action(VINE_ECHO_COORDINATOR_SCRIPT.RunnerAction.DOWN), "Pre-gate DOWN input was not buffered")
+    _check(not coordinator.debug_buffer_action(VINE_ECHO_COORDINATOR_SCRIPT.RunnerAction.UP), "A second pre-gate input overwrote the first input")
+    coordinator.debug_enter_gate(0)
+    coordinator._physics_process(1.0 / 60.0)
+    _check(coordinator.get_player_history() == [2], "Buffered pre-gate DOWN was not committed on Gate entry")
+
+
+func _test_airborne_action_buffer(xiaomai: CharacterBody2D, runner: Node) -> void:
+    xiaomai.global_position.y -= 80.0
+    xiaomai.velocity = Vector2(0.0, 1.0)
+    xiaomai.move_and_slide()
+    xiaomai.velocity = Vector2.ZERO
+    _check(not xiaomai.is_on_floor(), "Airborne action test did not leave the floor")
+    runner.perform_action(RUNNER_ACTION_CONTROLLER_SCRIPT.RunnerAction.UP)
+    _check(runner.get_queued_ground_action() == RUNNER_ACTION_CONTROLLER_SCRIPT.RunnerAction.UP, "Airborne UP was dropped instead of queued")
+    runner.stop_run()
+    runner.start_run(0.0)
+    runner.perform_action(RUNNER_ACTION_CONTROLLER_SCRIPT.RunnerAction.DOWN)
+    _check(runner.get_queued_ground_action() == RUNNER_ACTION_CONTROLLER_SCRIPT.RunnerAction.DOWN, "Airborne DOWN was dropped instead of queued")
+    runner.stop_run()
+    runner.start_run(0.0)
 
 
 func _test_gate_index_survives_pause_and_frame_variation(coordinator: Node) -> void:
