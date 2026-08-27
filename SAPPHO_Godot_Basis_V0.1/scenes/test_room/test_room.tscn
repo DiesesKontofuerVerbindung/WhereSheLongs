@@ -1,0 +1,130 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://scenes/test_room/test_room.gd" id="1_room"]
+[ext_resource type="PackedScene" path="res://shared/player/player.tscn" id="2_player"]
+[ext_resource type="Script" path="res://shared/interaction/interactable.gd" id="3_interactable"]
+[ext_resource type="Script" path="res://shared/interaction/scene_portal.gd" id="4_portal"]
+
+[sub_resource type="CircleShape2D" id="Circle_object"]
+radius = 34.0
+
+[sub_resource type="RectangleShape2D" id="Rect_portal"]
+size = Vector2(80, 80)
+
+[sub_resource type="RectangleShape2D" id="Wall_horizontal"]
+size = Vector2(1240, 30)
+
+[sub_resource type="RectangleShape2D" id="Wall_vertical"]
+size = Vector2(30, 680)
+
+[node name="TestRoom" type="Node2D"]
+script = ExtResource("1_room")
+
+[node name="Background" type="Polygon2D" parent="."]
+polygon = PackedVector2Array(0, 0, 1280, 0, 1280, 720, 0, 720)
+color = Color(0.11, 0.13, 0.17, 1)
+
+[node name="Title" type="Label" parent="."]
+offset_left = 36.0
+offset_top = 28.0
+offset_right = 560.0
+offset_bottom = 86.0
+theme_override_font_sizes/font_size = 26
+text = "SAPPHO — BASIS V0 TEST ROOM"
+
+[node name="Instructions" type="Label" parent="."]
+offset_left = 36.0
+offset_top = 78.0
+offset_right = 650.0
+offset_bottom = 140.0
+text = "Move: WASD / arrows     Interact: E     Look: F"
+
+[node name="Player" parent="." instance=ExtResource("2_player")]
+position = Vector2(250, 360)
+
+[node name="PracticeObject" type="Area2D" parent="."]
+position = Vector2(500, 360)
+script = ExtResource("3_interactable")
+speaker_name = "Test Object"
+interaction_text = "E interaction works. This object uses the shared interaction contract."
+look_text = "F look works. Scene code does not need to know Player internals."
+
+[node name="Visual" type="Polygon2D" parent="PracticeObject"]
+polygon = PackedVector2Array(0, -34, 32, -10, 20, 30, -20, 30, -32, -10)
+color = Color(0.82, 0.66, 0.28, 1)
+
+[node name="Label" type="Label" parent="PracticeObject"]
+offset_left = -95.0
+offset_top = 48.0
+offset_right = 110.0
+offset_bottom = 76.0
+text = "shared interactable"
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="PracticeObject"]
+shape = SubResource("Circle_object")
+
+[node name="ForestPortal" type="Area2D" parent="."]
+position = Vector2(900, 275)
+script = ExtResource("4_portal")
+target_scene = "res://scenes/forest/forest.tscn"
+
+[node name="Visual" type="Polygon2D" parent="ForestPortal"]
+polygon = PackedVector2Array(-40, -40, 40, -40, 40, 40, -40, 40)
+color = Color(0.2, 0.45, 0.28, 1)
+
+[node name="Label" type="Label" parent="ForestPortal"]
+offset_left = -52.0
+offset_top = -12.0
+offset_right = 55.0
+offset_bottom = 20.0
+text = "FOREST"
+horizontal_alignment = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ForestPortal"]
+shape = SubResource("Rect_portal")
+
+[node name="WeddingPortal" type="Area2D" parent="."]
+position = Vector2(900, 455)
+script = ExtResource("4_portal")
+target_scene = "res://scenes/wedding/wedding.tscn"
+
+[node name="Visual" type="Polygon2D" parent="WeddingPortal"]
+polygon = PackedVector2Array(-40, -40, 40, -40, 40, 40, -40, 40)
+color = Color(0.48, 0.31, 0.42, 1)
+
+[node name="Label" type="Label" parent="WeddingPortal"]
+offset_left = -58.0
+offset_top = -12.0
+offset_right = 60.0
+offset_bottom = 20.0
+text = "WEDDING"
+horizontal_alignment = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="WeddingPortal"]
+shape = SubResource("Rect_portal")
+
+[node name="Walls" type="Node2D" parent="."]
+
+[node name="Top" type="StaticBody2D" parent="Walls"]
+position = Vector2(640, 15)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Walls/Top"]
+shape = SubResource("Wall_horizontal")
+
+[node name="Bottom" type="StaticBody2D" parent="Walls"]
+position = Vector2(640, 705)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Walls/Bottom"]
+shape = SubResource("Wall_horizontal")
+
+[node name="Left" type="StaticBody2D" parent="Walls"]
+position = Vector2(15, 360)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Walls/Left"]
+shape = SubResource("Wall_vertical")
+
+[node name="Right" type="StaticBody2D" parent="Walls"]
+position = Vector2(1265, 360)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Walls/Right"]
+shape = SubResource("Wall_vertical")

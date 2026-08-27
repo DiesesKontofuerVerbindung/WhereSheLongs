@@ -1,0 +1,65 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="PackedScene" path="res://shared/player/player.tscn" id="1_player"]
+[ext_resource type="Script" path="res://shared/interaction/interactable.gd" id="2_interactable"]
+[ext_resource type="Script" path="res://shared/interaction/scene_portal.gd" id="3_portal"]
+
+[sub_resource type="RectangleShape2D" id="Rect_interaction"]
+size = Vector2(90, 70)
+
+[node name="Wedding" type="Node2D"]
+
+[node name="Background" type="Polygon2D" parent="."]
+polygon = PackedVector2Array(0, 0, 1280, 0, 1280, 720, 0, 720)
+color = Color(0.17, 0.11, 0.15, 1)
+
+[node name="Title" type="Label" parent="."]
+offset_left = 40.0
+offset_top = 30.0
+offset_right = 650.0
+offset_bottom = 95.0
+theme_override_font_sizes/font_size = 30
+text = "WEDDING — OWNER PLACEHOLDER"
+
+[node name="Note" type="Label" parent="."]
+offset_left = 40.0
+offset_top = 88.0
+offset_right = 920.0
+offset_bottom = 150.0
+text = "Build Wedding here. Keep shared Player / Input / GameState / Dialogue unchanged."
+
+[node name="Player" parent="." instance=ExtResource("1_player")]
+position = Vector2(350, 360)
+
+[node name="WeddingMarker" type="Area2D" parent="."]
+position = Vector2(620, 360)
+script = ExtResource("2_interactable")
+speaker_name = "Wedding"
+interaction_text = "Wedding scene owns its local mechanics. Shared infrastructure is reused, not copied."
+look_text = "This placeholder is intentionally minimal."
+
+[node name="Visual" type="Polygon2D" parent="WeddingMarker"]
+polygon = PackedVector2Array(-38, -34, 38, -34, 38, 34, -38, 34)
+color = Color(0.73, 0.48, 0.66, 1)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="WeddingMarker"]
+shape = SubResource("Rect_interaction")
+
+[node name="BackToTest" type="Area2D" parent="."]
+position = Vector2(980, 360)
+script = ExtResource("3_portal")
+target_scene = "res://scenes/test_room/test_room.tscn"
+
+[node name="Visual" type="Polygon2D" parent="BackToTest"]
+polygon = PackedVector2Array(-45, -35, 45, -35, 45, 35, -45, 35)
+color = Color(0.26, 0.28, 0.32, 1)
+
+[node name="Label" type="Label" parent="BackToTest"]
+offset_left = -35.0
+offset_top = -10.0
+offset_right = 40.0
+offset_bottom = 22.0
+text = "BACK"
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="BackToTest"]
+shape = SubResource("Rect_interaction")

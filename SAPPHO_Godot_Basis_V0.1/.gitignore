@@ -1,0 +1,16 @@
+# Godot 4 generated data
+.godot/
+
+# Exported builds
+/build/
+/exports/
+*.pck
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local-only Codex/runtime scratch
+.codex/tmp/
