@@ -19,6 +19,25 @@ TARGET_FPS = 240
 CAMERA_TARGET_FPS = 60
 CAMERA_BUFFER_SIZE = 1
 
+# Input signal profiles. Baseline preserves direct screen mapping; Adaptive
+# separates low-latency physics control from conservative gesture recognition.
+SENSITIVITY_BASELINE = "baseline"
+SENSITIVITY_ADAPTIVE = "adaptive"
+DEFAULT_SENSITIVITY_PROFILE = SENSITIVITY_ADAPTIVE
+PHYSICS_ONE_EURO_MIN_CUTOFF = 1.0
+PHYSICS_ONE_EURO_BETA = 0.007
+PHYSICS_ONE_EURO_D_CUTOFF = 1.0
+GESTURE_ONE_EURO_MIN_CUTOFF = 0.7
+GESTURE_ONE_EURO_BETA = 0.003
+GESTURE_ONE_EURO_D_CUTOFF = 1.0
+PHYSICS_DEADZONE = 2.0
+PALM_X_GAIN_BASE = 1.35
+PALM_X_GAIN_MAX = 1.75
+PALM_Y_GAIN = 1.0
+PALM_GAIN_SPEED_LOW = 90.0
+PALM_GAIN_SPEED_HIGH = 900.0
+SIGNAL_MONITOR_INTERVAL = 1.0 / 20.0
+
 # Explainable relaxed-palm classification. A natural fan hand may keep one
 # finger bent; the thumb remains irrelevant to this prototype.
 FINGER_EXTENDED_MIN_ANGLE = 140.0
@@ -51,7 +70,8 @@ STRENGTH_FREQUENCY_REFERENCE = 2.5
 RECENT_SWEEP_WINDOW = 2.0
 
 # Interference entities: mixed Latin/Cyrillic "voices" begin as one central
-# cluster and move only through local palm forces, impulses, and inertia.
+# cluster. Local palm forces and impulses remain available; a separate
+# presentation layer can also spread both groups outward during a palm motion.
 INTERFERENCE_ENTITY_COUNT = 28
 INTERFERENCE_RANDOM_SEED = 2608
 INTERFERENCE_CENTER_X = WINDOW_WIDTH / 2
@@ -86,6 +106,14 @@ HAND_IMPULSE_MIN_STRENGTH_RATIO = 0.35
 HAND_IMPULSE_GAIN = 1.0
 HAND_IMPULSE_LIFT_RATIO = 0.12
 INTERFERENCE_DISPERSED_MARGIN = 45.0
+
+# Presentation-level two-sided dispersion. This is intentionally separate
+# from local hand force: a valid horizontal palm motion drives the mixed
+# voices outward from the central field, while local left/right mechanics stay.
+AUTO_DISPERSION_MOTION_THRESHOLD = 55.0
+AUTO_DISPERSION_SPEED_REFERENCE = 650.0
+AUTO_DISPERSION_ACCELERATION = 2600.0
+AUTO_DISPERSION_DECAY = 1.15
 
 # Pillow renders real Cyrillic glyphs; OpenCV Hershey fonts only cover ASCII.
 UNICODE_FONT_CANDIDATES = (

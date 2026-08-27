@@ -69,6 +69,7 @@ def letter_entity(
     radius: float = 15.0,
     velocity_x: float = 0.0,
     velocity_y: float = 0.0,
+    side: int = 1,
 ) -> LetterEntity:
     return LetterEntity(
         glyph="A",
@@ -80,6 +81,7 @@ def letter_entity(
         color=(255, 255, 255),
         velocity_x=velocity_x,
         velocity_y=velocity_y,
+        side=side,
     )
 
 
@@ -256,6 +258,18 @@ class FanGestureTests(unittest.TestCase):
         self.assertFalse(field.hand_force_active)
         self.assertEqual(field.letters_inside_influence_radius, 0)
         self.assertGreater(letter.velocity_x, 0.0)
+
+    def test_open_palm_motion_automatically_drives_letters_to_both_sides(self) -> None:
+        left = letter_entity(x=150.0, y=400.0, side=-1)
+        right = letter_entity(x=850.0, y=400.0, side=1)
+        field = physics_field(left, right)
+        field.update(
+            0.02,
+            PalmPhysicsInput(500.0, 400.0, 350.0, 0.0, auto_dispersion=True),
+        )
+        self.assertGreater(field.auto_dispersion_strength, 0.0)
+        self.assertLess(left.velocity_x, 0.0)
+        self.assertGreater(right.velocity_x, 0.0)
 
     def test_crossing_center_arms_opposite_outward_half_stroke(self) -> None:
         tracker = PalmMotionTracker()

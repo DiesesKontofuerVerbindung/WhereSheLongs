@@ -12,7 +12,8 @@ import config
 from fan_detector import FanDetector, Point
 from fan_state import FanState
 from hand_tracker import HandTracker, TrackingFrame
-from interference_field import InterferenceField, PalmMotionTracker, PalmPhysicsInput
+from interference_field import InterferenceField, PalmPhysicsInput
+from palm_signal_processor import PalmMotion, PalmSignalProcessor
 from test_logger import ExpectedType, TestLogger, calculate_metrics
 
 
@@ -28,8 +29,16 @@ class PrototypeApp:
         self.state = AppState()
         self.detector = FanDetector()
         self.interference = InterferenceField()
-        self.palm_motion = PalmMotionTracker()
+        self.signal_processor = PalmSignalProcessor()
+        self.palm_signal = PalmMotion(
+            None, None, None, None, None, None, 0.0, 0.0, 0.0,
+            1.0, 0.0, 0.0, False, False, False,
+        )
         self.physics_palm: PalmPhysicsInput | None = None
+        self._previous_physics_x: float | None = None
+        self._previous_physics_y: float | None = None
+        self._physics_stroke_id = 0
+        self._physics_direction = 0
         self.tracker = HandTracker()
         self.logger = TestLogger(results_root or config.RESULTS_DIR)
         self.fps = 0.0
@@ -44,8 +53,12 @@ class PrototypeApp:
             self.logger.finish_trial("aborted", reason, now)
         self.detector.reset()
         self.interference.reset()
-        self.palm_motion.reset()
+        self.signal_processor.reset()
         self.physics_palm = None
+        self._previous_physics_x = None
+        self._previous_physics_y = None
+        self._physics_stroke_id = 0
+        self._physics_direction = 0
         self._last_entity_time = now
         self.state.status_message = "Gesture reset"
 
@@ -55,6 +68,14 @@ class PrototypeApp:
         self._last_frame_time = now
         self._fps_samples = (self._fps_samples + [1.0 / delta])[-20:]
         self.fps = sum(self._fps_samples) / len(self._fps_samples)
+
+    def set_sensitivity_profile(self, profile: str) -> None:
+        self.signal_processor.set_profile(profile)
+        self.physics_palm = None
+        self._previous_physics_x = None
+        self._previous_physics_y = None
+        self._physics_direction = 0
+        self.state.status_message = f"Sensitivity profile: {profile.upper()}"
 
     def tick(self) -> None:
         now = time.perf_counter()
@@ -66,18 +87,21 @@ class PrototypeApp:
         if frame.sample_id != self._last_tracking_sample_id:
             self._last_tracking_sample_id = frame.sample_id
             sample_time = frame.sample_time if frame.sample_time > 0.0 else now
-            point = None
-            if frame.palm_center is not None:
-                point = Point(float(frame.palm_center.screen_x), float(frame.palm_center.screen_y))
-            event = self.detector.update(point, frame.open_palm, sample_time)
             palm_x = None if frame.palm_center is None else float(frame.palm_center.screen_x)
             palm_y = None if frame.palm_center is None else float(frame.palm_center.screen_y)
-            self.physics_palm = self.palm_motion.update(
+            self.palm_signal = self.signal_processor.update(
                 palm_x,
                 palm_y,
                 sample_time,
                 frame.open_palm,
+                frame.hand_detected,
             )
+            self.logger.append_signal(self.palm_signal, sample_time)
+            point = None
+            if self.palm_signal.active and self.palm_signal.gesture_x is not None:
+                point = Point(self.palm_signal.gesture_x, self.palm_signal.gesture_y or 0.0)
+            event = self.detector.update(point, frame.open_palm, sample_time)
+            self.physics_palm = self._make_physics_palm()
         self.interference.update(entity_delta, self.physics_palm)
 
         if event is None:
@@ -103,15 +127,41 @@ class PrototypeApp:
             self.state.status_message = "FANNING: reverse direction with full sweeps"
         self.update_fps()
 
+    def _make_physics_palm(self) -> PalmPhysicsInput | None:
+        signal = self.palm_signal
+        if (
+            not signal.active
+            or not signal.open_palm
+            or signal.physics_x is None
+            or signal.physics_y is None
+        ):
+            return None
+        direction = 1 if signal.velocity_x > 0.0 else -1 if signal.velocity_x < 0.0 else 0
+        if direction and direction != self._physics_direction:
+            self._physics_stroke_id += 1
+            self._physics_direction = direction
+        previous_x = signal.physics_x if self._previous_physics_x is None else self._previous_physics_x
+        previous_y = signal.physics_y if self._previous_physics_y is None else self._previous_physics_y
+        self._previous_physics_x = signal.physics_x
+        self._previous_physics_y = signal.physics_y
+        return PalmPhysicsInput(
+            signal.physics_x,
+            signal.physics_y,
+            signal.velocity_x,
+            signal.velocity_y,
+            previous_x,
+            previous_y,
+            stroke_phase="active",
+            stroke_direction=direction,
+            stroke_id=self._physics_stroke_id,
+            auto_dispersion=True,
+        )
+
     def render(self) -> np.ndarray:
         canvas = np.full((config.WINDOW_HEIGHT, config.WINDOW_WIDTH, 3), (10, 12, 18), dtype=np.uint8)
         split_x = int(config.INTERFERENCE_CENTER_X)
-        neutral_left = int(config.INTERFERENCE_CENTER_X - config.HAND_NEUTRAL_HALF_WIDTH)
-        neutral_right = int(config.INTERFERENCE_CENTER_X + config.HAND_NEUTRAL_HALF_WIDTH)
         for y in range(285, config.WINDOW_HEIGHT - 30, 22):
             cv2.line(canvas, (split_x, y), (split_x, min(y + 10, config.WINDOW_HEIGHT - 30)), (42, 48, 62), 1, cv2.LINE_AA)
-        cv2.line(canvas, (neutral_left, 285), (neutral_left, config.WINDOW_HEIGHT - 30), (55, 82, 105), 1, cv2.LINE_AA)
-        cv2.line(canvas, (neutral_right, 285), (neutral_right, config.WINDOW_HEIGHT - 30), (55, 82, 105), 1, cv2.LINE_AA)
         cv2.putText(canvas, "< DISPERSE", (40, config.WINDOW_HEIGHT - 24), cv2.FONT_HERSHEY_SIMPLEX, 0.60, (125, 150, 185), 1, cv2.LINE_AA)
         cv2.putText(canvas, "DISPERSE >", (config.WINDOW_WIDTH - 170, config.WINDOW_HEIGHT - 24), cv2.FONT_HERSHEY_SIMPLEX, 0.60, (125, 150, 185), 1, cv2.LINE_AA)
         center_y = int(self.detector.anchor_y if self.detector.anchor_y is not None else config.WINDOW_HEIGHT / 2)
@@ -128,17 +178,22 @@ class PrototypeApp:
             cv2.line(canvas, (int(first.x), int(first.y)), (int(second.x), int(second.y)), (100, 155, 255), 3, cv2.LINE_AA)
 
         frame = self.state.last_frame
-        if frame is not None and frame.palm_center is not None:
-            palm = frame.palm_center
-            color = (80, 235, 120) if frame.open_palm else (90, 100, 235)
-            cv2.circle(canvas, (palm.screen_x, palm.screen_y), 12, color, -1, cv2.LINE_AA)
-            cv2.circle(canvas, (palm.screen_x, palm.screen_y), 18, (245, 245, 245), 1, cv2.LINE_AA)
+        signal = self.palm_signal
+        if signal.raw_x is not None and signal.raw_y is not None:
+            cv2.circle(canvas, (int(signal.raw_x), int(signal.raw_y)), 8, (80, 90, 240), 1, cv2.LINE_AA)
+        if signal.gesture_x is not None and signal.gesture_y is not None:
+            cv2.circle(canvas, (int(signal.gesture_x), int(signal.gesture_y)), 11, (240, 170, 80), 1, cv2.LINE_AA)
+        if signal.physics_x is not None and signal.physics_y is not None:
+            color = (80, 235, 120) if signal.open_palm else (90, 100, 235)
+            cv2.circle(canvas, (int(signal.physics_x), int(signal.physics_y)), 10, color, -1, cv2.LINE_AA)
+            cv2.circle(canvas, (int(signal.physics_x), int(signal.physics_y)), 16, (245, 245, 245), 1, cv2.LINE_AA)
 
         metrics = calculate_metrics(self.logger.records)
         accuracy = metrics["accuracy"]
         accuracy_text = "n/a" if accuracy is None else f"{float(accuracy) * 100:.1f}%"
         raw_xy = "-- / --"
-        palm_xy = "-- / --"
+        physics_xy = "-- / --"
+        gesture_xy = "-- / --"
         extensions = "I- M- R- P-"
         hand_status = "NO"
         if frame is not None:
@@ -151,18 +206,22 @@ class PrototypeApp:
             ))
             if frame.palm_center is not None:
                 raw_xy = f"{frame.palm_center.normalized_x:.3f} / {frame.palm_center.normalized_y:.3f}"
-                palm_xy = f"{frame.palm_center.screen_x} / {frame.palm_center.screen_y}"
+        if signal.physics_x is not None and signal.physics_y is not None:
+            physics_xy = f"{signal.physics_x:.1f} / {signal.physics_y:.1f}"
+        if signal.gesture_x is not None and signal.gesture_y is not None:
+            gesture_xy = f"{signal.gesture_x:.1f} / {signal.gesture_y:.1f}"
 
         debug_lines = [
-            "P positive | N negative | R reset | Q quit",
+            "P positive | N negative | A adaptive | B baseline | R reset | Q quit",
             f"Loop FPS: {self.fps:5.1f}/{config.TARGET_FPS}    Tracking FPS: {self.tracker.tracking_fps:5.1f}    Hand: {hand_status}    Open Palm: {'YES' if frame and frame.open_palm else 'NO'}    {extensions}",
-            f"Raw palm x/y: {raw_xy}    Palm x/y: {palm_xy}",
+            f"Raw palm x/y: {raw_xy}    Physics x/y: {physics_xy}    Gesture x/y: {gesture_xy}",
             f"Fan State: {self.detector.state.value}    Arming: {self.detector.arming_progress * 100:5.1f}%",
             f"Direction: {self.detector.direction.upper()}    Sweep Count: {self.detector.sweep_count}",
             f"Amplitude: {self.detector.horizontal_amplitude:7.1f}px    Horizontal Velocity: {self.detector.horizontal_velocity:8.1f}px/s",
             f"Fan Strength: {self.detector.fan_strength:.3f}    Expected: {self.state.expected_type.upper()}",
-            f"Palm velocity X/Y: {self.palm_motion.velocity_x:8.1f} / {self.palm_motion.velocity_y:8.1f} px/s",
-            f"Stroke: {self.interference.stroke_phase.upper()} {self.interference.stroke_direction:+d}    Neutral: {neutral_left}-{neutral_right}    Hand force: {'YES' if self.interference.hand_force_active else 'NO'}    Letters hit: {self.interference.letters_inside_influence_radius}",
+            f"Raw dx / Physics dx: {signal.raw_delta_x:7.1f} / {signal.physics_delta_x:7.1f} px    Physics velocity X/Y: {signal.velocity_x:8.1f} / {signal.velocity_y:8.1f} px/s",
+            f"Profile: {self.signal_processor.profile.upper()}    X gain: {signal.physics_gain:.2f}    Physics deadzone: {config.PHYSICS_DEADZONE:.1f}px    Input: {'ACTIVE' if signal.active and signal.open_palm else 'IDLE'}",
+            f"Hand force: {'YES' if self.interference.hand_force_active else 'NO'}    Letters hit: {self.interference.letters_inside_influence_radius}    Auto scatter: {self.interference.auto_dispersion_strength:.2f}",
             f"Last impulse: {self.interference.last_impulse_strength:.1f}    Hit stroke: {self.interference.last_impulse_stroke_id}",
             f"Gravity: {config.LETTER_GRAVITY:.1f} px/s2    Mean letter vx/vy: {self.interference.mean_velocity_x:7.1f} / {self.interference.mean_velocity_y:7.1f}",
             f"Letters dispersed: {self.interference.dispersed_count}/{len(self.interference.entities)}    Clear: {self.interference.dispersed_ratio * 100:5.1f}%",
@@ -201,6 +260,10 @@ def main() -> None:
                 app.state.expected_type = "positive"
             elif key in (ord("n"), ord("N")):
                 app.state.expected_type = "negative"
+            elif key in (ord("a"), ord("A")):
+                app.set_sensitivity_profile(config.SENSITIVITY_ADAPTIVE)
+            elif key in (ord("b"), ord("B")):
+                app.set_sensitivity_profile(config.SENSITIVITY_BASELINE)
             next_frame_at += frame_interval
             remaining = next_frame_at - time.perf_counter()
             if remaining > 0.0:

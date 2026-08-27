@@ -39,13 +39,20 @@ class TestLogger:
         self.trajectory_dir = self.run_dir / "trajectories"
         self.trajectory_dir.mkdir(parents=True, exist_ok=False)
         self.trials_path = self.run_dir / "trials.csv"
+        self.signal_monitor_path = self.run_dir / "signal_monitor.csv"
         self.summary_path = self.run_dir / "summary.json"
         self.environment_path = self.run_dir / "environment.json"
         self.active: ActiveTrial | None = None
         self.records: list[dict[str, object]] = []
         self._next_trial_id = 1
+        self._last_signal_log_at: float | None = None
         with self.trials_path.open("w", newline="", encoding="utf-8") as file:
             csv.DictWriter(file, fieldnames=self.trial_columns).writeheader()
+        with self.signal_monitor_path.open("w", newline="", encoding="utf-8") as file:
+            csv.DictWriter(file, fieldnames=(
+                "timestamp", "raw_x", "raw_y", "physics_x", "physics_y", "gesture_x", "gesture_y",
+                "physics_velocity_x", "physics_velocity_y", "gain", "open_palm", "hand_detected",
+            )).writeheader()
         write_config_snapshot(self.run_dir / "config_snapshot.json")
         write_environment(self.environment_path)
         self.write_summary()
@@ -71,6 +78,34 @@ class TestLogger:
     def append_sample(self, sample: TrajectorySample) -> None:
         if self.active is not None:
             self.active.samples.append(sample)
+
+    def append_signal(self, signal: object, timestamp: float) -> None:
+        if (
+            self._last_signal_log_at is not None
+            and timestamp - self._last_signal_log_at < config.SIGNAL_MONITOR_INTERVAL
+        ):
+            return
+        self._last_signal_log_at = timestamp
+        fields = (
+            "timestamp", "raw_x", "raw_y", "physics_x", "physics_y", "gesture_x", "gesture_y",
+            "physics_velocity_x", "physics_velocity_y", "gain", "open_palm", "hand_detected",
+        )
+        with self.signal_monitor_path.open("a", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(file, fieldnames=fields)
+            writer.writerow({
+                "timestamp": f"{timestamp:.6f}",
+                "raw_x": _format_signal_value(signal, "raw_x"),
+                "raw_y": _format_signal_value(signal, "raw_y"),
+                "physics_x": _format_signal_value(signal, "physics_x"),
+                "physics_y": _format_signal_value(signal, "physics_y"),
+                "gesture_x": _format_signal_value(signal, "gesture_x"),
+                "gesture_y": _format_signal_value(signal, "gesture_y"),
+                "physics_velocity_x": _format_signal_value(signal, "velocity_x"),
+                "physics_velocity_y": _format_signal_value(signal, "velocity_y"),
+                "gain": _format_signal_value(signal, "physics_gain"),
+                "open_palm": int(bool(getattr(signal, "open_palm", False))),
+                "hand_detected": int(bool(getattr(signal, "hand_detected", False))),
+            })
 
     def finish_trial(
         self,
@@ -188,3 +223,8 @@ def _safe_divide(numerator: int, denominator: int) -> float | None:
 
 def _mean(values: list[float]) -> float:
     return 0.0 if not values else sum(values) / len(values)
+
+
+def _format_signal_value(signal: object, name: str) -> str:
+    value = getattr(signal, name, None)
+    return "" if value is None else f"{float(value):.4f}"

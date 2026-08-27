@@ -28,6 +28,7 @@ class PalmPhysicsInput:
     stroke_phase: str = "active"
     stroke_direction: int = 0
     stroke_id: int = 1
+    auto_dispersion: bool = False
 
 
 class PalmMotionTracker:
@@ -192,6 +193,7 @@ class LetterEntity:
     acceleration_x: float = 0.0
     acceleration_y: float = 0.0
     dispersed: bool = False
+    side: int = 1
 
 
 class InterferenceField:
@@ -222,6 +224,7 @@ class InterferenceField:
         self.last_impulse_stroke_id = 0
         self.stroke_phase = "waiting"
         self.stroke_direction = 0
+        self.auto_dispersion_strength = 0.0
         self._font_cache: dict[int, ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
         self._glyph_cache: dict[
             tuple[str, int, tuple[int, int, int]],
@@ -263,6 +266,9 @@ class InterferenceField:
                 -config.INTERFERENCE_CLUSTER_HEIGHT / 2,
                 config.INTERFERENCE_CLUSTER_HEIGHT / 2,
             )
+            side = -1 if x < config.INTERFERENCE_CENTER_X else 1
+            if x == config.INTERFERENCE_CENTER_X:
+                side = -1 if index % 2 else 1
             self.entities.append(LetterEntity(
                 glyph=glyph,
                 x=x,
@@ -271,6 +277,7 @@ class InterferenceField:
                 radius=size * config.LETTER_RADIUS_SCALE,
                 size=size,
                 color=random.choice(self._colors),
+                side=side,
             ))
         self.elapsed = 0.0
         self.hand_force_active = False
@@ -279,6 +286,7 @@ class InterferenceField:
         self.last_impulse_stroke_id = 0
         self.stroke_phase = "waiting"
         self.stroke_direction = 0
+        self.auto_dispersion_strength = 0.0
 
     def update(self, delta_time: float, palm: PalmPhysicsInput | None = None) -> None:
         delta_time = max(0.0, min(config.LETTER_PHYSICS_MAX_DT, float(delta_time)))
@@ -291,6 +299,11 @@ class InterferenceField:
         self.letters_inside_influence_radius = len(influence)
         palm_speed = 0.0 if palm is None else abs(palm.velocity_x) + abs(palm.velocity_y)
         self.hand_force_active = active_palm and bool(influence) and palm_speed >= config.HAND_MIN_FORCE_VELOCITY
+        motion_strength = self._auto_dispersion_motion_strength(palm)
+        self.auto_dispersion_strength = max(
+            motion_strength,
+            self.auto_dispersion_strength * exp(-config.AUTO_DISPERSION_DECAY * delta_time),
+        )
         impulse_strength_ratio = self._impulse_strength_ratio(palm, bool(influence))
         applied_impulse_strength = 0.0
 
@@ -299,6 +312,12 @@ class InterferenceField:
                 continue
             entity.acceleration_x = 0.0
             entity.acceleration_y = config.LETTER_GRAVITY
+            if self.auto_dispersion_strength > 0.0:
+                self.apply_force(
+                    entity,
+                    entity.side * config.AUTO_DISPERSION_ACCELERATION * self.auto_dispersion_strength,
+                    0.0,
+                )
             falloff = influence.get(id(entity), 0.0)
             if palm is not None and falloff > 0.0:
                 force_x = palm.velocity_x * config.HAND_HORIZONTAL_FORCE_GAIN * falloff
@@ -327,6 +346,20 @@ class InterferenceField:
             )
         if applied_impulse_strength > 0.0:
             self.last_impulse_strength = applied_impulse_strength
+
+    @staticmethod
+    def _auto_dispersion_motion_strength(palm: PalmPhysicsInput | None) -> float:
+        if palm is None or not palm.auto_dispersion or palm.stroke_phase != "active":
+            return 0.0
+        span = max(
+            1e-6,
+            config.AUTO_DISPERSION_SPEED_REFERENCE - config.AUTO_DISPERSION_MOTION_THRESHOLD,
+        )
+        return _clamp(
+            (abs(palm.velocity_x) - config.AUTO_DISPERSION_MOTION_THRESHOLD) / span,
+            0.0,
+            1.0,
+        )
 
     def _influence_falloffs(self, palm: PalmPhysicsInput | None) -> dict[int, float]:
         if palm is None:
