@@ -50,6 +50,8 @@ func _run() -> void:
     _test_action_waits_for_execution_line(coordinator)
     _test_same_gate_reentry_preserves_and_repeats_action(coordinator, player_runner)
     _test_same_gate_landing_retry(coordinator, player, player_runner)
+    _test_free_action_between_gates(coordinator, player, player_runner)
+    _test_late_action_recovers_crossed_pass(coordinator, player)
     _test_airborne_action_buffer(xiaomai, xiaomai_runner)
     _test_gate_index_survives_pause_and_frame_variation(coordinator)
 
@@ -150,6 +152,34 @@ func _test_same_gate_landing_retry(coordinator: Node, player: CharacterBody2D, p
     _check(not coordinator.debug_retry_locked_player_action(VINE_ECHO_COORDINATOR_SCRIPT.RunnerAction.DOWN), "Same-Gate retry changed the locked UP choice")
     _check(coordinator.get_player_history() == player_history_before, "Same-Gate UP retry duplicated Player history")
     _check(coordinator.get_xiaomai_history() == xiaomai_history_before, "Same-Gate UP retry duplicated Amai echo history")
+
+    player.global_position.y -= 80.0
+    player.velocity = Vector2(0.0, 1.0)
+    player.move_and_slide()
+    _check(not player.is_on_floor(), "Airborne retry test did not leave the floor")
+    _check(coordinator.debug_retry_locked_player_action(VINE_ECHO_COORDINATOR_SCRIPT.RunnerAction.UP), "Airborne locked UP retry was rejected")
+    _check(coordinator.get_locked_retry_pending() == VINE_ECHO_COORDINATOR_SCRIPT.RunnerAction.UP, "Airborne locked UP retry was not latched until landing")
+
+
+func _test_free_action_between_gates(coordinator: Node, player: CharacterBody2D, player_runner: Node) -> void:
+    coordinator.reset_rounds()
+    player.global_position = Vector2(110.0, 774.0)
+    player.velocity = Vector2.ZERO
+    player.move_and_slide()
+    _check(player.is_on_floor(), "Free-action test Player is not on the floor")
+    _check(coordinator.debug_input_action(VINE_ECHO_COORDINATOR_SCRIPT.RunnerAction.UP), "Space outside a Decision Zone was rejected")
+    _check(player.velocity.y == -player_runner.jump_impulse, "Space outside a Decision Zone did not produce a physical jump")
+    _check(coordinator.get_buffered_action() == VINE_ECHO_COORDINATOR_SCRIPT.RunnerAction.UP, "Free UP did not retain the short pre-gate choice buffer")
+
+
+func _test_late_action_recovers_crossed_pass(coordinator: Node, player: CharacterBody2D) -> void:
+    coordinator.reset_rounds()
+    coordinator.debug_enter_gate(0)
+    coordinator._on_gate_passed(0, player)
+    _check(coordinator.current_gate_index == 0, "Gate finished before its action was chosen")
+    coordinator.debug_submit_action(VINE_ECHO_COORDINATOR_SCRIPT.RunnerAction.UP)
+    coordinator.debug_execute_gate(0)
+    _check(coordinator.current_gate_index == 1, "Late action did not recover an already-crossed Pass Zone")
 
 
 func _test_airborne_action_buffer(xiaomai: CharacterBody2D, runner: Node) -> void:

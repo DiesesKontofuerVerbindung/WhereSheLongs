@@ -23,6 +23,9 @@ signal gate_action_locked(gate_index: int, player_action: int, xiaomai_action: i
 @export var echo_anchor_tolerance := 4.0
 @export var echo_ground_snap_tolerance := 20.0
 @export var decision_input_buffer_duration := 0.35
+@export var runtime_trace_enabled := true
+@export_range(1, 60, 1) var runtime_trace_every_physics_frames := 1
+@export var runtime_trace_path := "res://../tmp/codex_logs/vine_echo_runtime_live.log"
 
 var previous_player_action = RunnerAction.NONE
 var current_gate_index = 0
@@ -37,12 +40,16 @@ var _locked_player_action = RunnerAction.NONE
 var _running := false
 var _echo_crossing_gate := false
 var _player_in_action_zone := false
+var _player_crossed_pass_zone := false
 var _action_executed := false
+var _locked_retry_pending = RunnerAction.NONE
 var _gates: Array[Node2D] = []
 var _player_history: Array[int] = []
 var _xiaomai_history: Array[int] = []
 var _last_echo_anchor_index := -1
 var _echo_anchor_hits: Array[Vector2] = []
+var _trace_file: FileAccess
+var _trace_frame := 0
 
 @onready var player: CharacterBody2D = get_node(player_path)
 @onready var xiaomai: CharacterBody2D = get_node(xiaomai_path)
@@ -53,6 +60,7 @@ var _echo_anchor_hits: Array[Vector2] = []
 
 func _ready() -> void:
     process_physics_priority = -10
+    _open_runtime_trace()
     _gates = _get_sorted_gates()
     for gate in _gates:
         gate.decision_requested.connect(_on_gate_decision_requested)
@@ -68,32 +76,49 @@ func _ready() -> void:
         call_deferred("begin_run")
 
 
+func _exit_tree() -> void:
+    _trace_event("SESSION_END")
+    if _trace_file != null:
+        _trace_file.close()
+        _trace_file = null
+
+
 func _input(event: InputEvent) -> void:
     if not _running:
         return
     var event_action := _get_event_action(event)
     if event_action == RunnerAction.NONE:
         return
-    if action_locked:
-        if retry_locked_player_action(event_action):
-            get_viewport().set_input_as_handled()
-        return
-    if _action_pending:
-        return
-    if buffer_action(event_action):
+    _trace_event("INPUT", "action=%s key=%s locked=%s executed=%s floor=%s" % [
+        action_name(event_action),
+        _event_key_text(event),
+        str(action_locked),
+        str(_action_executed),
+        str(player.is_on_floor()),
+    ])
+    if _handle_player_action_input(event_action):
         get_viewport().set_input_as_handled()
+    else:
+        _trace_event("INPUT_REJECTED", "reason=gate_state requested=%s locked=%s" % [
+            action_name(event_action),
+            action_name(_locked_player_action),
+        ])
 
 
 func _physics_process(delta: float) -> void:
+    _trace_frame += 1
     if _running:
         var player_horizontal_input := 1.0 if automatic_forward else Input.get_axis("move_left", "move_right")
         player_runner.set_horizontal_input(player_horizontal_input)
         _settle_echo_on_fixed_route()
         xiaomai_runner.set_horizontal_input(_get_echo_horizontal_input(player_horizontal_input))
+        _consume_locked_retry_on_landing()
     _tick_decision_input_buffer(delta)
     _capture_held_decision_input()
     if _action_pending:
         _commit_pending_action()
+    _update_debug_label()
+    _trace_physics_state()
 
 
 func begin_run() -> void:
@@ -109,10 +134,17 @@ func begin_run() -> void:
     var initial_input := 1.0 if automatic_forward else 0.0
     player_runner.start_run(initial_input)
     xiaomai_runner.start_run(initial_input)
+    _trace_event("RUN_BEGIN", "player=(%.1f, %.1f) amai=(%.1f, %.1f)" % [
+        player.global_position.x,
+        player.global_position.y,
+        xiaomai.global_position.x,
+        xiaomai.global_position.y,
+    ])
     _update_debug_label()
 
 
 func stop_run(restore_player_control: bool = true) -> void:
+    _trace_event("RUN_STOP", "restore_player_control=%s" % str(restore_player_control))
     _running = false
     player_runner.stop_run()
     xiaomai_runner.stop_run()
@@ -143,7 +175,9 @@ func reset_rounds() -> void:
     _locked_player_action = RunnerAction.NONE
     _echo_crossing_gate = false
     _player_in_action_zone = false
+    _player_crossed_pass_zone = false
     _action_executed = false
+    _locked_retry_pending = RunnerAction.NONE
     _player_history.clear()
     _xiaomai_history.clear()
     _last_echo_anchor_index = -1
@@ -185,19 +219,44 @@ func retry_locked_player_action(action: int) -> bool:
         return false
     if action != _locked_player_action:
         return false
-    player_runner.perform_action(action)
-    print("[VINE ECHO] retry gate=%d action=%s p=(%.1f, %.1f)" % [
-        current_gate_index + 1,
-        action_name(action),
-        player.global_position.x,
-        player.global_position.y,
-    ])
+    if player.is_on_floor():
+        player_runner.perform_action(action)
+        _locked_retry_pending = RunnerAction.NONE
+        _trace_event("RETRY_EXECUTED", "gate=%d action=%s" % [current_gate_index + 1, action_name(action)])
+    else:
+        _locked_retry_pending = action
+        _trace_event("RETRY_LATCHED", "gate=%d action=%s reason=airborne" % [current_gate_index + 1, action_name(action)])
     _update_debug_label()
     return true
 
 
 func debug_retry_locked_player_action(action: int) -> bool:
     return retry_locked_player_action(action)
+
+
+func get_locked_retry_pending() -> int:
+    return _locked_retry_pending
+
+
+func debug_input_action(action: int) -> bool:
+    return _handle_player_action_input(action)
+
+
+func _handle_player_action_input(action: int) -> bool:
+    if action_locked:
+        return retry_locked_player_action(action)
+    if _action_pending:
+        return false
+    if _awaiting_action:
+        return buffer_action(action)
+
+    var buffered_for_gate := buffer_action(action)
+    player_runner.perform_action(action)
+    _trace_event("FREE_ACTION_EXECUTED", "action=%s buffered_for_gate=%s" % [
+        action_name(action),
+        str(buffered_for_gate),
+    ])
+    return true
 
 
 func debug_enter_gate(gate_index: int) -> void:
@@ -213,7 +272,10 @@ func debug_enter_gate(gate_index: int) -> void:
     _pending_action = RunnerAction.NONE
     _locked_player_action = RunnerAction.NONE
     _player_in_action_zone = false
+    _player_crossed_pass_zone = false
     _action_executed = false
+    _locked_retry_pending = RunnerAction.NONE
+    _trace_event("GATE_ENTER", "gate=%d" % (gate_index + 1))
     _consume_buffered_action()
     _update_debug_label()
 
@@ -287,11 +349,24 @@ func _on_gate_action_execution_requested(gate_index: int, body: Node2D) -> void:
     if not _running or body != player or gate_index != current_gate_index:
         return
     _player_in_action_zone = true
+    _trace_event("ACTION_ZONE_ENTER", "gate=%d" % (gate_index + 1))
     _execute_or_repeat_locked_action()
 
 
 func _on_gate_passed(gate_index: int, body: Node2D) -> void:
-    if not _running or body != player or gate_index != current_gate_index or not action_locked or not _action_executed:
+    if not _running or body != player:
+        return
+    if gate_index != current_gate_index:
+        _trace_event("PASS_ZONE_IGNORED", "gate=%d current=%d" % [gate_index + 1, current_gate_index + 1])
+        return
+    _player_crossed_pass_zone = true
+    _trace_event("PASS_ZONE_ENTER", "gate=%d" % (gate_index + 1))
+    if not action_locked or not _action_executed:
+        _trace_event("PASS_WAITING_FOR_ACTION", "gate=%d locked=%s executed=%s" % [
+            gate_index + 1,
+            str(action_locked),
+            str(_action_executed),
+        ])
         return
     _finish_gate()
 
@@ -304,6 +379,7 @@ func _commit_pending_action() -> void:
     _pending_action = RunnerAction.NONE
     _locked_player_action = current_action
     action_locked = true
+    _trace_event("ACTION_LOCKED", "gate=%d action=%s" % [current_gate_index + 1, action_name(current_action)])
     if _player_in_action_zone:
         _execute_or_repeat_locked_action()
     _update_debug_label()
@@ -332,19 +408,50 @@ func _execute_locked_action() -> void:
     _xiaomai_history.append(xiaomai_action)
     previous_player_action = current_action
     _action_executed = true
+    _trace_event("ACTION_EXECUTED", "gate=%d player=%s amai=%s history=%s/%s" % [
+        current_gate_index + 1,
+        action_name(current_action),
+        action_name(xiaomai_action),
+        str(_player_history),
+        str(_xiaomai_history),
+    ])
     gate_action_locked.emit(current_gate_index, current_action, xiaomai_action)
     _update_debug_label()
+    if _player_crossed_pass_zone:
+        _trace_event("PASS_RECOVERED_AFTER_ACTION", "gate=%d" % (current_gate_index + 1))
+        _finish_gate()
 
 
 func _finish_gate() -> void:
+    _trace_event("GATE_FINISH", "gate=%d" % (current_gate_index + 1))
     _awaiting_action = false
     action_locked = false
     current_gate_index += 1
     _echo_crossing_gate = false
     _locked_player_action = RunnerAction.NONE
     _player_in_action_zone = false
+    _player_crossed_pass_zone = false
     _action_executed = false
+    _locked_retry_pending = RunnerAction.NONE
     _update_debug_label()
+
+
+func _consume_locked_retry_on_landing() -> void:
+    if _locked_retry_pending == RunnerAction.NONE:
+        return
+    if not action_locked or not _action_executed:
+        _trace_event("RETRY_CANCELLED", "reason=gate_state_changed action=%s" % action_name(_locked_retry_pending))
+        _locked_retry_pending = RunnerAction.NONE
+        return
+    if not player.is_on_floor():
+        return
+    var retry_action: int = _locked_retry_pending
+    _locked_retry_pending = RunnerAction.NONE
+    player_runner.perform_action(retry_action)
+    _trace_event("RETRY_EXECUTED", "gate=%d action=%s source=landing_latch" % [
+        current_gate_index + 1,
+        action_name(retry_action),
+    ])
 
 
 func _capture_held_decision_input() -> void:
@@ -448,6 +555,85 @@ func _get_event_action(event: InputEvent) -> int:
     return RunnerAction.NONE
 
 
+func _event_key_text(event: InputEvent) -> String:
+    var key_event := event as InputEventKey
+    if key_event == null:
+        return event.as_text()
+    return OS.get_keycode_string(key_event.keycode)
+
+
+func _open_runtime_trace() -> void:
+    if not runtime_trace_enabled:
+        return
+    var absolute_path := ProjectSettings.globalize_path(runtime_trace_path)
+    DirAccess.make_dir_recursive_absolute(absolute_path.get_base_dir())
+    if FileAccess.file_exists(absolute_path):
+        _trace_file = FileAccess.open(absolute_path, FileAccess.READ_WRITE)
+        if _trace_file != null:
+            _trace_file.seek_end()
+    else:
+        _trace_file = FileAccess.open(absolute_path, FileAccess.WRITE_READ)
+    if _trace_file == null:
+        push_error("[VINE TRACE] failed to open %s error=%s" % [absolute_path, error_string(FileAccess.get_open_error())])
+        return
+    _trace_event("SESSION_START", "path=%s" % absolute_path)
+
+
+func _trace_event(kind: String, details: String = "") -> void:
+    if not runtime_trace_enabled:
+        return
+    var line := "[VINE TRACE] ms=%d frame=%d event=%s %s" % [Time.get_ticks_msec(), _trace_frame, kind, details]
+    print(line)
+    _write_trace_line(line)
+
+
+func _trace_physics_state() -> void:
+    if not runtime_trace_enabled or _trace_frame % runtime_trace_every_physics_frames != 0:
+        return
+    var collision_text := "none"
+    if player.get_slide_collision_count() > 0:
+        var collision := player.get_slide_collision(0)
+        if collision != null and collision.get_collider() is Node:
+            collision_text = str((collision.get_collider() as Node).get_path())
+    var line := "[VINE STATE] ms=%d frame=%d gate=%d p=(%.2f,%.2f) v=(%.2f,%.2f) floor=%s hit=%s input(L=%s R=%s U=%s D=%s) awaiting=%s locked=%s executed=%s in_action=%s crossed_pass=%s pending=%s locked_action=%s retry_pending=%s buffer=%s/%.3f runner_queue=%s sliding=%s history=%s/%s" % [
+        Time.get_ticks_msec(),
+        _trace_frame,
+        current_gate_index + 1,
+        player.global_position.x,
+        player.global_position.y,
+        player.velocity.x,
+        player.velocity.y,
+        str(player.is_on_floor()),
+        collision_text,
+        str(Input.is_action_pressed(&"move_left")),
+        str(Input.is_action_pressed(&"move_right")),
+        str(Input.is_action_pressed(&"jump")),
+        str(Input.is_action_pressed(&"move_down")),
+        str(_awaiting_action),
+        str(action_locked),
+        str(_action_executed),
+        str(_player_in_action_zone),
+        str(_player_crossed_pass_zone),
+        action_name(_pending_action),
+        action_name(_locked_player_action),
+        action_name(_locked_retry_pending),
+        action_name(_buffered_action),
+        _buffered_action_remaining,
+        action_name(player_runner.get_queued_ground_action()),
+        str(player_runner.is_sliding),
+        str(_player_history),
+        str(_xiaomai_history),
+    ]
+    _write_trace_line(line)
+
+
+func _write_trace_line(line: String) -> void:
+    if _trace_file == null:
+        return
+    _trace_file.store_line(line)
+    _trace_file.flush()
+
+
 func _get_sorted_gates() -> Array[Node2D]:
     var result: Array[Node2D] = []
     for candidate in get_tree().get_nodes_in_group("vine_decision_gate"):
@@ -476,7 +662,12 @@ func _update_debug_label() -> void:
     elif action_locked:
         decision_text = "LOCKED %s · Same key retries / move right" % action_name(_locked_player_action)
     var echo_text := "CROSSING" if _echo_crossing_gate else "WAITING AT GATE"
-    debug_label.text = "Gate: %d\nDecision: %s\nPlayer Current: %s\nAmai Echo: %s (%s)\nPrevious Player: %s\nLocked: %s" % [
+    var collision_text := "none"
+    if player.get_slide_collision_count() > 0:
+        var collision := player.get_slide_collision(0)
+        if collision != null and collision.get_collider() is Node:
+            collision_text = str((collision.get_collider() as Node).name)
+    debug_label.text = "Gate: %d\nDecision: %s\nPlayer Current: %s\nAmai Echo: %s (%s)\nPrevious Player: %s\nLocked: %s\nP: (%.1f, %.1f) V: (%.1f, %.1f)\nFloor: %s  Hit: %s\nAwait/Exec/InAction/Passed: %s/%s/%s/%s\nRetry Pending: %s  Runner Queue: %s\nInput L/R/U/D: %s/%s/%s/%s\nTrace: %s" % [
         current_gate_index + 1,
         decision_text,
         action_name(player_current),
@@ -484,4 +675,21 @@ func _update_debug_label() -> void:
         echo_text,
         action_name(previous_player_action),
         str(action_locked),
+        player.global_position.x,
+        player.global_position.y,
+        player.velocity.x,
+        player.velocity.y,
+        str(player.is_on_floor()),
+        collision_text,
+        str(_awaiting_action),
+        str(_action_executed),
+        str(_player_in_action_zone),
+        str(_player_crossed_pass_zone),
+        action_name(_locked_retry_pending),
+        action_name(player_runner.get_queued_ground_action()),
+        str(Input.is_action_pressed(&"move_left")),
+        str(Input.is_action_pressed(&"move_right")),
+        str(Input.is_action_pressed(&"jump")),
+        str(Input.is_action_pressed(&"move_down")),
+        runtime_trace_path,
     ]
