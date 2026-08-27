@@ -1,4 +1,4 @@
-"""CSV/JSON/trajectory logger for formal positive and negative Swipe Trials."""
+"""CSV/JSON/trajectory logger for positive and negative Fan trials."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from typing import Literal
 
 import config
 from environment_recorder import write_config_snapshot, write_environment
-from swipe_detector import TrajectorySample
+from fan_detector import FanEvent, TrajectorySample
 
 
 ExpectedType = Literal["positive", "negative"]
@@ -22,18 +22,15 @@ TrialResult = Literal["success", "fail", "aborted"]
 class ActiveTrial:
     trial_id: int
     expected_type: ExpectedType
-    finger_mode: str
-    target_block: str
-    source: str
     started_at: float
     samples: list[TrajectorySample] = field(default_factory=list)
 
 
 class TestLogger:
     trial_columns = (
-        "trial_id", "expected_type", "finger_mode", "target_block", "source", "result",
-        "classification", "fail_reason", "duration", "path_points", "start_x", "start_y",
-        "end_x", "end_y", "vertical_distance", "horizontal_distance", "timestamp",
+        "trial_id", "expected_type", "result", "classification", "fail_reason",
+        "duration", "sweep_count", "max_amplitude", "mean_amplitude",
+        "peak_horizontal_velocity", "mean_fan_strength", "path_points", "timestamp",
     )
 
     def __init__(self, results_root: Path = config.RESULTS_DIR) -> None:
@@ -47,7 +44,6 @@ class TestLogger:
         self.active: ActiveTrial | None = None
         self.records: list[dict[str, object]] = []
         self._next_trial_id = 1
-        self.blocks_completed = 0
         with self.trials_path.open("w", newline="", encoding="utf-8") as file:
             csv.DictWriter(file, fieldnames=self.trial_columns).writeheader()
         write_config_snapshot(self.run_dir / "config_snapshot.json")
@@ -62,17 +58,13 @@ class TestLogger:
     def completed_trials(self) -> int:
         return sum(record["result"] in {"success", "fail"} for record in self.records)
 
-    def set_blocks_completed(self, count: int) -> None:
-        self.blocks_completed = int(count)
-        self.write_summary()
-
     def update_environment(self, camera_info: dict[str, object]) -> None:
         write_environment(self.environment_path, camera_info)
 
-    def start_trial(self, expected_type: ExpectedType, finger_mode: str, target_block: str, source: str, now: float) -> ActiveTrial:
+    def start_trial(self, expected_type: ExpectedType, now: float) -> ActiveTrial:
         if self.active is not None:
             raise RuntimeError("Cannot start a new trial while another is active.")
-        self.active = ActiveTrial(self._next_trial_id, expected_type, finger_mode, target_block, source, now)
+        self.active = ActiveTrial(self._next_trial_id, expected_type, now)
         self._next_trial_id += 1
         return self.active
 
@@ -80,45 +72,36 @@ class TestLogger:
         if self.active is not None:
             self.active.samples.append(sample)
 
-    def discard_active_trial(self) -> None:
-        if self.active is None:
-            return
-        self._next_trial_id -= 1
-        self.active = None
-
     def finish_trial(
         self,
         result: TrialResult,
         fail_reason: str,
         now: float,
-        vertical_distance: float | None = None,
-        horizontal_distance: float | None = None,
+        event: FanEvent | None = None,
     ) -> dict[str, object] | None:
         if self.active is None:
             return None
         active = self.active
         self.active = None
-        first = active.samples[0].raw if active.samples else None
-        last = active.samples[-1].raw if active.samples else None
-        vertical = vertical_distance if vertical_distance is not None else (0.0 if first is None or last is None else first.y - last.y)
-        horizontal = horizontal_distance if horizontal_distance is not None else (0.0 if first is None or last is None else last.x - first.x)
+        amplitudes = [sample.horizontal_amplitude for sample in active.samples]
+        velocities = [abs(sample.horizontal_velocity) for sample in active.samples]
+        strengths = [sample.fan_strength for sample in active.samples]
+        sweep_count = max((sample.sweep_count for sample in active.samples), default=0)
+        if event is not None:
+            sweep_count = max(sweep_count, event.sweep_count)
         record: dict[str, object] = {
             "trial_id": active.trial_id,
             "expected_type": active.expected_type,
-            "finger_mode": active.finger_mode,
-            "target_block": active.target_block,
-            "source": active.source,
             "result": result,
             "classification": _classification(active.expected_type, result),
             "fail_reason": fail_reason,
             "duration": round(max(0.0, now - active.started_at), 3),
+            "sweep_count": sweep_count,
+            "max_amplitude": round(max(amplitudes, default=0.0), 3),
+            "mean_amplitude": round(_mean(amplitudes), 3),
+            "peak_horizontal_velocity": round(max(velocities, default=0.0), 3),
+            "mean_fan_strength": round(_mean(strengths), 4),
             "path_points": len(active.samples),
-            "start_x": _coordinate(first, "x"),
-            "start_y": _coordinate(first, "y"),
-            "end_x": _coordinate(last, "x"),
-            "end_y": _coordinate(last, "y"),
-            "vertical_distance": round(float(vertical), 3),
-            "horizontal_distance": round(float(horizontal), 3),
             "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         }
         self.records.append(record)
@@ -130,17 +113,13 @@ class TestLogger:
         return record
 
     def write_summary(self) -> None:
-        metrics = calculate_metrics(self.records)
         summary = {
             "run_directory": str(self.run_dir),
             "target_positive_trials": config.TARGET_POSITIVE_TRIALS,
             "target_negative_trials": config.TARGET_NEGATIVE_TRIALS,
             "completed_trials": self.completed_trials,
             "aborted_trials": sum(record["result"] == "aborted" for record in self.records),
-            "blocks_completed": self.blocks_completed,
-            "one_finger_trials": sum(record["finger_mode"] == config.ONE_FINGER for record in self.records),
-            "two_finger_trials": sum(record["finger_mode"] == config.TWO_FINGER for record in self.records),
-            **metrics,
+            **calculate_metrics(self.records),
         }
         self.summary_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
 
@@ -152,8 +131,8 @@ class TestLogger:
     def _write_trajectory(self, active: ActiveTrial) -> None:
         path = self.trajectory_dir / f"trial_{active.trial_id:03d}.csv"
         fields = (
-            "timestamp", "raw_x", "raw_y", "smoothed_x", "smoothed_y", "finger_mode",
-            "state", "target_block", "block_x", "block_y",
+            "timestamp", "raw_palm_x", "raw_palm_y", "smoothed_palm_x", "smoothed_palm_y",
+            "open_palm", "state", "direction", "horizontal_velocity", "fan_strength",
         )
         with path.open("w", newline="", encoding="utf-8") as file:
             writer = csv.DictWriter(file, fieldnames=fields)
@@ -161,42 +140,37 @@ class TestLogger:
             for sample in active.samples:
                 writer.writerow({
                     "timestamp": f"{sample.timestamp:.3f}",
-                    "raw_x": f"{sample.raw.x:.3f}",
-                    "raw_y": f"{sample.raw.y:.3f}",
-                    "smoothed_x": f"{sample.smoothed.x:.3f}",
-                    "smoothed_y": f"{sample.smoothed.y:.3f}",
-                    "finger_mode": sample.finger_mode,
+                    "raw_palm_x": f"{sample.raw.x / config.WINDOW_WIDTH:.5f}",
+                    "raw_palm_y": f"{sample.raw.y / config.WINDOW_HEIGHT:.5f}",
+                    "smoothed_palm_x": f"{sample.smoothed.x / config.WINDOW_WIDTH:.5f}",
+                    "smoothed_palm_y": f"{sample.smoothed.y / config.WINDOW_HEIGHT:.5f}",
+                    "open_palm": int(sample.open_palm),
                     "state": sample.state.value,
-                    "target_block": sample.target_block or "",
-                    "block_x": "" if sample.block_x is None else f"{sample.block_x:.3f}",
-                    "block_y": "" if sample.block_y is None else f"{sample.block_y:.3f}",
+                    "direction": sample.direction,
+                    "horizontal_velocity": f"{sample.horizontal_velocity:.3f}",
+                    "fan_strength": f"{sample.fan_strength:.4f}",
                 })
 
     def _print_progress(self, record: dict[str, object]) -> None:
         print(
-            f"Trial {int(record['trial_id']):02d}/{self.target_total}\n"
-            f"Expected: {str(record['expected_type']).upper()}\n"
-            f"Finger: {record['finger_mode']}\n"
-            f"Target: {record['target_block']}\n"
-            f"Result: {str(record['result']).upper()}\n"
-            f"Classification: {record['classification'] or '--'}"
-            + (f"\nFAIL\nReason: {record['fail_reason']}" if record["fail_reason"] else "")
+            f"Trial {int(record['trial_id']):02d}/{self.target_total} "
+            f"{str(record['expected_type']).upper()} {str(record['result']).upper()} "
+            f"{record['classification'] or record['fail_reason']}".rstrip()
         )
-        print(f"Checklist: {self.blocks_completed}/{config.BLOCK_COUNT}\n")
 
 
 def calculate_metrics(records: list[dict[str, object]]) -> dict[str, object]:
-    classified = [record for record in records if record["classification"]]
-    counts = {name: sum(record["classification"] == name for record in classified) for name in ("TP", "TN", "FP", "FN")}
+    counts = {name: sum(record["classification"] == name for record in records) for name in ("TP", "TN", "FP", "FN")}
     tp, tn, fp, fn = counts["TP"], counts["TN"], counts["FP"], counts["FN"]
     return {
         "positive_trials": tp + fn,
         "negative_trials": tn + fp,
         "tp": tp, "tn": tn, "fp": fp, "fn": fn,
+        "positive_success_rate": _safe_divide(tp, tp + fn),
+        "false_positive_rate": _safe_divide(fp, fp + tn),
         "precision": _safe_divide(tp, tp + fp),
         "recall": _safe_divide(tp, tp + fn),
         "accuracy": _safe_divide(tp + tn, tp + tn + fp + fn),
-        "false_positive_rate": _safe_divide(fp, fp + tn),
     }
 
 
@@ -212,7 +186,5 @@ def _safe_divide(numerator: int, denominator: int) -> float | None:
     return None if denominator == 0 else round(numerator / denominator, 6)
 
 
-def _coordinate(point: object, axis: str) -> float | None:
-    if point is None:
-        return None
-    return round(float(getattr(point, axis)), 3)
+def _mean(values: list[float]) -> float:
+    return 0.0 if not values else sum(values) / len(values)
