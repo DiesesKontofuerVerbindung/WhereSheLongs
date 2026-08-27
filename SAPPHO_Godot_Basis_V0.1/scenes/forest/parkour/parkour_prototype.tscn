@@ -1,4 +1,4 @@
-[gd_scene load_steps=30 format=3]
+[gd_scene load_steps=33 format=3]
 
 [ext_resource type="Script" path="res://scenes/forest/parkour/parkour_controller.gd" id="1_controller"]
 [ext_resource type="Texture2D" path="res://scenes/forest/parkour/reference/forest_parkour_art.png" id="2_art"]
@@ -15,6 +15,9 @@
 [ext_resource type="Script" path="res://scenes/forest/parkour/parkour_greybox_surface.gd" id="13_surface"]
 [ext_resource type="Texture2D" path="res://scenes/forest/parkour/characters/xiaoling_parkour_side.png" id="14_xiaoling"]
 [ext_resource type="Texture2D" path="res://scenes/forest/parkour/characters/amai_parkour_side.png" id="15_amai_sprite"]
+[ext_resource type="PackedScene" path="res://scenes/forest/parkour/vine_echo/vine_decision_gate.tscn" id="16_echo_gate"]
+[ext_resource type="Script" path="res://scenes/forest/parkour/vine_echo/runner_action_controller.gd" id="17_runner"]
+[ext_resource type="Script" path="res://scenes/forest/parkour/vine_echo/vine_echo_coordinator.gd" id="18_echo_coordinator"]
 
 [sub_resource type="RectangleShape2D" id="Rect_ground"]
 size = Vector2(1920, 100)
@@ -54,6 +57,10 @@ size = Vector2(230, 30)
 
 [sub_resource type="RectangleShape2D" id="Rect_risk_platform_2"]
 size = Vector2(210, 30)
+
+[sub_resource type="CapsuleShape2D" id="Capsule_amai_echo"]
+radius = 11.0
+height = 32.0
 
 [node name="ForestParkourPrototype" type="Node2D"]
 script = ExtResource("1_controller")
@@ -165,6 +172,12 @@ position = Vector2(2880, 1280)
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment02_Vines/Ground"]
 shape = SubResource("Rect_ground")
 
+[node name="VineRunFloor" type="StaticBody2D" parent="Gameplay/Segment02_Vines"]
+position = Vector2(2880, 650)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment02_Vines/VineRunFloor"]
+shape = SubResource("Rect_ground")
+
 [node name="Title" type="Label" parent="Gameplay/Segment02_Vines"]
 position = Vector2(2100, 100)
 theme_override_colors/font_color = Color(0.62, 0.95, 0.83, 1)
@@ -178,31 +191,43 @@ text = "Figma 主布局：高低平台推进 · 跳过低藤 · 从垂藤下滑�
 
 [node name="StartPlatform" type="StaticBody2D" parent="Gameplay/Segment02_Vines"]
 position = Vector2(2284, 557)
+collision_layer = 0
+collision_mask = 0
 script = ExtResource("13_surface")
 surface_size = Vector2(300, 80)
 
 [node name="RaisedStepA" type="StaticBody2D" parent="Gameplay/Segment02_Vines"]
 position = Vector2(2742, 374)
+collision_layer = 0
+collision_mask = 0
 script = ExtResource("13_surface")
 surface_size = Vector2(280, 70)
 
 [node name="LowRunPlatform" type="StaticBody2D" parent="Gameplay/Segment02_Vines"]
 position = Vector2(3144, 575)
+collision_layer = 0
+collision_mask = 0
 script = ExtResource("13_surface")
 surface_size = Vector2(300, 70)
 
 [node name="RaisedStepB" type="StaticBody2D" parent="Gameplay/Segment02_Vines"]
 position = Vector2(3604, 697)
+collision_layer = 0
+collision_mask = 0
 script = ExtResource("13_surface")
 surface_size = Vector2(320, 70)
 
 [node name="ExitPlatform" type="StaticBody2D" parent="Gameplay/Segment02_Vines"]
 position = Vector2(3820, 810)
+collision_layer = 0
+collision_mask = 0
 script = ExtResource("13_surface")
 surface_size = Vector2(260, 100)
 
 [node name="OptionalNarrowShortcut" type="StaticBody2D" parent="Gameplay/Segment02_Vines"]
 position = Vector2(2970, 455)
+collision_layer = 0
+collision_mask = 0
 script = ExtResource("13_surface")
 surface_size = Vector2(140, 28)
 surface_color = Color(0.55, 0.39, 0.68, 1)
@@ -220,6 +245,7 @@ text = "窄高台捷径"
 
 [node name="VineGate" type="Node2D" parent="Gameplay/Segment02_Vines"]
 position = Vector2(2715, 430)
+visible = false
 script = ExtResource("10_vine")
 
 [node name="Visual" type="Polygon2D" parent="Gameplay/Segment02_Vines/VineGate"]
@@ -232,12 +258,15 @@ theme_override_font_sizes/font_size = 22
 text = "VINE A · 跳"
 
 [node name="StaticBody2D" type="StaticBody2D" parent="Gameplay/Segment02_Vines/VineGate"]
+collision_layer = 0
+collision_mask = 0
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment02_Vines/VineGate/StaticBody2D"]
 shape = SubResource("Rect_vine_a")
 
 [node name="JumpSensor" type="Area2D" parent="Gameplay/Segment02_Vines/VineGate"]
 position = Vector2(0, -100)
+monitoring = false
 collision_layer = 0
 collision_mask = 1
 
@@ -246,6 +275,7 @@ shape = SubResource("Rect_jump_sensor")
 
 [node name="SlideSensor" type="Area2D" parent="Gameplay/Segment02_Vines/VineGate"]
 position = Vector2(0, 60)
+monitoring = false
 collision_layer = 0
 collision_mask = 1
 
@@ -254,6 +284,7 @@ shape = SubResource("Rect_slide_sensor")
 
 [node name="VineB" type="Node2D" parent="Gameplay/Segment02_Vines"]
 position = Vector2(3144, 494)
+visible = false
 script = ExtResource("10_vine")
 
 [node name="Visual" type="Polygon2D" parent="Gameplay/Segment02_Vines/VineB"]
@@ -266,12 +297,15 @@ theme_override_font_sizes/font_size = 22
 text = "VINE B · 滑"
 
 [node name="StaticBody2D" type="StaticBody2D" parent="Gameplay/Segment02_Vines/VineB"]
+collision_layer = 0
+collision_mask = 0
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment02_Vines/VineB/StaticBody2D"]
 shape = SubResource("Rect_vine_b")
 
 [node name="JumpSensor" type="Area2D" parent="Gameplay/Segment02_Vines/VineB"]
 position = Vector2(0, -85)
+monitoring = false
 collision_layer = 0
 collision_mask = 1
 
@@ -280,11 +314,28 @@ shape = SubResource("Rect_jump_sensor")
 
 [node name="SlideSensor" type="Area2D" parent="Gameplay/Segment02_Vines/VineB"]
 position = Vector2(0, 30)
+monitoring = false
 collision_layer = 0
 collision_mask = 1
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment02_Vines/VineB/SlideSensor"]
 shape = SubResource("Rect_slide_sensor")
+
+[node name="Gate01" parent="Gameplay/Segment02_Vines" instance=ExtResource("16_echo_gate")]
+position = Vector2(2700, 600)
+gate_index = 0
+
+[node name="Gate02" parent="Gameplay/Segment02_Vines" instance=ExtResource("16_echo_gate")]
+position = Vector2(3020, 600)
+gate_index = 1
+
+[node name="Gate03" parent="Gameplay/Segment02_Vines" instance=ExtResource("16_echo_gate")]
+position = Vector2(3340, 600)
+gate_index = 2
+
+[node name="Gate04" parent="Gameplay/Segment02_Vines" instance=ExtResource("16_echo_gate")]
+position = Vector2(3660, 600)
+gate_index = 3
 
 [node name="Segment03_PredatorPlant" type="Node2D" parent="Gameplay"]
 
@@ -500,7 +551,7 @@ collision_mask = 1
 shape = SubResource("Rect_exit")
 
 [node name="Segment02Exit" type="Area2D" parent="Gameplay/SectionTransitions"]
-position = Vector2(3760, 540)
+position = Vector2(3880, 540)
 collision_layer = 0
 collision_mask = 1
 
@@ -518,7 +569,7 @@ shape = SubResource("Rect_exit")
 [node name="Checkpoints" type="Node2D" parent="Gameplay"]
 
 [node name="S2AfterVine" type="Area2D" parent="Gameplay/Checkpoints"]
-position = Vector2(3604, 540)
+position = Vector2(3800, 540)
 collision_layer = 0
 collision_mask = 1
 
@@ -671,10 +722,14 @@ floor_snap_length = 8.0
 visible = false
 
 [node name="XiaolingSprite" type="Sprite2D" parent="Player"]
-position = Vector2(0, -11)
-scale = Vector2(0.1, 0.1)
+position = Vector2(0, -20)
+scale = Vector2(0.18, 0.18)
 texture = ExtResource("14_xiaoling")
 flip_h = true
+
+[node name="RunnerActionController" type="Node" parent="Player"]
+script = ExtResource("17_runner")
+suspend_runner_physics = true
 
 [node name="AmaiPlaceholder" type="Node2D" parent="."]
 z_index = 9
@@ -687,8 +742,8 @@ polygon = PackedVector2Array(-14, 18, -12, -15, 0, -25, 12, -15, 14, 18)
 color = Color(0.98, 0.6, 0.18, 0.86)
 
 [node name="AmaiSprite" type="Sprite2D" parent="AmaiPlaceholder"]
-position = Vector2(0, -10)
-scale = Vector2(0.1, 0.1)
+position = Vector2(0, -19)
+scale = Vector2(0.18, 0.18)
 texture = ExtResource("15_amai_sprite")
 flip_h = false
 
@@ -702,6 +757,30 @@ position = Vector2(-74, 34)
 theme_override_font_sizes/font_size = 16
 text = ""
 
+[node name="AmaiEcho" type="CharacterBody2D" parent="."]
+visible = false
+z_index = 9
+position = Vector2(2284, 584)
+collision_layer = 2
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="AmaiEcho"]
+shape = SubResource("Capsule_amai_echo")
+
+[node name="AmaiSprite" type="Sprite2D" parent="AmaiEcho"]
+position = Vector2(0, -19)
+scale = Vector2(0.18, 0.18)
+texture = ExtResource("15_amai_sprite")
+
+[node name="NameLabel" type="Label" parent="AmaiEcho"]
+position = Vector2(-34, -56)
+theme_override_colors/font_color = Color(1, 0.8, 0.42, 1)
+theme_override_font_sizes/font_size = 16
+text = "阿麦 Echo"
+
+[node name="RunnerActionController" type="Node" parent="AmaiEcho"]
+script = ExtResource("17_runner")
+
 [node name="DesignCamera" type="Camera2D" parent="."]
 position = Vector2(960, 540)
 zoom = Vector2(0.666667, 0.666667)
@@ -710,6 +789,30 @@ enabled = true
 [node name="ParkourDebug" type="Node2D" parent="."]
 script = ExtResource("8_debug")
 platforms_path = NodePath("../Gameplay/Segment01_Platforms")
+
+[node name="VineEchoCoordinator" type="Node" parent="."]
+script = ExtResource("18_echo_coordinator")
+xiaomai_path = NodePath("../AmaiEcho")
+xiaomai_runner_path = NodePath("../AmaiEcho/RunnerActionController")
+debug_label_path = NodePath("../VineEchoDebug/Panel/DebugText")
+start_on_ready = false
+automatic_forward = false
+echo_waits_at_gates = true
+
+[node name="VineEchoDebug" type="CanvasLayer" parent="."]
+layer = 10
+
+[node name="Panel" type="PanelContainer" parent="VineEchoDebug"]
+offset_left = 18.0
+offset_top = 372.0
+offset_right = 438.0
+offset_bottom = 568.0
+
+[node name="DebugText" type="Label" parent="VineEchoDebug/Panel"]
+custom_minimum_size = Vector2(392, 174)
+theme_override_colors/font_color = Color(0.84, 1, 0.9, 1)
+theme_override_font_sizes/font_size = 16
+text = "Vine Echo inactive"
 
 [node name="CanvasLayer" type="CanvasLayer" parent="ParkourDebug"]
 

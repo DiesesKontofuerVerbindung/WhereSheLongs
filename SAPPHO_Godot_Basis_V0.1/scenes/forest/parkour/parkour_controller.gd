@@ -20,6 +20,7 @@ signal player_respawned(checkpoint_id: StringName)
 @export var eye_transition_path: NodePath = ^"EyeTransition"
 @export var vine_gate_path: NodePath = ^"Gameplay/Segment02_Vines/VineGate"
 @export var vine_gate_b_path: NodePath = ^"Gameplay/Segment02_Vines/VineB"
+@export var vine_echo_path: NodePath = ^"VineEchoCoordinator"
 @export var predator_plant_path: NodePath = ^"Gameplay/Segment03_PredatorPlant/PredatorPlant"
 @export var predator_plant_b_path: NodePath = ^"Gameplay/Segment03_PredatorPlant/PredatorPlantB"
 @export var predator_plant_c_path: NodePath = ^"Gameplay/Segment03_PredatorPlant/PredatorPlantC"
@@ -58,6 +59,7 @@ var _slide_collision_position := Vector2.ZERO
 @onready var eye_transition: ParkourEyeTransition = get_node_or_null(eye_transition_path)
 @onready var vine_gate: ParkourVineGate = get_node_or_null(vine_gate_path)
 @onready var vine_gate_b: ParkourVineGate = get_node_or_null(vine_gate_b_path)
+@onready var vine_echo: Node = get_node_or_null(vine_echo_path)
 @onready var predator_plant: ParkourPredatorPlant = get_node_or_null(predator_plant_path)
 @onready var predator_plant_b: ParkourPredatorPlant = get_node_or_null(predator_plant_b_path)
 @onready var predator_plant_c: ParkourPredatorPlant = get_node_or_null(predator_plant_c_path)
@@ -86,6 +88,8 @@ func _physics_process(delta: float) -> void:
         return
     if player.global_position.y > kill_y:
         respawn(true)
+        return
+    if current_segment == 2 and vine_echo != null and vine_echo.is_active():
         return
 
     motor.velocity = player.velocity
@@ -124,6 +128,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func enter_parkour() -> void:
+    if vine_echo != null:
+        vine_echo.stop_run(false)
+    _set_amai_echo_mode(false)
     player.use_external_control()
     player.set_interaction_enabled(false)
     active = true
@@ -146,6 +153,9 @@ func enter_parkour() -> void:
 
 func exit_parkour() -> void:
     active = false
+    if vine_echo != null:
+        vine_echo.stop_run(false)
+    _set_amai_echo_mode(false)
     _set_slide_state(false)
     player.stop_external_movement()
     player.use_normal_control()
@@ -157,6 +167,8 @@ func respawn(count_as_fall: bool = true) -> void:
         fall_count += 1
     _set_slide_state(false)
     _place_player(_last_safe_spawn)
+    if current_segment == 2 and vine_echo != null:
+        vine_echo.begin_run()
     if amai != null:
         amai.reset_to_segment(current_segment)
     player_respawned.emit(last_safe_platform)
@@ -199,6 +211,9 @@ func debug_jump_to_segment(segment_index: int) -> void:
 
 
 func debug_set_slide(enabled: bool) -> void:
+    if current_segment == 2 and vine_echo != null and vine_echo.is_active():
+        vine_echo.debug_set_player_slide(enabled)
+        return
     motor.is_sliding = enabled
     _set_slide_state(enabled)
 
@@ -212,6 +227,9 @@ func transition_to_segment(next_segment: int) -> void:
         return
     _transitioning = true
     var previous_segment := current_segment
+    if previous_segment == 2 and vine_echo != null:
+        vine_echo.stop_run(false)
+        _set_amai_echo_mode(false)
     var carried_speed := maxf(absf(player.velocity.x), 180.0)
     _set_slide_state(false)
     player.stop_external_movement()
@@ -230,6 +248,10 @@ func transition_to_segment(next_segment: int) -> void:
     player.set_external_velocity(motor.velocity)
     if amai != null:
         amai.reset_to_segment(next_segment)
+    if next_segment == 2:
+        _set_amai_echo_mode(true)
+        if vine_echo != null:
+            vine_echo.begin_run()
 
     if previous_segment == 1:
         segment_01_completed.emit()
@@ -275,6 +297,9 @@ func reset_run_for_test() -> void:
     _parkour_completed_emitted = false
     _vine_choice = &""
     _plant_choice = &""
+    if vine_echo != null:
+        vine_echo.stop_run(false)
+    _set_amai_echo_mode(false)
     motor.reset_counters()
     if vine_gate != null:
         vine_gate.reset_choice()
@@ -408,6 +433,8 @@ func _connect_segment_nodes() -> void:
         vine_gate.choice_made.connect(_on_vine_choice)
     if vine_gate_b != null:
         vine_gate_b.choice_made.connect(_on_vine_choice)
+    if vine_echo != null:
+        vine_echo.gate_action_locked.connect(_on_vine_echo_action_locked)
     if predator_plant != null:
         predator_plant.choice_made.connect(_on_plant_choice)
         predator_plant.hazard_triggered.connect(_on_plant_hazard)
@@ -448,7 +475,7 @@ func _on_segment_03_finish_entered(body: Node2D) -> void:
 
 func _on_s2_checkpoint_entered(body: Node2D) -> void:
     if body == player and current_segment == 2:
-        _set_checkpoint(&"S2_AFTER_VINE", Vector2(3604.0, 630.0))
+        _set_checkpoint(&"S2_AFTER_VINE", Vector2(3800.0, 584.0))
 
 
 func _on_s3_checkpoint_entered(body: Node2D) -> void:
@@ -461,6 +488,13 @@ func _on_vine_choice(choice: StringName) -> void:
     player_choices.append(choice)
     if amai != null:
         amai.record_choice(choice)
+
+
+func _on_vine_echo_action_locked(_gate_index: int, player_action: int, _amai_echo_action: int) -> void:
+    if vine_echo == null:
+        return
+    _vine_choice = StringName(vine_echo.action_name(player_action))
+    player_choices.append(_vine_choice)
 
 
 func _on_plant_choice(choice: StringName) -> void:
@@ -488,6 +522,13 @@ func _set_slide_state(enabled: bool) -> void:
     player.set_meta("parkour_sliding", enabled)
     if not enabled:
         motor.is_sliding = false
+
+
+func _set_amai_echo_mode(enabled: bool) -> void:
+    if amai == null:
+        return
+    amai.visible = not enabled
+    amai.set_physics_process(not enabled)
 
 
 func _place_player(target_position: Vector2) -> void:

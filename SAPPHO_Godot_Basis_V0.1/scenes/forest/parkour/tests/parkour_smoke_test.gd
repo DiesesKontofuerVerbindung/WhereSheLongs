@@ -81,8 +81,12 @@ func _test_continuous_parkour() -> void:
     var player: CharacterBody2D = scene.get_node("Player")
     var player_shape_node: CollisionShape2D = player.get_node("CollisionShape2D")
     var eye_transition = scene.get_node("EyeTransition")
-    var vine_a = scene.get_node("Gameplay/Segment02_Vines/VineGate")
-    var vine_b = scene.get_node("Gameplay/Segment02_Vines/VineB")
+    var vine_echo = scene.get_node("VineEchoCoordinator")
+    var amai_echo: CharacterBody2D = scene.get_node("AmaiEcho")
+    var player_runner = scene.get_node("Player/RunnerActionController")
+    var amai_runner = scene.get_node("AmaiEcho/RunnerActionController")
+    var gate_01 = scene.get_node("Gameplay/Segment02_Vines/Gate01")
+    var gate_04 = scene.get_node("Gameplay/Segment02_Vines/Gate04")
     var plant_a = scene.get_node("Gameplay/Segment03_PredatorPlant/PredatorPlant")
     var plant_b = scene.get_node("Gameplay/Segment03_PredatorPlant/PredatorPlantB")
     var plant_c = scene.get_node("Gameplay/Segment03_PredatorPlant/PredatorPlantC")
@@ -123,12 +127,24 @@ func _test_continuous_parkour() -> void:
 
         await scene.debug_jump_to_segment(2)
         _check(scene.current_segment == 2 and camera.position.is_equal_approx(route.get_segment_center(2)), "Eye transition did not enter Segment 02")
-        vine_a.reset_choice()
-        vine_a.debug_choose(&"JUMP")
-        _check(vine_a.last_choice == &"JUMP" and amai.active_guide == &"Segment02JumpGuide", "Vine A jump did not select Amai's jump guide")
-        vine_b.reset_choice()
-        vine_b.debug_choose(&"SLIDE")
-        _check(vine_b.last_choice == &"SLIDE" and amai.active_guide == &"Segment02SlideGuide", "Vine B slide did not select Amai's slide guide")
+        _check(vine_echo.is_active(), "Segment 02 did not activate the Gate-indexed echo coordinator")
+        _check(not vine_echo.automatic_forward, "Segment 02 must preserve manual horizontal movement")
+        _check(vine_echo.echo_waits_at_gates, "Amai Echo must run ahead to each Gate and wait for the Player")
+        _check(player_runner.get_script() == amai_runner.get_script(), "Player and Amai Echo do not share RunnerActionController")
+        _check(is_equal_approx(player_runner.run_speed, amai_runner.run_speed), "Player and Amai Echo movement speeds differ")
+        _check(gate_01.has_first_round_echo_bypass(amai_echo), "Gate 01 must bypass Amai Echo's NONE action")
+        _check(gate_04.gate_index == 3, "Segment 02 must contain four indexed Vine gates")
+        vine_echo.debug_run_sequence([1, 2, 1, 2])
+        _check(vine_echo.get_player_history() == [1, 2, 1, 2], "Vine Player sequence is not UP DOWN UP DOWN")
+        _check(vine_echo.get_xiaomai_history() == [0, 1, 2, 1], "Vine Amai sequence is not NONE UP DOWN UP")
+        vine_echo.reset_rounds()
+        vine_echo.debug_enter_gate(0)
+        _check(vine_echo.debug_submit_action(1), "First Vine action was not accepted")
+        _check(not vine_echo.debug_submit_action(2), "A Gate accepted a second action after lock")
+        vine_echo.debug_pass_gate(0)
+        root.get_tree().paused = true
+        _check(vine_echo.current_gate_index == 1 and vine_echo.previous_player_action == 1, "Pause changed the Gate-indexed previous action")
+        root.get_tree().paused = false
         scene._on_s2_checkpoint_entered(player)
         scene.debug_set_slide(true)
         scene.respawn(false)
@@ -196,11 +212,14 @@ func _test_segment_02_geometry(scene: Node, motor: Node, normal_height: float, s
     var shortcut_size: Vector2 = shortcut.get("surface_size")
     _check(shortcut_size.x <= 150.0 and _surface_is_reachable(scene.get_node("Gameplay/Segment02_Vines/RaisedStepA"), shortcut, motor), "Segment 02 narrow vine shortcut is missing or unreachable")
 
-    var floor = scene.get_node("Gameplay/Segment02_Vines/LowRunPlatform") as Node2D
-    var gate_shape_node: CollisionShape2D = scene.get_node("Gameplay/Segment02_Vines/VineB/StaticBody2D/CollisionShape2D")
+    var floor = scene.get_node("Gameplay/Segment02_Vines/VineRunFloor") as StaticBody2D
+    var floor_shape_node: CollisionShape2D = scene.get_node("Gameplay/Segment02_Vines/VineRunFloor/CollisionShape2D")
+    var floor_shape := floor_shape_node.shape as RectangleShape2D
+    var gate_shape_node: CollisionShape2D = scene.get_node("Gameplay/Segment02_Vines/Gate01/SlideVine/CollisionShape2D")
     var gate_shape := gate_shape_node.shape as RectangleShape2D
-    var under_clearance := _surface_top(floor) - (gate_shape_node.global_position.y + gate_shape.size.y * 0.5)
-    _check(normal_height > under_clearance and slide_height < under_clearance, "Vine B must block standing movement while allowing the slide collider")
+    var floor_top: float = floor.global_position.y - floor_shape.size.y * 0.5
+    var under_clearance: float = floor_top - (gate_shape_node.global_position.y + gate_shape.size.y * 0.5)
+    _check(normal_height > under_clearance and slide_height < under_clearance, "A Vine gate must block standing movement while allowing the slide collider")
     _check(scene.get_node("Gameplay/Checkpoints/S2AfterVine") != null, "S2_AFTER_VINE checkpoint is missing")
 
 
@@ -249,8 +268,9 @@ func _test_guide_paths(scene: Node, amai: Node) -> void:
 func _test_debug_overlay_coverage(scene: Node) -> void:
     var debug = scene.get_node("ParkourDebug")
     var required_shapes := [
-        ^"../Gameplay/Segment02_Vines/VineB/StaticBody2D/CollisionShape2D",
-        ^"../Gameplay/Segment02_Vines/VineB/SlideSensor/CollisionShape2D",
+        ^"../Gameplay/Segment02_Vines/Gate01/SlideVine/CollisionShape2D",
+        ^"../Gameplay/Segment02_Vines/Gate01/DecisionZone/CollisionShape2D",
+        ^"../Gameplay/Segment02_Vines/Gate04/PassZone/CollisionShape2D",
         ^"../Gameplay/Segment03_PredatorPlant/PredatorPlant/HazardArea/CollisionShape2D",
         ^"../Gameplay/Segment03_PredatorPlant/PredatorPlantB/HazardArea/CollisionShape2D",
         ^"../Gameplay/Segment03_PredatorPlant/PredatorPlantC/HazardArea/CollisionShape2D",

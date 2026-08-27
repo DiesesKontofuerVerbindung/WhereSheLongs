@@ -1,0 +1,157 @@
+[gd_scene load_steps=12 format=3]
+
+[ext_resource type="PackedScene" path="res://shared/player/player.tscn" id="1_player"]
+[ext_resource type="Script" path="res://scenes/forest/parkour/vine_echo/runner_action_controller.gd" id="2_runner"]
+[ext_resource type="PackedScene" path="res://scenes/forest/parkour/vine_echo/vine_decision_gate.tscn" id="3_gate"]
+[ext_resource type="Script" path="res://scenes/forest/parkour/vine_echo/vine_echo_coordinator.gd" id="4_coordinator"]
+[ext_resource type="Texture2D" path="res://scenes/forest/parkour/characters/xiaoling_parkour_side.png" id="5_xiaoling"]
+[ext_resource type="Texture2D" path="res://scenes/forest/parkour/characters/amai_parkour_side.png" id="6_xiaomai"]
+
+[sub_resource type="RectangleShape2D" id="Rectangle_ground"]
+size = Vector2(2100, 120)
+
+[sub_resource type="CapsuleShape2D" id="Capsule_xiaomai"]
+radius = 11.0
+height = 32.0
+
+[sub_resource type="RectangleShape2D" id="Rectangle_finish"]
+size = Vector2(70, 420)
+
+[node name="VineSegment" type="Node2D"]
+
+[node name="Backdrop" type="Polygon2D" parent="."]
+polygon = PackedVector2Array(0, 0, 2100, 0, 2100, 1080, 0, 1080)
+color = Color(0.055, 0.115, 0.12, 1)
+
+[node name="Terrain" type="Polygon2D" parent="."]
+polygon = PackedVector2Array(0, 720, 250, 760, 430, 735, 620, 790, 820, 700, 1030, 760, 1240, 720, 1450, 780, 1660, 690, 1850, 750, 2100, 710, 2100, 1080, 0, 1080)
+color = Color(0.12, 0.29, 0.25, 1)
+
+[node name="VineHangs" type="Node2D" parent="."]
+
+[node name="Vine01" type="Polygon2D" parent="VineHangs"]
+polygon = PackedVector2Array(430, 0, 450, 0, 450, 610, 430, 610)
+color = Color(0.2, 0.48, 0.27, 0.9)
+
+[node name="Vine02" type="Polygon2D" parent="VineHangs"]
+polygon = PackedVector2Array(830, 0, 850, 0, 850, 555, 830, 555)
+color = Color(0.24, 0.56, 0.3, 0.9)
+
+[node name="Vine03" type="Polygon2D" parent="VineHangs"]
+polygon = PackedVector2Array(1240, 0, 1260, 0, 1260, 625, 1240, 625)
+color = Color(0.2, 0.48, 0.27, 0.9)
+
+[node name="Vine04" type="Polygon2D" parent="VineHangs"]
+polygon = PackedVector2Array(1630, 0, 1650, 0, 1650, 540, 1630, 540)
+color = Color(0.24, 0.56, 0.3, 0.9)
+
+[node name="Ground" type="StaticBody2D" parent="."]
+position = Vector2(1050, 850)
+collision_layer = 1
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Ground"]
+shape = SubResource("Rectangle_ground")
+
+[node name="GroundVisual" type="Polygon2D" parent="Ground"]
+polygon = PackedVector2Array(-1050, -60, 1050, -60, 1050, 60, -1050, 60)
+color = Color(0.16, 0.38, 0.32, 1)
+
+[node name="Gate01" parent="." instance=ExtResource("3_gate")]
+position = Vector2(440, 790)
+gate_index = 0
+
+[node name="Gate02" parent="." instance=ExtResource("3_gate")]
+position = Vector2(840, 790)
+gate_index = 1
+
+[node name="Gate03" parent="." instance=ExtResource("3_gate")]
+position = Vector2(1240, 790)
+gate_index = 2
+
+[node name="Gate04" parent="." instance=ExtResource("3_gate")]
+position = Vector2(1640, 790)
+gate_index = 3
+
+[node name="Finish" type="Area2D" parent="."]
+position = Vector2(1980, 580)
+collision_layer = 0
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Finish"]
+shape = SubResource("Rectangle_finish")
+
+[node name="FinishLabel" type="Label" parent="."]
+position = Vector2(1915, 690)
+theme_override_colors/font_color = Color(0.66, 0.95, 0.86, 1)
+theme_override_font_sizes/font_size = 20
+text = "VINE SEGMENT END"
+
+[node name="Player" parent="." instance=ExtResource("1_player")]
+position = Vector2(110, 774)
+collision_layer = 1
+collision_mask = 1
+z_index = 10
+
+[node name="Visual" parent="Player" index="0"]
+visible = false
+
+[node name="XiaolingSprite" type="Sprite2D" parent="Player"]
+position = Vector2(0, -11)
+scale = Vector2(0.1, 0.1)
+texture = ExtResource("5_xiaoling")
+flip_h = true
+
+[node name="RunnerActionController" type="Node" parent="Player"]
+script = ExtResource("2_runner")
+suspend_runner_physics = true
+
+[node name="Xiaomai" type="CharacterBody2D" parent="."]
+position = Vector2(74, 774)
+collision_layer = 2
+collision_mask = 1
+z_index = 9
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Xiaomai"]
+shape = SubResource("Capsule_xiaomai")
+
+[node name="XiaomaiSprite" type="Sprite2D" parent="Xiaomai"]
+position = Vector2(0, -10)
+scale = Vector2(0.1, 0.1)
+texture = ExtResource("6_xiaomai")
+
+[node name="NameLabel" type="Label" parent="Xiaomai"]
+position = Vector2(-28, -54)
+theme_override_colors/font_color = Color(1, 0.8, 0.42, 1)
+theme_override_font_sizes/font_size = 16
+text = "小麦"
+
+[node name="RunnerActionController" type="Node" parent="Xiaomai"]
+script = ExtResource("2_runner")
+
+[node name="VineEchoCoordinator" type="Node" parent="."]
+script = ExtResource("4_coordinator")
+automatic_forward = false
+
+[node name="DebugLayer" type="CanvasLayer" parent="."]
+
+[node name="Panel" type="PanelContainer" parent="DebugLayer"]
+offset_left = 18.0
+offset_top = 18.0
+offset_right = 438.0
+offset_bottom = 214.0
+
+[node name="DebugText" type="Label" parent="DebugLayer/Panel"]
+custom_minimum_size = Vector2(392, 174)
+theme_override_colors/font_color = Color(0.84, 1, 0.9, 1)
+theme_override_font_sizes/font_size = 17
+text = "Gate: 1\nPlayer Current: NONE\nXiaomai Echo: NONE\nPrevious Player: NONE\nLocked: false"
+
+[node name="Instruction" type="Label" parent="DebugLayer"]
+offset_left = 20.0
+offset_top = 194.0
+offset_right = 510.0
+offset_bottom = 250.0
+theme_override_colors/font_color = Color(0.9, 0.95, 0.9, 1)
+theme_override_font_sizes/font_size = 18
+text = "← / → 移动：Space = UP · S / ↓ = DOWN\n小麦永远执行上一扇门的动作。"

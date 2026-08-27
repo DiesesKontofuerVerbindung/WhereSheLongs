@@ -8,8 +8,8 @@ Forest-owned continuous parkour prototype. It reuses `res://shared/player/player
 Segment 01 — supplied forest art
 J1 → J2 → J3 → J3.5 → J4 → jump beyond the right edge
     ↓ eye-close transition
-Segment 02 — VINE PLACEHOLDER
-Jump over or slide under
+Segment 02 — VINE ECHO
+Four indexed gates: each accepts UP or DOWN; Amai Echo executes the previous gate's Player action
     ↓ eye-close transition
 Segment 03 — MOVING PLANT PLACEHOLDER
 Wait for CLOSED or take the upper risk route
@@ -24,12 +24,14 @@ J4 only completes the platform portion. It does not complete Parkour. J5 and the
 - Gameplay: `res://scenes/forest/parkour/parkour_prototype.tscn`
 - Mechanism test: `res://scenes/forest/parkour/parkour_mechanics_test.tscn`
 - Smoke: `godot --headless --path . --script res://scenes/forest/parkour/tests/parkour_smoke_test.gd`
+- Vine echo prototype: `res://scenes/forest/parkour/vine_segment_prototype.tscn` (focused layout test)
+- Vine echo smoke: `godot --headless --path . --script res://scenes/forest/parkour/tests/vine_echo_smoke_test.gd`
 
 Controls:
 
 - `A / D` or arrows: run
 - `Space`: jump
-- `S / ↓`: slide while grounded
+- `S / ↓ / PgDn`: choose or perform the grounded DOWN slide
 - `F1`: diagnostics
 - `F2`: respawn at the current segment checkpoint
 - `F3`: advance debug progress / jump to the next segment
@@ -38,3 +40,7 @@ Controls:
 - `F6`: clean/annotated Segment 01 background
 
 Segment 02 and 03 are deliberately Greybox placeholders. Their gameplay scripts and collision are separate from visuals so future art replacement does not rewrite the mechanics.
+
+## Segment 02 Vine Echo
+
+The full `parkour_prototype.tscn` uses the four-gate delayed-action rule in Segment 02. Horizontal movement remains player-controlled. Amai Echo independently runs to the next Gate's waiting point, then waits for the Player to reach that decision. At Gate N, Amai Echo executes the Player action stored from Gate N-1. Gate 01 gives Amai Echo `NONE` and bypasses her obstacle collision. Space locks `UP`; `S`/Down/PgDn locks `DOWN`; the first valid input per gate wins. The focused `vine_segment_prototype.tscn` is retained for mechanism-only inspection.
