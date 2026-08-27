@@ -33,8 +33,11 @@ var _action_pending := false
 var _pending_action = RunnerAction.NONE
 var _buffered_action = RunnerAction.NONE
 var _buffered_action_remaining := 0.0
+var _locked_player_action = RunnerAction.NONE
 var _running := false
 var _echo_crossing_gate := false
+var _player_in_action_zone := false
+var _action_executed := false
 var _gates: Array[Node2D] = []
 var _player_history: Array[int] = []
 var _xiaomai_history: Array[int] = []
@@ -53,6 +56,7 @@ func _ready() -> void:
     _gates = _get_sorted_gates()
     for gate in _gates:
         gate.decision_requested.connect(_on_gate_decision_requested)
+        gate.action_execution_requested.connect(_on_gate_action_execution_requested)
         gate.gate_passed.connect(_on_gate_passed)
         if not echo_fixed_route.is_empty():
             gate.allow_fixed_ground_route(xiaomai)
@@ -131,7 +135,10 @@ func reset_rounds() -> void:
     _pending_action = RunnerAction.NONE
     _buffered_action = RunnerAction.NONE
     _buffered_action_remaining = 0.0
+    _locked_player_action = RunnerAction.NONE
     _echo_crossing_gate = false
+    _player_in_action_zone = false
+    _action_executed = false
     _player_history.clear()
     _xiaomai_history.clear()
     _last_echo_anchor_index = -1
@@ -177,6 +184,9 @@ func debug_enter_gate(gate_index: int) -> void:
     action_locked = false
     _action_pending = false
     _pending_action = RunnerAction.NONE
+    _locked_player_action = RunnerAction.NONE
+    _player_in_action_zone = false
+    _action_executed = false
     _consume_buffered_action()
     _update_debug_label()
 
@@ -188,8 +198,15 @@ func debug_submit_action(action: int) -> bool:
     return true
 
 
+func debug_execute_gate(gate_index: int) -> void:
+    if gate_index != current_gate_index:
+        return
+    _player_in_action_zone = true
+    _execute_locked_action()
+
+
 func debug_pass_gate(gate_index: int) -> void:
-    if gate_index != current_gate_index or not action_locked:
+    if gate_index != current_gate_index or not action_locked or not _action_executed:
         return
     _finish_gate()
 
@@ -199,6 +216,7 @@ func debug_run_sequence(actions: Array) -> void:
     for gate_index in actions.size():
         debug_enter_gate(gate_index)
         debug_submit_action(int(actions[gate_index]))
+        debug_execute_gate(gate_index)
         debug_pass_gate(gate_index)
 
 
@@ -234,8 +252,15 @@ func _on_gate_decision_requested(gate_index: int, body: Node2D) -> void:
     debug_enter_gate(gate_index)
 
 
+func _on_gate_action_execution_requested(gate_index: int, body: Node2D) -> void:
+    if not _running or body != player or gate_index != current_gate_index:
+        return
+    _player_in_action_zone = true
+    _execute_locked_action()
+
+
 func _on_gate_passed(gate_index: int, body: Node2D) -> void:
-    if not _running or body != player or gate_index != current_gate_index or not action_locked:
+    if not _running or body != player or gate_index != current_gate_index or not action_locked or not _action_executed:
         return
     _finish_gate()
 
@@ -244,19 +269,28 @@ func _commit_pending_action() -> void:
     if not _action_pending or not _awaiting_action or action_locked:
         return
     var current_action: int = _pending_action
-    var xiaomai_action: int = previous_player_action
     _action_pending = false
     _pending_action = RunnerAction.NONE
+    _locked_player_action = current_action
+    action_locked = true
+    if _player_in_action_zone:
+        _execute_locked_action()
+    _update_debug_label()
 
+
+func _execute_locked_action() -> void:
+    if not action_locked or _action_executed or _locked_player_action == RunnerAction.NONE:
+        return
+    var current_action: int = _locked_player_action
+    var xiaomai_action: int = previous_player_action
     player_runner.perform_action(current_action)
     _echo_crossing_gate = true
     if xiaomai_action != RunnerAction.NONE:
         xiaomai_runner.perform_action(xiaomai_action)
-
     _player_history.append(current_action)
     _xiaomai_history.append(xiaomai_action)
     previous_player_action = current_action
-    action_locked = true
+    _action_executed = true
     gate_action_locked.emit(current_gate_index, current_action, xiaomai_action)
     _update_debug_label()
 
@@ -266,6 +300,9 @@ func _finish_gate() -> void:
     action_locked = false
     current_gate_index += 1
     _echo_crossing_gate = false
+    _locked_player_action = RunnerAction.NONE
+    _player_in_action_zone = false
+    _action_executed = false
     _update_debug_label()
 
 
@@ -371,14 +408,19 @@ func _get_sorted_gates() -> Array[Node2D]:
 func _update_debug_label() -> void:
     if debug_label == null:
         return
-    var player_current: int = RunnerAction.NONE
+    var player_current: int = _locked_player_action
     var xiaomai_echo: int = previous_player_action
-    if not _player_history.is_empty():
+    if _action_executed and not _player_history.is_empty():
+        player_current = _player_history[-1]
+        xiaomai_echo = _xiaomai_history[-1]
+    elif player_current == RunnerAction.NONE and not _player_history.is_empty():
         player_current = _player_history[-1]
         xiaomai_echo = _xiaomai_history[-1]
     var decision_text := "READY · Space=UP / S↓PgDn=DOWN" if _awaiting_action and not action_locked else "Move right to the next Gate"
     if _buffered_action != RunnerAction.NONE:
         decision_text = "BUFFERED %s · %.2fs" % [action_name(_buffered_action), _buffered_action_remaining]
+    elif action_locked and not _action_executed:
+        decision_text = "LOCKED %s · Move to action line" % action_name(_locked_player_action)
     var echo_text := "CROSSING" if _echo_crossing_gate else "WAITING AT GATE"
     debug_label.text = "Gate: %d\nDecision: %s\nPlayer Current: %s\nAmai Echo: %s (%s)\nPrevious Player: %s\nLocked: %s" % [
         current_gate_index + 1,

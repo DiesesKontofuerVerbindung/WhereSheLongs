@@ -2,6 +2,7 @@ extends Node2D
 class_name VineDecisionGate
 
 signal decision_requested(gate_index: int, body: Node2D)
+signal action_execution_requested(gate_index: int, body: Node2D)
 signal gate_passed(gate_index: int, body: Node2D)
 
 @export var gate_index := 0
@@ -10,6 +11,7 @@ var _first_round_echo_bypass: CharacterBody2D
 var _fixed_ground_route_runner: CharacterBody2D
 
 @onready var decision_zone: Area2D = $DecisionZone
+@onready var action_zone: Area2D = $ActionZone
 @onready var pass_zone: Area2D = $PassZone
 @onready var slide_vine: StaticBody2D = $SlideVine
 @onready var up_path: StaticBody2D = $UpPath
@@ -18,6 +20,7 @@ var _fixed_ground_route_runner: CharacterBody2D
 func _ready() -> void:
     add_to_group("vine_decision_gate")
     decision_zone.body_entered.connect(_on_decision_zone_body_entered)
+    action_zone.body_entered.connect(_on_action_zone_body_entered)
     pass_zone.body_entered.connect(_on_pass_zone_body_entered)
 
 
@@ -42,6 +45,11 @@ func has_fixed_ground_route(echo_runner: CharacterBody2D) -> bool:
 func _on_decision_zone_body_entered(body: Node2D) -> void:
     if body is CharacterBody2D:
         decision_requested.emit(gate_index, body)
+
+
+func _on_action_zone_body_entered(body: Node2D) -> void:
+    if body is CharacterBody2D:
+        action_execution_requested.emit(gate_index, body)
 
 
 func _on_pass_zone_body_entered(body: Node2D) -> void:

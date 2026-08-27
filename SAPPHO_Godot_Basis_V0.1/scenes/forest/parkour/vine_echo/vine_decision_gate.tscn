@@ -1,4 +1,4 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scenes/forest/parkour/vine_echo/vine_decision_gate.gd" id="1_gate"]
 
@@ -7,6 +7,9 @@ size = Vector2(240, 300)
 
 [sub_resource type="RectangleShape2D" id="Rectangle_vine"]
 size = Vector2(80, 22)
+
+[sub_resource type="RectangleShape2D" id="Rectangle_action"]
+size = Vector2(32, 300)
 
 [sub_resource type="RectangleShape2D" id="Rectangle_upper"]
 size = Vector2(220, 30)
@@ -24,6 +27,14 @@ collision_mask = 1
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="DecisionZone"]
 shape = SubResource("Rectangle_decision")
+
+[node name="ActionZone" type="Area2D" parent="."]
+position = Vector2(-100, -150)
+collision_layer = 0
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ActionZone"]
+shape = SubResource("Rectangle_action")
 
 [node name="PassZone" type="Area2D" parent="."]
 position = Vector2(60, -150)

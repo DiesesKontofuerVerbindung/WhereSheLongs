@@ -47,6 +47,7 @@ func _run() -> void:
     _test_sequence_two(coordinator)
     _test_first_input_wins(coordinator)
     _test_pre_gate_input_buffer(coordinator)
+    _test_action_waits_for_execution_line(coordinator)
     _test_airborne_action_buffer(xiaomai, xiaomai_runner)
     _test_gate_index_survives_pause_and_frame_variation(coordinator)
 
@@ -89,6 +90,7 @@ func _test_first_input_wins(coordinator: Node) -> void:
     coordinator.debug_enter_gate(0)
     _check(coordinator.debug_submit_action(VINE_ECHO_COORDINATOR_SCRIPT.RunnerAction.UP), "Gate did not accept the first UP input")
     _check(not coordinator.debug_submit_action(VINE_ECHO_COORDINATOR_SCRIPT.RunnerAction.DOWN), "Gate accepted DOWN after it had already locked UP")
+    coordinator.debug_execute_gate(0)
     _check(coordinator.get_player_history() == [1], "Fast UP then DOWN did not preserve the first action")
     _check(coordinator.get_xiaomai_history() == [0], "First gate echo must remain NONE")
 
@@ -99,7 +101,21 @@ func _test_pre_gate_input_buffer(coordinator: Node) -> void:
     _check(not coordinator.debug_buffer_action(VINE_ECHO_COORDINATOR_SCRIPT.RunnerAction.UP), "A second pre-gate input overwrote the first input")
     coordinator.debug_enter_gate(0)
     coordinator._physics_process(1.0 / 60.0)
+    _check(coordinator.action_locked, "Buffered pre-gate DOWN was not locked on Gate entry")
+    _check(coordinator.get_player_history().is_empty(), "Buffered pre-gate DOWN executed before the action line")
+    coordinator.debug_execute_gate(0)
     _check(coordinator.get_player_history() == [2], "Buffered pre-gate DOWN was not committed on Gate entry")
+
+
+func _test_action_waits_for_execution_line(coordinator: Node) -> void:
+    coordinator.reset_rounds()
+    coordinator.debug_enter_gate(0)
+    coordinator.debug_submit_action(VINE_ECHO_COORDINATOR_SCRIPT.RunnerAction.UP)
+    _check(coordinator.action_locked, "UP selection did not lock in the decision zone")
+    _check(coordinator.get_player_history().is_empty(), "UP executed inside the early decision zone")
+    coordinator.debug_execute_gate(0)
+    _check(coordinator.get_player_history() == [1], "UP did not execute at the action line")
+    _check(coordinator.get_xiaomai_history() == [0], "Gate 01 action line did not preserve Amai NONE")
 
 
 func _test_airborne_action_buffer(xiaomai: CharacterBody2D, runner: Node) -> void:
@@ -122,6 +138,7 @@ func _test_gate_index_survives_pause_and_frame_variation(coordinator: Node) -> v
     coordinator.reset_rounds()
     coordinator.debug_enter_gate(0)
     coordinator.debug_submit_action(VINE_ECHO_COORDINATOR_SCRIPT.RunnerAction.DOWN)
+    coordinator.debug_execute_gate(0)
     coordinator.debug_pass_gate(0)
     root.get_tree().paused = true
     _check(coordinator.current_gate_index == 1 and coordinator.previous_player_action == VINE_ECHO_COORDINATOR_SCRIPT.RunnerAction.DOWN, "Pause changed the stored gate-indexed action")
@@ -130,6 +147,7 @@ func _test_gate_index_survives_pause_and_frame_variation(coordinator: Node) -> v
     coordinator._physics_process(0.25)
     coordinator.debug_enter_gate(1)
     coordinator.debug_submit_action(VINE_ECHO_COORDINATOR_SCRIPT.RunnerAction.UP)
+    coordinator.debug_execute_gate(1)
     coordinator.debug_pass_gate(1)
     _check(coordinator.get_player_history() == [2, 1], "Frame variation changed Player gate ordering")
     _check(coordinator.get_xiaomai_history() == [0, 2], "Frame variation changed Xiaomai from previous-gate echo")

@@ -141,6 +141,7 @@ func _test_continuous_parkour() -> void:
         vine_echo.debug_enter_gate(0)
         _check(vine_echo.debug_submit_action(1), "First Vine action was not accepted")
         _check(not vine_echo.debug_submit_action(2), "A Gate accepted a second action after lock")
+        vine_echo.debug_execute_gate(0)
         vine_echo.debug_pass_gate(0)
         root.get_tree().paused = true
         _check(vine_echo.current_gate_index == 1 and vine_echo.previous_player_action == 1, "Pause changed the Gate-indexed previous action")
@@ -270,6 +271,7 @@ func _test_debug_overlay_coverage(scene: Node) -> void:
     var required_shapes := [
         ^"../Gameplay/Segment02_Vines/Gate01/SlideVine/CollisionShape2D",
         ^"../Gameplay/Segment02_Vines/Gate01/DecisionZone/CollisionShape2D",
+        ^"../Gameplay/Segment02_Vines/Gate01/ActionZone/CollisionShape2D",
         ^"../Gameplay/Segment02_Vines/Gate04/PassZone/CollisionShape2D",
         ^"../Gameplay/Segment03_PredatorPlant/PredatorPlant/HazardArea/CollisionShape2D",
         ^"../Gameplay/Segment03_PredatorPlant/PredatorPlantB/HazardArea/CollisionShape2D",
