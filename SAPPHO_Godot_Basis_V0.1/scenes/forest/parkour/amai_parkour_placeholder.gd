@@ -192,6 +192,24 @@ func release_segment_one_exit() -> void:
     ])
 
 
+func join_waterfall_intro(target_position: Vector2) -> void:
+    global_position = target_position
+    velocity = Vector2.ZERO
+    _reset_leg()
+    _waiting_for_player_recovery = false
+    _segment_one_exit_released = false
+    _needs_floor_settle = true
+    visible = true
+    set_physics_process(true)
+    _set_state(AmaiState.WAITING)
+    _trace_event("WATERFALL_JOIN", "p=(%.1f,%.1f) player=(%.1f,%.1f)" % [
+        global_position.x,
+        global_position.y,
+        player.global_position.x,
+        player.global_position.y,
+    ])
+
+
 func is_waiting_for_player_recovery() -> bool:
     return _waiting_for_player_recovery
 

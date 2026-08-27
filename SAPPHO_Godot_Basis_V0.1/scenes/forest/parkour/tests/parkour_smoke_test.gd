@@ -184,6 +184,8 @@ func _test_continuous_parkour() -> void:
         await scene.debug_complete_parkour()
         await scene.debug_complete_parkour()
         _check(scene.current_segment == 4, "Segment 03 finish did not enter the Waterfall placeholder")
+        _check(amai.visible and amai.global_position.x >= 5760.0, "Amai stayed behind at the Segment 3 exit")
+        _check(absf(amai.global_position.x - player.global_position.x) <= 180.0, "Amai did not enter Waterfall Intro beside Xiaoling")
         _check(completion_count[0] == run_index + 1, "parkour_completed emitted more than once for run %d" % [run_index + 1])
 
     _check(player.control_mode == player.ControlMode.LOCKED, "Waterfall intro placeholder did not lock control")

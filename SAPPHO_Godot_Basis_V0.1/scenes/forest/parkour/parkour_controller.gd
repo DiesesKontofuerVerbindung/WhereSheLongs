@@ -25,6 +25,7 @@ signal player_respawned(checkpoint_id: StringName)
 @export var predator_plant_b_path: NodePath = ^"Gameplay/Segment03_PredatorPlant/PredatorPlantB"
 @export var predator_plant_c_path: NodePath = ^"Gameplay/Segment03_PredatorPlant/PredatorPlantC"
 @export var amai_path: NodePath = ^"AmaiPlaceholder"
+@export var amai_waterfall_spawn := Vector2(6290.0, 850.0)
 
 var current_platform: StringName = &""
 var last_safe_platform: StringName = &""
@@ -278,6 +279,8 @@ func complete_parkour() -> void:
     if design_camera != null:
         design_camera.position = Vector2(6720.0, 540.0)
     _place_player(Vector2(6150.0, 850.0))
+    if amai != null:
+        amai.join_waterfall_intro(amai_waterfall_spawn)
     _parkour_completed_emitted = true
     segment_03_completed.emit(_plant_choice)
     parkour_completed.emit()
