@@ -97,13 +97,14 @@ class FanGestureTests(unittest.TestCase):
         self.assertTrue(glyphs.intersection(CYRILLIC_GLYPHS))
         self.assertEqual(len(field.entities), config.INTERFERENCE_ENTITY_COUNT)
 
-    def test_gravity_accelerates_and_moves_letter_downward_without_hand(self) -> None:
+    def test_disabled_gravity_keeps_stationary_letter_at_its_height(self) -> None:
         field = physics_field(letter_entity(y=300.0))
         field.update(0.05, None)
         letter = field.entities[0]
-        self.assertEqual(letter.acceleration_y, config.LETTER_GRAVITY)
-        self.assertGreater(letter.velocity_y, 0.0)
-        self.assertGreater(letter.y, 300.0)
+        self.assertEqual(config.LETTER_GRAVITY, 0.0)
+        self.assertEqual(letter.acceleration_y, 0.0)
+        self.assertEqual(letter.velocity_y, 0.0)
+        self.assertEqual(letter.y, 300.0)
 
     def test_floor_prevents_tunneling_and_small_bounce_settles(self) -> None:
         letter = letter_entity(
