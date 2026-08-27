@@ -1,8 +1,9 @@
-"""Webcam + MediaPipe tracker with one-finger and two-finger control modes."""
+"""Webcam + MediaPipe palm feature extraction for the Fan prototype."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import acos, degrees, hypot
 from pathlib import Path
 import time
 from typing import Optional
@@ -21,7 +22,7 @@ import config
 
 
 @dataclass(frozen=True)
-class CursorPoint:
+class PalmPoint:
     normalized_x: float
     normalized_y: float
     screen_x: int
@@ -31,44 +32,74 @@ class CursorPoint:
 @dataclass(frozen=True)
 class TrackingFrame:
     hand_detected: bool
-    finger_mode: str
-    cursor: CursorPoint | None
+    palm_center: PalmPoint | None
+    open_palm: bool
     index_extended: bool = False
     middle_extended: bool = False
-    cursor_held: bool = False
+    ring_extended: bool = False
+    pinky_extended: bool = False
+    palm_held: bool = False
 
 
-def _is_extended(landmarks: list[object], tip_index: int, pip_index: int) -> bool:
-    tip = landmarks[tip_index]
-    pip = landmarks[pip_index]
-    return float(tip.y) < float(pip.y) - config.FINGER_EXTENSION_MARGIN
+@dataclass(frozen=True)
+class HandFeatures:
+    normalized_x: float
+    normalized_y: float
+    index_extended: bool
+    middle_extended: bool
+    ring_extended: bool
+    pinky_extended: bool
+
+    @property
+    def open_palm(self) -> bool:
+        return all((self.index_extended, self.middle_extended, self.ring_extended, self.pinky_extended))
 
 
-def valid_finger_mode(landmarks: list[object], finger_mode: str) -> tuple[bool, bool]:
-    """Return index/middle extension flags and reject folded fingers in TWO_FINGER mode."""
+def _xy(landmark: object) -> tuple[float, float]:
+    return float(landmark.x), float(landmark.y)
 
-    index_extended = _is_extended(landmarks, 8, 6)
-    middle_extended = _is_extended(landmarks, 12, 10)
-    if finger_mode == config.TWO_FINGER:
-        return index_extended and middle_extended, middle_extended
-    return index_extended, middle_extended
+def _joint_angle(first: object, joint: object, last: object) -> float:
+    first_x, first_y = _xy(first)
+    joint_x, joint_y = _xy(joint)
+    last_x, last_y = _xy(last)
+    left = (first_x - joint_x, first_y - joint_y)
+    right = (last_x - joint_x, last_y - joint_y)
+    denominator = hypot(*left) * hypot(*right)
+    if denominator <= 1e-9:
+        return 0.0
+    cosine = max(-1.0, min(1.0, (left[0] * right[0] + left[1] * right[1]) / denominator))
+    return degrees(acos(cosine))
 
-
-def map_normalized_y_to_screen(
-    normalized_y: float,
-    window_height: int = config.WINDOW_HEIGHT,
-) -> int:
-    """Map the reachable camera Y band into the full playable screen height."""
-
-    input_span = config.CURSOR_Y_INPUT_MAX - config.CURSOR_Y_INPUT_MIN
-    if input_span <= 0:
-        raise ValueError("CURSOR_Y_INPUT_MAX must be greater than CURSOR_Y_INPUT_MIN")
-    input_progress = (normalized_y - config.CURSOR_Y_INPUT_MIN) / input_span
-    input_progress = max(0.0, min(1.0, input_progress))
-    output_ratio = config.CURSOR_Y_OUTPUT_MIN_RATIO + input_progress * (
-        config.CURSOR_Y_OUTPUT_MAX_RATIO - config.CURSOR_Y_OUTPUT_MIN_RATIO
+def _finger_extended(landmarks: list[object], mcp: int, pip: int, dip: int, tip: int, palm: tuple[float, float]) -> bool:
+    angle = _joint_angle(landmarks[mcp], landmarks[pip], landmarks[tip])
+    palm_x, palm_y = palm
+    tip_x, tip_y = _xy(landmarks[tip])
+    pip_x, pip_y = _xy(landmarks[pip])
+    tip_radius = hypot(tip_x - palm_x, tip_y - palm_y)
+    pip_radius = hypot(pip_x - palm_x, pip_y - palm_y)
+    return (
+        angle >= config.FINGER_EXTENDED_MIN_ANGLE
+        and tip_radius >= pip_radius * config.FINGER_EXTENDED_DISTANCE_RATIO
+        and _joint_angle(landmarks[pip], landmarks[dip], landmarks[tip]) >= config.FINGER_EXTENDED_MIN_ANGLE
     )
-    return min(window_height - 1, int(output_ratio * window_height))
+
+
+def extract_hand_features(landmarks: list[object]) -> HandFeatures:
+    """Return rotation-tolerant palm center and four-finger extension flags."""
+
+    if len(landmarks) < 21:
+        raise ValueError("MediaPipe hand landmarks must contain 21 points")
+    palm_indices = (0, 5, 9, 13, 17)
+    palm_x = sum(float(landmarks[index].x) for index in palm_indices) / len(palm_indices)
+    palm_y = sum(float(landmarks[index].y) for index in palm_indices) / len(palm_indices)
+    palm = (palm_x, palm_y)
+    fingers = (
+        _finger_extended(landmarks, 5, 6, 7, 8, palm),
+        _finger_extended(landmarks, 9, 10, 11, 12, palm),
+        _finger_extended(landmarks, 13, 14, 15, 16, palm),
+        _finger_extended(landmarks, 17, 18, 19, 20, palm),
+    )
+    return HandFeatures(palm_x, palm_y, *fingers)
 
 
 class HandTracker:
@@ -84,8 +115,8 @@ class HandTracker:
         self.error: Optional[str] = None
         self.hand_detected = False
         self._timestamp_ms = 0
-        self._last_valid_cursor: CursorPoint | None = None
-        self._last_valid_cursor_at: float | None = None
+        self._last_valid_frame: TrackingFrame | None = None
+        self._last_valid_frame_at: float | None = None
 
     @property
     def available(self) -> bool:
@@ -139,16 +170,16 @@ class HandTracker:
             self.close()
             return False
 
-    def read(self, finger_mode: str) -> TrackingFrame:
+    def read(self) -> TrackingFrame:
         now = time.monotonic()
         if not self.available:
             self.hand_detected = False
-            return self._held_or_empty_frame(finger_mode, now)
+            return self._held_or_empty_frame(now)
         ok, frame = self.capture.read()
         if not ok or frame is None:
             self.hand_detected = False
             self.error = "摄像头暂时无法读取画面。"
-            return self._held_or_empty_frame(finger_mode, now)
+            return self._held_or_empty_frame(now)
         if config.MIRROR_CAMERA:
             frame = cv2.flip(frame, 1)
         try:
@@ -158,38 +189,53 @@ class HandTracker:
             result = self.landmarker.detect_for_video(image, self._timestamp_ms)
             if not result.hand_landmarks:
                 self.hand_detected = False
-                return self._held_or_empty_frame(finger_mode, now)
+                return self._held_or_empty_frame(now)
             landmarks = result.hand_landmarks[0]
             self.hand_detected = True
-            mode_valid, middle_extended = valid_finger_mode(landmarks, finger_mode)
-            index_extended = _is_extended(landmarks, 8, 6)
-            if not mode_valid:
-                return TrackingFrame(True, finger_mode, None, index_extended, middle_extended)
-            points = [landmarks[8]] if finger_mode == config.ONE_FINGER else [landmarks[8], landmarks[12]]
-            normalized_x = max(0.0, min(1.0, sum(float(point.x) for point in points) / len(points)))
-            normalized_y = max(0.0, min(1.0, sum(float(point.y) for point in points) / len(points)))
-            cursor = CursorPoint(
+            features = extract_hand_features(landmarks)
+            normalized_x = max(0.0, min(1.0, features.normalized_x))
+            normalized_y = max(0.0, min(1.0, features.normalized_y))
+            palm = PalmPoint(
                 normalized_x=normalized_x,
                 normalized_y=normalized_y,
                 screen_x=min(config.WINDOW_WIDTH - 1, int(normalized_x * config.WINDOW_WIDTH)),
-                screen_y=map_normalized_y_to_screen(normalized_y),
+                screen_y=min(config.WINDOW_HEIGHT - 1, int(normalized_y * config.WINDOW_HEIGHT)),
             )
-            self._last_valid_cursor = cursor
-            self._last_valid_cursor_at = now
-            return TrackingFrame(True, finger_mode, cursor, index_extended, middle_extended)
+            frame = TrackingFrame(
+                True,
+                palm,
+                features.open_palm,
+                features.index_extended,
+                features.middle_extended,
+                features.ring_extended,
+                features.pinky_extended,
+            )
+            self._last_valid_frame = frame
+            self._last_valid_frame_at = now
+            return frame
         except Exception as exc:
             self.hand_detected = False
             self.error = f"手部追踪单帧失败: {exc}"
-            return self._held_or_empty_frame(finger_mode, now)
+            return self._held_or_empty_frame(now)
 
-    def _held_or_empty_frame(self, finger_mode: str, now: float) -> TrackingFrame:
+    def _held_or_empty_frame(self, now: float) -> TrackingFrame:
         if (
-            self._last_valid_cursor is not None
-            and self._last_valid_cursor_at is not None
-            and now - self._last_valid_cursor_at <= config.CURSOR_HOLD_TIME
+            self._last_valid_frame is not None
+            and self._last_valid_frame_at is not None
+            and now - self._last_valid_frame_at <= config.CURSOR_HOLD_TIME
         ):
-            return TrackingFrame(False, finger_mode, self._last_valid_cursor, cursor_held=True)
-        return TrackingFrame(False, finger_mode, None)
+            previous = self._last_valid_frame
+            return TrackingFrame(
+                False,
+                previous.palm_center,
+                previous.open_palm,
+                previous.index_extended,
+                previous.middle_extended,
+                previous.ring_extended,
+                previous.pinky_extended,
+                palm_held=True,
+            )
+        return TrackingFrame(False, None, False)
 
     def close(self) -> None:
         if self.capture is not None:
@@ -201,5 +247,5 @@ class HandTracker:
             except Exception:
                 pass
             self.landmarker = None
-        self._last_valid_cursor = None
-        self._last_valid_cursor_at = None
+        self._last_valid_frame = None
+        self._last_valid_frame_at = None

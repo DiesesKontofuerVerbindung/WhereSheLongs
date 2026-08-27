@@ -1,4 +1,4 @@
-"""All adjustable Prototype 2 parameters live in this file."""
+"""All adjustable Fan Gesture Prototype parameters live in this file."""
 
 from pathlib import Path
 
@@ -8,7 +8,7 @@ MODEL_PATH = PROJECT_DIR / "hand_landmarker.task"
 RESULTS_DIR = PROJECT_DIR / "results"
 
 # Window and camera.
-WINDOW_NAME = "Swipe Checklist Prototype 2"
+WINDOW_NAME = "Fan Gesture Prototype 2"
 WINDOW_WIDTH = 1000
 WINDOW_HEIGHT = 700
 CAMERA_INDEX = 0
@@ -18,43 +18,35 @@ MIRROR_CAMERA = True
 TARGET_FPS = 30
 CAMERA_BUFFER_SIZE = 1
 
-# Layout: blocks live in logical section 5, between 4/6 and 5/6 of the screen.
-SECTION_COUNT = 6
-SECTION_HEIGHT = WINDOW_HEIGHT / SECTION_COUNT
-BLOCK_COUNT = 5
-BLOCK_WIDTH = 100
-BLOCK_HEIGHT = 100
-BLOCK_GAP = 0
-BLOCK_SECTION = 5
-BLOCK_CENTER_Y = SECTION_HEIGHT * (BLOCK_SECTION - 0.5)
+# Explainable palm classification. Finger extension combines a PIP joint angle
+# with fingertip distance from the palm; it does not assume an upright hand.
+FINGER_EXTENDED_MIN_ANGLE = 150.0
+FINGER_EXTENDED_DISTANCE_RATIO = 1.12
 
-# Interaction and swipe geometry.
-INTERACTION_BOTTOM_RATIO = 1.0
-INTERACTION_BOTTOM_Y = WINDOW_HEIGHT * INTERACTION_BOTTOM_RATIO
-REMOVE_THRESHOLD_Y = WINDOW_HEIGHT * 2 / 6
-
-# Camera-to-screen calibration. A webcam often sees only the upper portion of
-# the player's reachable hand range, so raw MediaPipe Y is compressed into the
-# full playable height instead of being copied one-to-one.
-CURSOR_Y_INPUT_MIN = 0.0
-CURSOR_Y_INPUT_MAX = 0.62
-CURSOR_Y_OUTPUT_MIN_RATIO = 0.0
-CURSOR_Y_OUTPUT_MAX_RATIO = INTERACTION_BOTTOM_RATIO
-
-BLOCK_ARM_TIME = 0.22
-BLOCK_HITBOX_MARGIN = 22
-MIN_SWIPE_START_DISTANCE = 26.0
-MIN_SWIPE_UP_DISTANCE = 230.0
-MAX_HORIZONTAL_DRIFT = 90.0
-MAX_SWIPE_TIME = 2.5
-FAIL_AUTO_REARM_TIME = 0.35
+# Fan state machine and horizontal motion geometry (screen pixels / seconds).
+PALM_ARM_TIME = 0.25
+PALM_ARM_MAX_DRIFT = 36.0
+FAN_START_DISTANCE = 55.0
+MIN_HORIZONTAL_AMPLITUDE = 80.0
+MIN_DIRECTION_DISTANCE = 45.0
+MAX_VERTICAL_DRIFT = 105.0
+JITTER_DEADZONE = 7.0
+DIRECTION_HYSTERESIS = 18.0
+FAN_IDLE_TIMEOUT = 1.20
+OPEN_PALM_GRACE_TIME = 0.18
+MIN_SWEEPS_FOR_SUCCESS = 2
 SMOOTHING_FACTOR = 0.35
+VELOCITY_SMOOTHING_FACTOR = 0.35
 MAX_MISSING_HAND_TIME = 0.35
 CURSOR_HOLD_TIME = 0.12
-CANDIDATE_REJECT_DISTANCE = 30.0
-FINGER_EXTENSION_MARGIN = 0.02
 TRAIL_LENGTH = 80
 TRAJECTORY_PREFILL_POINTS = 30
+
+# Normalization references for the explainable 0..1 fan-strength formula.
+STRENGTH_VELOCITY_REFERENCE = 700.0
+STRENGTH_AMPLITUDE_REFERENCE = 180.0
+STRENGTH_FREQUENCY_REFERENCE = 2.5
+RECENT_SWEEP_WINDOW = 2.0
 
 # MediaPipe.
 NUM_HANDS = 1
@@ -65,7 +57,3 @@ MIN_HAND_TRACKING_CONFIDENCE = 0.45
 # Reproducible interactive test targets.
 TARGET_POSITIVE_TRIALS = 20
 TARGET_NEGATIVE_TRIALS = 20
-
-ONE_FINGER = "ONE_FINGER"
-TWO_FINGER = "TWO_FINGER"
-MOUSE_FINGER = "MOUSE"
