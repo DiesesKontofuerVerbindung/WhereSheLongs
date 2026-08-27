@@ -5,12 +5,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import numpy as np
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import config
 from fan_detector import FanDetector, Point, TrajectorySample
 from fan_state import FanState
 from hand_tracker import extract_hand_features
+from interference_field import CYRILLIC_GLYPHS, LATIN_GLYPHS, InterferenceField
 from test_logger import TestLogger
 
 
@@ -53,6 +56,42 @@ def feed_x(detector: FanDetector, x: float, y: float, now: float, count: int = 4
 
 
 class FanGestureTests(unittest.TestCase):
+    def test_interference_cluster_mixes_latin_and_cyrillic_glyphs(self) -> None:
+        field = InterferenceField(seed=7)
+        glyphs = {entity.glyph for entity in field.entities}
+        self.assertTrue(glyphs.intersection(LATIN_GLYPHS))
+        self.assertTrue(glyphs.intersection(CYRILLIC_GLYPHS))
+        self.assertEqual(len(field.entities), config.INTERFERENCE_ENTITY_COUNT)
+
+    def test_fan_strength_pushes_entities_outward_on_both_sides(self) -> None:
+        field = InterferenceField(seed=7)
+        initial_left = sum(entity.x for entity in field.entities if entity.side < 0) / 14
+        initial_right = sum(entity.x for entity in field.entities if entity.side > 0) / 14
+        for step in range(40):
+            field.update(0.05, 0.90, "right" if step % 2 == 0 else "left", step // 10)
+        final_left = sum(entity.x for entity in field.entities if entity.side < 0) / 14
+        final_right = sum(entity.x for entity in field.entities if entity.side > 0) / 14
+        self.assertLess(final_left, initial_left - 100.0)
+        self.assertGreater(final_right, initial_right + 100.0)
+
+    def test_zero_strength_does_not_disperse_and_reset_restores_cluster(self) -> None:
+        field = InterferenceField(seed=11)
+        initial = [(entity.x, entity.y) for entity in field.entities]
+        for _ in range(20):
+            field.update(0.05, 0.0, "center", 0)
+        self.assertEqual([entity.x for entity in field.entities], [point[0] for point in initial])
+        self.assertEqual(field.dispersed_count, 0)
+        field.update(0.10, 1.0, "right", 2)
+        field.reset()
+        self.assertEqual([(entity.x, entity.y) for entity in field.entities], initial)
+        self.assertEqual(field.dispersed_ratio, 0.0)
+
+    def test_unicode_entities_render_onto_opencv_canvas(self) -> None:
+        field = InterferenceField(seed=7)
+        canvas = np.zeros((config.WINDOW_HEIGHT, config.WINDOW_WIDTH, 3), dtype=np.uint8)
+        field.render(canvas)
+        self.assertGreater(int(np.count_nonzero(canvas)), 0)
+
     def test_open_palm_feature_is_rotation_tolerant(self) -> None:
         for rotation in (0.0, 45.0, 90.0, 180.0):
             features = extract_hand_features(open_palm_landmarks(rotation))

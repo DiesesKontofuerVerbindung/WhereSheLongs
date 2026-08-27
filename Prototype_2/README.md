@@ -18,6 +18,8 @@ fan_update { strength, direction, sweep_count }
 
 Each valid direction reversal increments `sweep_count` by one sweep segment. Thresholds for arming, jitter, amplitude, hysteresis, vertical drift, timeouts and strength normalization are all in `config.py`.
 
+The validation scene also contains 28 mixed Latin/Cyrillic letter entities. They begin as one noisy central cluster; active `fan_strength` gives alternating entities opposite outward acceleration, and every confirmed sweep adds an outward impulse. The letters therefore peel apart toward both screen edges while the UI reports a live clear percentage. Pillow plus a Unicode Windows font is used because OpenCV's built-in font cannot render Cyrillic.
+
 ## Run
 
 ```powershell
@@ -28,7 +30,7 @@ python main.py
 
 Keys: `P` positive trial, `N` negative trial, `R` reset, `Q`/`Esc` quit.
 
-The UI shows Open Palm, raw/mapped palm center, state, direction, sweep count, amplitude, horizontal velocity and fan strength. Every launch writes a reproducible `results/run_*` directory with config/environment snapshots, trial summaries and per-frame trajectories.
+The UI shows Open Palm, raw/mapped palm center, state, direction, sweep count, amplitude, horizontal velocity, fan strength and letter-clear percentage. Every launch writes a reproducible `results/run_*` directory with config/environment snapshots, trial summaries and per-frame trajectories.
 
 Recommended negative trials: fist movement, vertical open-palm movement, stationary open palm, small horizontal jitter and one-way horizontal movement.
 

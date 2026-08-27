@@ -12,6 +12,7 @@ import config
 from fan_detector import FanDetector, Point
 from fan_state import FanState
 from hand_tracker import HandTracker, TrackingFrame
+from interference_field import InterferenceField
 from test_logger import ExpectedType, TestLogger, calculate_metrics
 
 
@@ -26,10 +27,12 @@ class PrototypeApp:
     def __init__(self, results_root=None) -> None:
         self.state = AppState()
         self.detector = FanDetector()
+        self.interference = InterferenceField()
         self.tracker = HandTracker()
         self.logger = TestLogger(results_root or config.RESULTS_DIR)
         self.fps = 0.0
         self._last_frame_time = time.perf_counter()
+        self._last_entity_time = self._last_frame_time
         self._fps_samples: list[float] = []
 
     def reset(self, reason: str = "manual_reset") -> None:
@@ -37,6 +40,8 @@ class PrototypeApp:
         if self.logger.active is not None:
             self.logger.finish_trial("aborted", reason, now)
         self.detector.reset()
+        self.interference.reset()
+        self._last_entity_time = now
         self.state.status_message = "Gesture reset"
 
     def update_fps(self) -> None:
@@ -48,12 +53,19 @@ class PrototypeApp:
 
     def tick(self) -> None:
         now = time.perf_counter()
+        entity_delta = max(0.0, min(0.10, now - self._last_entity_time))
+        self._last_entity_time = now
         frame = self.tracker.read()
         self.state.last_frame = frame
         point = None
         if frame.palm_center is not None:
             point = Point(float(frame.palm_center.screen_x), float(frame.palm_center.screen_y))
         event = self.detector.update(point, frame.open_palm, now)
+        if event.reset:
+            self.interference.reset()
+        else:
+            entity_strength = event.fan_strength if event.state == FanState.FANNING else 0.0
+            self.interference.update(entity_delta, entity_strength, event.direction, event.sweep_count)
 
         if event.started:
             self.logger.start_trial(self.state.expected_type, now)
@@ -77,6 +89,11 @@ class PrototypeApp:
 
     def render(self) -> np.ndarray:
         canvas = np.full((config.WINDOW_HEIGHT, config.WINDOW_WIDTH, 3), (10, 12, 18), dtype=np.uint8)
+        split_x = int(config.INTERFERENCE_CENTER_X)
+        for y in range(285, config.WINDOW_HEIGHT - 30, 22):
+            cv2.line(canvas, (split_x, y), (split_x, min(y + 10, config.WINDOW_HEIGHT - 30)), (42, 48, 62), 1, cv2.LINE_AA)
+        cv2.putText(canvas, "< DISPERSE", (40, config.WINDOW_HEIGHT - 24), cv2.FONT_HERSHEY_SIMPLEX, 0.60, (125, 150, 185), 1, cv2.LINE_AA)
+        cv2.putText(canvas, "DISPERSE >", (config.WINDOW_WIDTH - 170, config.WINDOW_HEIGHT - 24), cv2.FONT_HERSHEY_SIMPLEX, 0.60, (125, 150, 185), 1, cv2.LINE_AA)
         center_y = int(self.detector.anchor_y if self.detector.anchor_y is not None else config.WINDOW_HEIGHT / 2)
         cv2.line(canvas, (0, center_y), (config.WINDOW_WIDTH, center_y), (65, 70, 85), 1, cv2.LINE_AA)
         if self.detector.anchor_y is not None:
@@ -84,6 +101,8 @@ class PrototypeApp:
             lower = int(min(config.WINDOW_HEIGHT - 1, self.detector.anchor_y + config.MAX_VERTICAL_DRIFT))
             cv2.line(canvas, (0, upper), (config.WINDOW_WIDTH, upper), (55, 105, 125), 1, cv2.LINE_AA)
             cv2.line(canvas, (0, lower), (config.WINDOW_WIDTH, lower), (55, 105, 125), 1, cv2.LINE_AA)
+
+        self.interference.render(canvas)
 
         for first, second in zip(self.detector.trail, self.detector.trail[1:]):
             cv2.line(canvas, (int(first.x), int(first.y)), (int(second.x), int(second.y)), (100, 155, 255), 3, cv2.LINE_AA)
@@ -122,6 +141,7 @@ class PrototypeApp:
             f"Direction: {self.detector.direction.upper()}    Sweep Count: {self.detector.sweep_count}",
             f"Amplitude: {self.detector.horizontal_amplitude:7.1f}px    Horizontal Velocity: {self.detector.horizontal_velocity:8.1f}px/s",
             f"Fan Strength: {self.detector.fan_strength:.3f}    Expected: {self.state.expected_type.upper()}",
+            f"Letters dispersed: {self.interference.dispersed_count}/{len(self.interference.entities)}    Clear: {self.interference.dispersed_ratio * 100:5.1f}%",
             f"Trials: {self.logger.completed_trials}/{self.logger.target_total}    TP/TN/FP/FN: {metrics['tp']}/{metrics['tn']}/{metrics['fp']}/{metrics['fn']}    Acc: {accuracy_text}",
             f"Camera: {self.tracker.error or 'ready'}",
             f"Status: {self.state.status_message}",

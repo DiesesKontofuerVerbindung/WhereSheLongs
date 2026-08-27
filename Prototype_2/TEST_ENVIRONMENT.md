@@ -20,6 +20,8 @@ Negative trials:
 Negative action types:
 Observed false sweeps:
 Mean / peak fan strength:
+Letters dispersed after valid fan:
+Observed Unicode rendering issues:
 
 Git commit:
 Git branch:
