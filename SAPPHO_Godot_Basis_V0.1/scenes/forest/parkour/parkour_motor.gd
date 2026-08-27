@@ -9,6 +9,7 @@ class_name ParkourMotor
 @export var max_fall_speed := 1100.0
 @export var coyote_time := 0.12
 @export var jump_buffer_time := 0.12
+@export var slide_speed := 320.0
 @export_range(0.1, 1.0, 0.05) var jump_release_multiplier := 0.45
 @export var variable_jump_enabled := true
 
@@ -16,6 +17,7 @@ var velocity := Vector2.ZERO
 var coyote_timer := 0.0
 var jump_buffer_timer := 0.0
 var jump_count := 0
+var is_sliding := false
 
 
 func step(
@@ -24,13 +26,19 @@ func step(
         jump_pressed: bool,
         jump_held: bool,
         jump_released: bool,
-        grounded: bool
+        grounded: bool,
+        slide_pressed: bool = false
 ) -> Vector2:
     coyote_timer = coyote_time if grounded else maxf(0.0, coyote_timer - delta)
     jump_buffer_timer = jump_buffer_time if jump_pressed else maxf(0.0, jump_buffer_timer - delta)
 
+    is_sliding = grounded and slide_pressed
     var target_speed := clampf(horizontal_input, -1.0, 1.0) * move_speed
     var acceleration := ground_acceleration if not is_zero_approx(horizontal_input) else ground_deceleration
+    if is_sliding:
+        var slide_direction := signf(horizontal_input) if not is_zero_approx(horizontal_input) else signf(velocity.x)
+        target_speed = slide_direction * maxf(absf(velocity.x), slide_speed)
+        acceleration = ground_acceleration if not is_zero_approx(slide_direction) else ground_deceleration
     velocity.x = move_toward(velocity.x, target_speed, acceleration * delta)
 
     if grounded and velocity.y > 0.0:
@@ -54,6 +62,7 @@ func reset_motion() -> void:
     velocity = Vector2.ZERO
     coyote_timer = 0.0
     jump_buffer_timer = 0.0
+    is_sliding = false
 
 
 func reset_counters() -> void:

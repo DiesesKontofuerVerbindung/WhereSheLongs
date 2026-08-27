@@ -9,6 +9,7 @@
 
 [node name="ParkourMechanicsTest" type="Node2D"]
 script = ExtResource("1_controller")
+platforms_path = NodePath("Gameplay/Platforms")
 
 [node name="Background" type="ColorRect" parent="."]
 z_index = -10

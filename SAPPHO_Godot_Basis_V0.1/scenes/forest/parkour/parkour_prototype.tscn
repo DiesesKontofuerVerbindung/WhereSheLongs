@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=27 format=3]
 
 [ext_resource type="Script" path="res://scenes/forest/parkour/parkour_controller.gd" id="1_controller"]
 [ext_resource type="Texture2D" path="res://scenes/forest/parkour/reference/forest_parkour_art.png" id="2_art"]
@@ -8,6 +8,43 @@
 [ext_resource type="PackedScene" path="res://scenes/forest/parkour/parkour_platform.tscn" id="6_platform"]
 [ext_resource type="PackedScene" path="res://shared/player/player.tscn" id="7_player"]
 [ext_resource type="Script" path="res://scenes/forest/parkour/parkour_debug.gd" id="8_debug"]
+[ext_resource type="Script" path="res://scenes/forest/parkour/parkour_eye_transition.gd" id="9_eye"]
+[ext_resource type="Script" path="res://scenes/forest/parkour/parkour_vine_gate.gd" id="10_vine"]
+[ext_resource type="Script" path="res://scenes/forest/parkour/parkour_predator_plant.gd" id="11_plant"]
+[ext_resource type="Script" path="res://scenes/forest/parkour/amai_parkour_placeholder.gd" id="12_amai"]
+
+[sub_resource type="RectangleShape2D" id="Rect_ground"]
+size = Vector2(1920, 100)
+
+[sub_resource type="RectangleShape2D" id="Rect_vine"]
+size = Vector2(160, 120)
+
+[sub_resource type="RectangleShape2D" id="Rect_jump_sensor"]
+size = Vector2(220, 190)
+
+[sub_resource type="RectangleShape2D" id="Rect_slide_sensor"]
+size = Vector2(220, 54)
+
+[sub_resource type="RectangleShape2D" id="Rect_hazard"]
+size = Vector2(190, 130)
+
+[sub_resource type="RectangleShape2D" id="Rect_risk_sensor"]
+size = Vector2(520, 220)
+
+[sub_resource type="RectangleShape2D" id="Rect_safe_sensor"]
+size = Vector2(190, 100)
+
+[sub_resource type="RectangleShape2D" id="Rect_exit"]
+size = Vector2(100, 1080)
+
+[sub_resource type="RectangleShape2D" id="Rect_checkpoint"]
+size = Vector2(90, 400)
+
+[sub_resource type="RectangleShape2D" id="Rect_risk_platform_1"]
+size = Vector2(230, 30)
+
+[sub_resource type="RectangleShape2D" id="Rect_risk_platform_2"]
+size = Vector2(210, 30)
 
 [node name="ForestParkourPrototype" type="Node2D"]
 script = ExtResource("1_controller")
@@ -22,6 +59,18 @@ texture = ExtResource("2_art")
 visible = false
 texture = ExtResource("3_layout")
 
+[node name="Segment02Backdrop" type="Polygon2D" parent="Background"]
+polygon = PackedVector2Array(1920, 0, 3840, 0, 3840, 1080, 1920, 1080)
+color = Color(0.055, 0.115, 0.12, 1)
+
+[node name="Segment03Backdrop" type="Polygon2D" parent="Background"]
+polygon = PackedVector2Array(3840, 0, 5760, 0, 5760, 1080, 3840, 1080)
+color = Color(0.105, 0.065, 0.13, 1)
+
+[node name="WaterfallPlaceholderBackdrop" type="Polygon2D" parent="Background"]
+polygon = PackedVector2Array(5760, 0, 7680, 0, 7680, 1080, 5760, 1080)
+color = Color(0.04, 0.08, 0.145, 1)
+
 [node name="ParkourMotor" type="Node" parent="."]
 script = ExtResource("4_motor")
 
@@ -30,29 +79,249 @@ script = ExtResource("5_route")
 
 [node name="Gameplay" type="Node2D" parent="."]
 
-[node name="Platforms" type="Node2D" parent="Gameplay"]
+[node name="Segment01_Platforms" type="Node2D" parent="Gameplay"]
 
-[node name="J1" parent="Gameplay/Platforms" instance=ExtResource("6_platform")]
+[node name="J1" parent="Gameplay/Segment01_Platforms" instance=ExtResource("6_platform")]
 platform_id = &"J1"
 
-[node name="J2" parent="Gameplay/Platforms" instance=ExtResource("6_platform")]
+[node name="J2" parent="Gameplay/Segment01_Platforms" instance=ExtResource("6_platform")]
 platform_id = &"J2"
 
-[node name="J3" parent="Gameplay/Platforms" instance=ExtResource("6_platform")]
+[node name="J3" parent="Gameplay/Segment01_Platforms" instance=ExtResource("6_platform")]
 platform_id = &"J3"
 
-[node name="J3_5" parent="Gameplay/Platforms" instance=ExtResource("6_platform")]
+[node name="J3_5" parent="Gameplay/Segment01_Platforms" instance=ExtResource("6_platform")]
 platform_id = &"J3_5"
 
-[node name="J4" parent="Gameplay/Platforms" instance=ExtResource("6_platform")]
+[node name="J4" parent="Gameplay/Segment01_Platforms" instance=ExtResource("6_platform")]
 platform_id = &"J4"
 
-[node name="J5" parent="Gameplay/Platforms" instance=ExtResource("6_platform")]
-platform_id = &"J5"
+[node name="Segment02_Vines" type="Node2D" parent="Gameplay"]
+
+[node name="GroundVisual" type="Polygon2D" parent="Gameplay/Segment02_Vines"]
+polygon = PackedVector2Array(1920, 900, 3840, 900, 3840, 1080, 1920, 1080)
+color = Color(0.13, 0.31, 0.27, 1)
+
+[node name="Ground" type="StaticBody2D" parent="Gameplay/Segment02_Vines"]
+position = Vector2(2880, 950)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment02_Vines/Ground"]
+shape = SubResource("Rect_ground")
+
+[node name="Title" type="Label" parent="Gameplay/Segment02_Vines"]
+position = Vector2(2100, 100)
+theme_override_colors/font_color = Color(0.62, 0.95, 0.83, 1)
+theme_override_font_sizes/font_size = 42
+text = "SEGMENT 02 · VINE PLACEHOLDER"
+
+[node name="Hint" type="Label" parent="Gameplay/Segment02_Vines"]
+position = Vector2(2100, 160)
+theme_override_font_sizes/font_size = 24
+text = "Space：跳过去    S / ↓：滑过去"
+
+[node name="VineGate" type="Node2D" parent="Gameplay/Segment02_Vines"]
+position = Vector2(2880, 811)
+script = ExtResource("10_vine")
+
+[node name="Visual" type="Polygon2D" parent="Gameplay/Segment02_Vines/VineGate"]
+polygon = PackedVector2Array(-80, -60, 80, -60, 80, 60, -80, 60)
+color = Color(0.38, 0.75, 0.29, 1)
+
+[node name="Label" type="Label" parent="Gameplay/Segment02_Vines/VineGate"]
+position = Vector2(-112, -104)
+theme_override_font_sizes/font_size = 22
+text = "PH_VINE"
+
+[node name="StaticBody2D" type="StaticBody2D" parent="Gameplay/Segment02_Vines/VineGate"]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment02_Vines/VineGate/StaticBody2D"]
+shape = SubResource("Rect_vine")
+
+[node name="JumpSensor" type="Area2D" parent="Gameplay/Segment02_Vines/VineGate"]
+position = Vector2(0, -155)
+collision_layer = 0
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment02_Vines/VineGate/JumpSensor"]
+shape = SubResource("Rect_jump_sensor")
+
+[node name="SlideSensor" type="Area2D" parent="Gameplay/Segment02_Vines/VineGate"]
+position = Vector2(0, 64)
+collision_layer = 0
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment02_Vines/VineGate/SlideSensor"]
+shape = SubResource("Rect_slide_sensor")
+
+[node name="Segment03_PredatorPlant" type="Node2D" parent="Gameplay"]
+
+[node name="GroundVisual" type="Polygon2D" parent="Gameplay/Segment03_PredatorPlant"]
+polygon = PackedVector2Array(3840, 900, 5760, 900, 5760, 1080, 3840, 1080)
+color = Color(0.29, 0.19, 0.34, 1)
+
+[node name="Ground" type="StaticBody2D" parent="Gameplay/Segment03_PredatorPlant"]
+position = Vector2(4800, 950)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment03_PredatorPlant/Ground"]
+shape = SubResource("Rect_ground")
+
+[node name="Title" type="Label" parent="Gameplay/Segment03_PredatorPlant"]
+position = Vector2(4020, 100)
+theme_override_colors/font_color = Color(0.94, 0.68, 0.93, 1)
+theme_override_font_sizes/font_size = 42
+text = "SEGMENT 03 · MOVING PLANT PLACEHOLDER"
+
+[node name="Hint" type="Label" parent="Gameplay/Segment03_PredatorPlant"]
+position = Vector2(4020, 160)
+theme_override_font_sizes/font_size = 24
+text = "等它闭合后直跑，或走上方高台冒险越过"
+
+[node name="PredatorPlant" type="Node2D" parent="Gameplay/Segment03_PredatorPlant"]
+position = Vector2(4740, 810)
+script = ExtResource("11_plant")
+
+[node name="Visual" type="Polygon2D" parent="Gameplay/Segment03_PredatorPlant/PredatorPlant"]
+polygon = PackedVector2Array(-95, 65, -70, -30, 0, -65, 70, -30, 95, 65)
+color = Color(0.92, 0.2, 0.32, 1)
+
+[node name="Label" type="Label" parent="Gameplay/Segment03_PredatorPlant/PredatorPlant"]
+position = Vector2(-120, 84)
+theme_override_font_sizes/font_size = 22
+text = "PH_PLANT · OPEN / CLOSED"
+
+[node name="HazardArea" type="Area2D" parent="Gameplay/Segment03_PredatorPlant/PredatorPlant"]
+position = Vector2(0, 45)
+collision_layer = 0
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment03_PredatorPlant/PredatorPlant/HazardArea"]
+shape = SubResource("Rect_hazard")
+
+[node name="RiskRouteSensor" type="Area2D" parent="Gameplay/Segment03_PredatorPlant/PredatorPlant"]
+position = Vector2(0, -160)
+collision_layer = 0
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment03_PredatorPlant/PredatorPlant/RiskRouteSensor"]
+shape = SubResource("Rect_risk_sensor")
+
+[node name="SafeRouteSensor" type="Area2D" parent="Gameplay/Segment03_PredatorPlant/PredatorPlant"]
+position = Vector2(250, 50)
+collision_layer = 0
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment03_PredatorPlant/PredatorPlant/SafeRouteSensor"]
+shape = SubResource("Rect_safe_sensor")
+
+[node name="RiskPlatform1Visual" type="Polygon2D" parent="Gameplay/Segment03_PredatorPlant"]
+polygon = PackedVector2Array(4385, 705, 4615, 705, 4615, 735, 4385, 735)
+color = Color(0.68, 0.46, 0.78, 1)
+
+[node name="RiskPlatform1" type="StaticBody2D" parent="Gameplay/Segment03_PredatorPlant"]
+position = Vector2(4500, 720)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment03_PredatorPlant/RiskPlatform1"]
+shape = SubResource("Rect_risk_platform_1")
+
+[node name="RiskPlatform2Visual" type="Polygon2D" parent="Gameplay/Segment03_PredatorPlant"]
+polygon = PackedVector2Array(4715, 605, 4925, 605, 4925, 635, 4715, 635)
+color = Color(0.76, 0.52, 0.83, 1)
+
+[node name="RiskPlatform2" type="StaticBody2D" parent="Gameplay/Segment03_PredatorPlant"]
+position = Vector2(4820, 620)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment03_PredatorPlant/RiskPlatform2"]
+shape = SubResource("Rect_risk_platform_2")
+
+[node name="SectionTransitions" type="Node2D" parent="Gameplay"]
+
+[node name="Segment01Exit" type="Area2D" parent="Gameplay/SectionTransitions"]
+position = Vector2(1950, 540)
+collision_layer = 0
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/SectionTransitions/Segment01Exit"]
+shape = SubResource("Rect_exit")
+
+[node name="Segment02Exit" type="Area2D" parent="Gameplay/SectionTransitions"]
+position = Vector2(3870, 540)
+collision_layer = 0
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/SectionTransitions/Segment02Exit"]
+shape = SubResource("Rect_exit")
+
+[node name="Segment03Finish" type="Area2D" parent="Gameplay/SectionTransitions"]
+position = Vector2(5710, 540)
+collision_layer = 0
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/SectionTransitions/Segment03Finish"]
+shape = SubResource("Rect_exit")
+
+[node name="Checkpoints" type="Node2D" parent="Gameplay"]
+
+[node name="S2AfterVine" type="Area2D" parent="Gameplay/Checkpoints"]
+position = Vector2(3290, 700)
+collision_layer = 0
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Checkpoints/S2AfterVine"]
+shape = SubResource("Rect_checkpoint")
+
+[node name="S3AfterPlant" type="Area2D" parent="Gameplay/Checkpoints"]
+position = Vector2(5210, 700)
+collision_layer = 0
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Checkpoints/S3AfterPlant"]
+shape = SubResource("Rect_checkpoint")
+
+[node name="WaterfallIntroPlaceholder" type="Node2D" parent="Gameplay"]
+
+[node name="GroundVisual" type="Polygon2D" parent="Gameplay/WaterfallIntroPlaceholder"]
+polygon = PackedVector2Array(5760, 900, 7680, 900, 7680, 1080, 5760, 1080)
+color = Color(0.1, 0.22, 0.35, 1)
+
+[node name="Ground" type="StaticBody2D" parent="Gameplay/WaterfallIntroPlaceholder"]
+position = Vector2(6720, 950)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/WaterfallIntroPlaceholder/Ground"]
+shape = SubResource("Rect_ground")
+
+[node name="Title" type="Label" parent="Gameplay/WaterfallIntroPlaceholder"]
+position = Vector2(6170, 300)
+theme_override_colors/font_color = Color(0.66, 0.84, 1, 1)
+theme_override_font_sizes/font_size = 50
+text = "WATERFALL INTRO · PLACEHOLDER"
+
+[node name="Subtitle" type="Label" parent="Gameplay/WaterfallIntroPlaceholder"]
+position = Vector2(6300, 380)
+theme_override_font_sizes/font_size = 26
+text = "跑酷完成，等待下一段美术与剧情接入"
 
 [node name="Player" parent="." instance=ExtResource("7_player")]
 z_index = 10
 floor_snap_length = 8.0
+
+[node name="AmaiPlaceholder" type="Node2D" parent="."]
+z_index = 9
+position = Vector2(620, 760)
+script = ExtResource("12_amai")
+
+[node name="Visual" type="Polygon2D" parent="AmaiPlaceholder"]
+polygon = PackedVector2Array(-14, 18, -12, -15, 0, -25, 12, -15, 14, 18)
+color = Color(0.98, 0.6, 0.18, 0.86)
+
+[node name="NameLabel" type="Label" parent="AmaiPlaceholder"]
+position = Vector2(-24, -58)
+theme_override_font_sizes/font_size = 18
+text = "阿麦 PH"
+
+[node name="ChoiceLabel" type="Label" parent="AmaiPlaceholder"]
+position = Vector2(-74, 34)
+theme_override_font_sizes/font_size = 16
+text = ""
 
 [node name="DesignCamera" type="Camera2D" parent="."]
 position = Vector2(960, 540)
@@ -61,17 +330,48 @@ enabled = true
 
 [node name="ParkourDebug" type="Node2D" parent="."]
 script = ExtResource("8_debug")
+platforms_path = NodePath("../Gameplay/Segment01_Platforms")
 
 [node name="CanvasLayer" type="CanvasLayer" parent="ParkourDebug"]
 
 [node name="PanelContainer" type="PanelContainer" parent="ParkourDebug/CanvasLayer"]
 offset_left = 18.0
 offset_top = 18.0
-offset_right = 478.0
-offset_bottom = 300.0
+offset_right = 500.0
+offset_bottom = 360.0
 
 [node name="DebugText" type="Label" parent="ParkourDebug/CanvasLayer/PanelContainer"]
-custom_minimum_size = Vector2(430, 250)
+custom_minimum_size = Vector2(450, 310)
 theme_override_colors/font_color = Color(0.88, 1, 0.95, 1)
 theme_override_font_sizes/font_size = 16
 text = "Parkour Debug"
+
+[node name="EyeTransition" type="CanvasLayer" parent="."]
+layer = 100
+script = ExtResource("9_eye")
+
+[node name="TopLid" type="ColorRect" parent="EyeTransition"]
+mouse_filter = 2
+color = Color(0.003, 0.004, 0.008, 1)
+
+[node name="BottomLid" type="ColorRect" parent="EyeTransition"]
+mouse_filter = 2
+color = Color(0.003, 0.004, 0.008, 1)
+
+[node name="Caption" type="Label" parent="EyeTransition"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -320.0
+offset_top = -65.0
+offset_right = 320.0
+offset_bottom = 65.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0.85, 0.92, 1, 1)
+theme_override_font_sizes/font_size = 32
+text = "PLACEHOLDER"
+horizontal_alignment = 1
+vertical_alignment = 1

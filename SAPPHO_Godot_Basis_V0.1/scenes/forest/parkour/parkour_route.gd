@@ -2,8 +2,18 @@ extends Node
 class_name ParkourRoute
 
 const DESIGN_SIZE := Vector2(1920.0, 1080.0)
-const FOREST_ORDER: Array[StringName] = [&"J1", &"J2", &"J3", &"J3_5", &"J4", &"J5"]
+const FOREST_ORDER: Array[StringName] = [&"J1", &"J2", &"J3", &"J3_5", &"J4"]
 const MECHANICS_ORDER: Array[StringName] = [&"A", &"B", &"C", &"D"]
+const SEGMENT_CENTERS := {
+    1: Vector2(960.0, 540.0),
+    2: Vector2(2880.0, 540.0),
+    3: Vector2(4800.0, 540.0),
+}
+const SEGMENT_SPAWNS := {
+    1: Vector2(384.0, 840.0),
+    2: Vector2(2140.0, 850.0),
+    3: Vector2(4060.0, 850.0),
+}
 
 # Position is the fixed route anchor. Collision offset/size is the tunable gameplay layer.
 const FOREST_DATA := {
@@ -38,15 +48,8 @@ const FOREST_DATA := {
     &"J4": {
         "normalized_position": Vector2(0.76, 0.54),
         "collision_offset": Vector2(0.0, 14.0),
-        "collision_size": Vector2(300.0, 34.0),
-        "landing_sensor_size": Vector2(270.0, 14.0),
-        "checkpoint_enabled": true,
-    },
-    &"J5": {
-        "normalized_position": Vector2(0.67, 0.28),
-        "collision_offset": Vector2(0.0, 16.0),
-        "collision_size": Vector2(230.0, 34.0),
-        "landing_sensor_size": Vector2(205.0, 14.0),
+        "collision_size": Vector2(620.0, 34.0),
+        "landing_sensor_size": Vector2(560.0, 14.0),
         "checkpoint_enabled": true,
     },
 }
@@ -101,3 +104,11 @@ func get_world_position(platform_id: StringName) -> Vector2:
 
 func get_progress_index(platform_id: StringName) -> int:
     return get_order().find(platform_id)
+
+
+func get_segment_center(segment_index: int) -> Vector2:
+    return SEGMENT_CENTERS.get(segment_index, SEGMENT_CENTERS[1])
+
+
+func get_segment_spawn(segment_index: int) -> Vector2:
+    return SEGMENT_SPAWNS.get(segment_index, SEGMENT_SPAWNS[1])

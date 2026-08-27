@@ -1,19 +1,40 @@
-# Forest Parkour Prototype
+# Forest Parkour Prototype V2
 
-Standalone Forest-owned prototype scenes. Both reuse `res://shared/player/player.tscn`; no second Player implementation exists.
+Forest-owned continuous parkour prototype. It reuses `res://shared/player/player.tscn`; all three gameplay segments keep the same Player, ParkourMotor, EXTERNAL control session, and checkpoint state.
 
-## Run
+## Flow
 
+```text
+Segment 01 — supplied forest art
+J1 → J2 → J3 → J3.5 → J4 → jump beyond the right edge
+    ↓ eye-close transition
+Segment 02 — VINE PLACEHOLDER
+Jump over or slide under
+    ↓ eye-close transition
+Segment 03 — MOVING PLANT PLACEHOLDER
+Wait for CLOSED or take the upper risk route
+    ↓ parkour_completed
+WATERFALL INTRO PLACEHOLDER
+```
+
+J4 only completes the platform portion. It does not complete Parkour. J5 and the former advanced-route signal have been removed.
+
+## Run and controls
+
+- Gameplay: `res://scenes/forest/parkour/parkour_prototype.tscn`
 - Mechanism test: `res://scenes/forest/parkour/parkour_mechanics_test.tscn`
-- Fixed-art gameplay: `res://scenes/forest/parkour/parkour_prototype.tscn`
-- Automated smoke: `godot --headless --path . --script res://scenes/forest/parkour/tests/parkour_smoke_test.gd`
+- Smoke: `godot --headless --path . --script res://scenes/forest/parkour/tests/parkour_smoke_test.gd`
 
-Controls: `A/D` or arrows move, `Space` jumps. `F1` toggles diagnostics, `F2` respawns, `F3` teleports to the next platform, `F4` toggles collision/sensor overlays, `F5` toggles J labels, and `F6` switches between clean art and the annotated layout reference.
+Controls:
 
-## Layer contract
+- `A / D` or arrows: run
+- `Space`: jump
+- `S / ↓`: slide while grounded
+- `F1`: diagnostics
+- `F2`: respawn at the current segment checkpoint
+- `F3`: advance debug progress / jump to the next segment
+- `F4`: collision and sensor overlay
+- `F5`: route labels
+- `F6`: clean/annotated Segment 01 background
 
-- Art: the supplied image, fitted uniformly inside the 1920×1080 design canvas.
-- Route: normalized anchors stored only in `parkour_route.gd`.
-- Collision: scene-owned rectangles configured from the route data; no image-derived collision.
-
-The main route is `J1 → J2 → J3 → J3.5 → J4`. The current fixed composition places J5 above the normal jump envelope, so it remains an optional advanced/checkpoint target and emits its own completion event when reached (including through the F3 inspection tool). A future playable connection should add J4.5 or a later dream mechanic instead of increasing global jump strength.
+Segment 02 and 03 are deliberately Greybox placeholders. Their gameplay scripts and collision are separate from visuals so future art replacement does not rewrite the mechanics.
