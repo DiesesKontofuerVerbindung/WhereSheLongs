@@ -148,6 +148,10 @@ class InterferenceField:
         self._last_impulse_direction = 0
         self._high_speed_active = False
         self._font_cache: dict[int, ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
+        self._glyph_cache: dict[
+            tuple[str, int, tuple[int, int, int]],
+            tuple[np.ndarray, np.ndarray],
+        ] = {}
         self.reset()
 
     @property
@@ -306,28 +310,71 @@ class InterferenceField:
         entity.velocity_x *= exp(-config.LETTER_FLOOR_FRICTION * delta_time)
 
     def render(self, canvas: np.ndarray) -> np.ndarray:
-        """Draw real Latin and Cyrillic glyphs onto an OpenCV BGR canvas."""
+        """Blend cached Unicode glyph sprites directly onto a BGR canvas."""
 
-        image = Image.fromarray(canvas[:, :, ::-1].copy())
-        draw = ImageDraw.Draw(image)
         for entity in self.entities:
             if entity.dispersed:
                 continue
-            font = self._font(entity.size)
-            bounds = draw.textbbox((0, 0), entity.glyph, font=font, stroke_width=1)
-            width = bounds[2] - bounds[0]
-            height = bounds[3] - bounds[1]
-            position = (entity.x - width / 2, entity.y - height / 2 - bounds[1])
-            draw.text(
-                position,
-                entity.glyph,
-                font=font,
-                fill=entity.color,
-                stroke_width=1,
-                stroke_fill=(18, 20, 28),
-            )
-        canvas[:] = np.asarray(image)[:, :, ::-1]
+            premultiplied, inverse_alpha = self._glyph_sprite(entity)
+            self._blend_sprite(canvas, premultiplied, inverse_alpha, entity.x, entity.y)
         return canvas
+
+    def _glyph_sprite(self, entity: LetterEntity) -> tuple[np.ndarray, np.ndarray]:
+        key = (entity.glyph, entity.size, entity.color)
+        cached = self._glyph_cache.get(key)
+        if cached is not None:
+            return cached
+        font = self._font(entity.size)
+        measuring_image = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
+        measuring_draw = ImageDraw.Draw(measuring_image)
+        bounds = measuring_draw.textbbox((0, 0), entity.glyph, font=font, stroke_width=1)
+        width = max(1, bounds[2] - bounds[0])
+        height = max(1, bounds[3] - bounds[1])
+        image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        draw.text(
+            (-bounds[0], -bounds[1]),
+            entity.glyph,
+            font=font,
+            fill=(*entity.color, 255),
+            stroke_width=1,
+            stroke_fill=(18, 20, 28, 255),
+        )
+        rgba = np.asarray(image, dtype=np.uint8)
+        alpha = rgba[:, :, 3:4].astype(np.float32) / 255.0
+        bgr = rgba[:, :, :3][:, :, ::-1].astype(np.float32)
+        cached = (bgr * alpha, 1.0 - alpha)
+        self._glyph_cache[key] = cached
+        return cached
+
+    @staticmethod
+    def _blend_sprite(
+        canvas: np.ndarray,
+        premultiplied: np.ndarray,
+        inverse_alpha: np.ndarray,
+        center_x: float,
+        center_y: float,
+    ) -> None:
+        sprite_height, sprite_width = premultiplied.shape[:2]
+        left = int(round(center_x - sprite_width / 2))
+        top = int(round(center_y - sprite_height / 2))
+        right = left + sprite_width
+        bottom = top + sprite_height
+        canvas_height, canvas_width = canvas.shape[:2]
+        clipped_left = max(0, left)
+        clipped_top = max(0, top)
+        clipped_right = min(canvas_width, right)
+        clipped_bottom = min(canvas_height, bottom)
+        if clipped_left >= clipped_right or clipped_top >= clipped_bottom:
+            return
+        source_left = clipped_left - left
+        source_top = clipped_top - top
+        source_right = source_left + clipped_right - clipped_left
+        source_bottom = source_top + clipped_bottom - clipped_top
+        source = premultiplied[source_top:source_bottom, source_left:source_right]
+        inverse = inverse_alpha[source_top:source_bottom, source_left:source_right]
+        destination = canvas[clipped_top:clipped_bottom, clipped_left:clipped_right]
+        destination[:] = (source + destination * inverse).astype(np.uint8)
 
     def _font(self, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         if size not in self._font_cache:

@@ -90,6 +90,12 @@ def physics_field(*entities: LetterEntity) -> InterferenceField:
 
 
 class FanGestureTests(unittest.TestCase):
+    def test_responsive_runtime_calibration(self) -> None:
+        self.assertEqual(config.TARGET_FPS, 240)
+        self.assertLessEqual(config.PALM_ARM_TIME, 0.15)
+        self.assertLessEqual(config.FAN_START_DISTANCE, 35.0)
+        self.assertGreater(config.SMOOTHING_FACTOR, 0.5)
+
     def test_interference_cluster_mixes_latin_and_cyrillic_glyphs(self) -> None:
         field = InterferenceField(seed=7)
         glyphs = {entity.glyph for entity in field.entities}
@@ -225,6 +231,17 @@ class FanGestureTests(unittest.TestCase):
         canvas = np.zeros((config.WINDOW_HEIGHT, config.WINDOW_WIDTH, 3), dtype=np.uint8)
         field.render(canvas)
         self.assertGreater(int(np.count_nonzero(canvas)), 0)
+
+    def test_unicode_glyph_sprites_are_cached_after_first_render(self) -> None:
+        field = physics_field(letter_entity())
+        first = np.zeros((config.WINDOW_HEIGHT, config.WINDOW_WIDTH, 3), dtype=np.uint8)
+        second = np.zeros_like(first)
+        field.render(first)
+        cache_size = len(field._glyph_cache)
+        field.render(second)
+        self.assertEqual(cache_size, 1)
+        self.assertEqual(len(field._glyph_cache), cache_size)
+        self.assertTrue(np.array_equal(first, second))
 
     def test_open_palm_feature_is_rotation_tolerant(self) -> None:
         for rotation in (0.0, 45.0, 90.0, 180.0):

@@ -35,6 +35,7 @@ class PrototypeApp:
         self.fps = 0.0
         self._last_frame_time = time.perf_counter()
         self._last_entity_time = self._last_frame_time
+        self._last_tracking_sample_id = -1
         self._fps_samples: list[float] = []
 
     def reset(self, reason: str = "manual_reset") -> None:
@@ -61,17 +62,29 @@ class PrototypeApp:
         self._last_entity_time = now
         frame = self.tracker.read()
         self.state.last_frame = frame
-        point = None
-        if frame.palm_center is not None:
-            point = Point(float(frame.palm_center.screen_x), float(frame.palm_center.screen_y))
-        event = self.detector.update(point, frame.open_palm, now)
-        palm_x = None if frame.palm_center is None else float(frame.palm_center.screen_x)
-        palm_y = None if frame.palm_center is None else float(frame.palm_center.screen_y)
-        self.physics_palm = self.palm_motion.update(palm_x, palm_y, now, frame.open_palm)
+        event = None
+        if frame.sample_id != self._last_tracking_sample_id:
+            self._last_tracking_sample_id = frame.sample_id
+            sample_time = frame.sample_time if frame.sample_time > 0.0 else now
+            point = None
+            if frame.palm_center is not None:
+                point = Point(float(frame.palm_center.screen_x), float(frame.palm_center.screen_y))
+            event = self.detector.update(point, frame.open_palm, sample_time)
+            palm_x = None if frame.palm_center is None else float(frame.palm_center.screen_x)
+            palm_y = None if frame.palm_center is None else float(frame.palm_center.screen_y)
+            self.physics_palm = self.palm_motion.update(
+                palm_x,
+                palm_y,
+                sample_time,
+                frame.open_palm,
+            )
         self.interference.update(entity_delta, self.physics_palm)
 
+        if event is None:
+            self.update_fps()
+            return
         if event.started:
-            self.logger.start_trial(self.state.expected_type, now)
+            self.logger.start_trial(self.state.expected_type, event.sample.timestamp if event.sample else now)
             for sample in event.initial_samples:
                 self.logger.append_sample(sample)
         if event.sample is not None and self.logger.active is not None:
@@ -138,7 +151,7 @@ class PrototypeApp:
 
         debug_lines = [
             "P positive | N negative | R reset | Q quit",
-            f"FPS: {self.fps:5.1f}    Hand: {hand_status}    Open Palm: {'YES' if frame and frame.open_palm else 'NO'}    {extensions}",
+            f"Loop FPS: {self.fps:5.1f}/{config.TARGET_FPS}    Tracking FPS: {self.tracker.tracking_fps:5.1f}    Hand: {hand_status}    Open Palm: {'YES' if frame and frame.open_palm else 'NO'}    {extensions}",
             f"Raw palm x/y: {raw_xy}    Palm x/y: {palm_xy}",
             f"Fan State: {self.detector.state.value}    Arming: {self.detector.arming_progress * 100:5.1f}%",
             f"Direction: {self.detector.direction.upper()}    Sweep Count: {self.detector.sweep_count}",
@@ -168,11 +181,13 @@ def main() -> None:
     app.tracker.start()
     app.logger.update_environment(app.tracker.camera_info())
     print(f"Results run: {app.logger.run_dir}")
+    frame_interval = 1.0 / config.TARGET_FPS
+    next_frame_at = time.perf_counter()
     try:
         while True:
             app.tick()
             cv2.imshow(config.WINDOW_NAME, app.render())
-            key = cv2.waitKey(max(1, int(1000 / config.TARGET_FPS))) & 0xFF
+            key = cv2.waitKey(1) & 0xFF
             if key in (ord("q"), ord("Q"), 27):
                 break
             if key in (ord("r"), ord("R")):
@@ -181,6 +196,12 @@ def main() -> None:
                 app.state.expected_type = "positive"
             elif key in (ord("n"), ord("N")):
                 app.state.expected_type = "negative"
+            next_frame_at += frame_interval
+            remaining = next_frame_at - time.perf_counter()
+            if remaining > 0.0:
+                time.sleep(remaining)
+            else:
+                next_frame_at = time.perf_counter()
     finally:
         app.close()
         cv2.destroyAllWindows()

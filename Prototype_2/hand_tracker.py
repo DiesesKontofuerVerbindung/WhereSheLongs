@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from math import acos, degrees, hypot
 from pathlib import Path
+from threading import Event, Lock, Thread, current_thread
 import time
 from typing import Optional
 
@@ -39,6 +40,8 @@ class TrackingFrame:
     ring_extended: bool = False
     pinky_extended: bool = False
     palm_held: bool = False
+    sample_id: int = 0
+    sample_time: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -123,6 +126,12 @@ class HandTracker:
         self._timestamp_ms = 0
         self._last_valid_frame: TrackingFrame | None = None
         self._last_valid_frame_at: float | None = None
+        self._latest_frame = TrackingFrame(False, None, False)
+        self._latest_lock = Lock()
+        self._stop_event = Event()
+        self._worker: Thread | None = None
+        self._sample_id = 0
+        self.tracking_fps = 0.0
 
     @property
     def available(self) -> bool:
@@ -168,7 +177,11 @@ class HandTracker:
                 return False
             self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, config.CAMERA_WIDTH)
             self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, config.CAMERA_HEIGHT)
+            self.capture.set(cv2.CAP_PROP_FPS, config.CAMERA_TARGET_FPS)
             self.capture.set(cv2.CAP_PROP_BUFFERSIZE, config.CAMERA_BUFFER_SIZE)
+            self._stop_event.clear()
+            self._worker = Thread(target=self._tracking_loop, name="fan-hand-tracker", daemon=True)
+            self._worker.start()
             self.error = None
             return True
         except Exception as exc:
@@ -177,7 +190,31 @@ class HandTracker:
             return False
 
     def read(self) -> TrackingFrame:
-        now = time.monotonic()
+        """Return immediately with the newest completed tracking sample."""
+
+        with self._latest_lock:
+            return self._latest_frame
+
+    def _tracking_loop(self) -> None:
+        previous_sample_at: float | None = None
+        while not self._stop_event.is_set():
+            frame = self._read_camera_frame()
+            sampled_at = time.perf_counter()
+            if previous_sample_at is not None:
+                delta = max(1e-6, sampled_at - previous_sample_at)
+                instantaneous_fps = 1.0 / delta
+                if self.tracking_fps <= 0.0:
+                    self.tracking_fps = instantaneous_fps
+                else:
+                    self.tracking_fps += 0.15 * (instantaneous_fps - self.tracking_fps)
+            previous_sample_at = sampled_at
+            self._sample_id += 1
+            frame = replace(frame, sample_id=self._sample_id, sample_time=sampled_at)
+            with self._latest_lock:
+                self._latest_frame = frame
+
+    def _read_camera_frame(self) -> TrackingFrame:
+        now = time.perf_counter()
         if not self.available:
             self.hand_detected = False
             return self._held_or_empty_frame(now)
@@ -191,7 +228,7 @@ class HandTracker:
         try:
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
-            self._timestamp_ms += max(1, int(1000 / config.TARGET_FPS))
+            self._timestamp_ms = max(self._timestamp_ms + 1, int(time.perf_counter() * 1000))
             result = self.landmarker.detect_for_video(image, self._timestamp_ms)
             if not result.hand_landmarks:
                 self.hand_detected = False
@@ -244,9 +281,16 @@ class HandTracker:
         return TrackingFrame(False, None, False)
 
     def close(self) -> None:
+        self._stop_event.set()
+        worker = self._worker
+        if worker is not None and worker is not current_thread():
+            worker.join(timeout=1.0)
         if self.capture is not None:
             self.capture.release()
             self.capture = None
+        if worker is not None and worker.is_alive() and worker is not current_thread():
+            worker.join(timeout=1.0)
+        self._worker = None
         if self.landmarker is not None:
             try:
                 self.landmarker.close()
@@ -255,3 +299,7 @@ class HandTracker:
             self.landmarker = None
         self._last_valid_frame = None
         self._last_valid_frame_at = None
+        self._sample_id = 0
+        self.tracking_fps = 0.0
+        with self._latest_lock:
+            self._latest_frame = TrackingFrame(False, None, False)
