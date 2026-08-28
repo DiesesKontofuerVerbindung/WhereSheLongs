@@ -3,6 +3,8 @@ extends SceneTree
 const PARKOUR_SCENE := "res://scenes/forest/parkour/parkour_prototype.tscn"
 const MAX_REPLAY_FRAMES := 1200
 const MIDDLE_GATE_INDEX := 2
+const LATE_GATE_INDEX := 3
+const LATE_ACTION_DELAY_FRAMES := 2
 const AD_PHASE_FRAMES := 6
 const AD_PHASE_COUNT := 8
 
@@ -10,6 +12,11 @@ var failures: Array[String] = []
 var replay_log: Array[String] = []
 var _last_history_size := 0
 var _minimum_velocity_after_action: Dictionary = {}
+var _replay_player: CharacterBody2D
+var _current_replay_frame := -1
+var _gate04_action_zone_frame := -1
+var _gate04_space_frame := -1
+var _gate04_root_contact_seen := false
 
 
 func _initialize() -> void:
@@ -36,6 +43,8 @@ func _run() -> void:
     var gates: Array[Node2D] = []
     for index in 4:
         gates.append(scene.get_node("Gameplay/Segment02_Vines/Gate%02d" % (index + 1)))
+    _replay_player = player
+    gates[LATE_GATE_INDEX].action_execution_requested.connect(_on_gate04_action_zone_entered)
 
     replay_log.append("START p=(%.1f, %.1f) floor=%s" % [player.global_position.x, player.global_position.y, player.is_on_floor()])
     Input.action_press(&"move_right")
@@ -44,6 +53,7 @@ func _run() -> void:
     var middle_probe_done := false
     var completed := false
     for frame in MAX_REPLAY_FRAMES:
+        _current_replay_frame = frame
         var gate_index: int = coordinator.current_gate_index
         if gate_index >= gates.size():
             completed = true
@@ -57,8 +67,12 @@ func _run() -> void:
             middle_probe_done = true
             submitted_gate = gate_index
 
-        if gate_index != submitted_gate and player.global_position.x >= gate.global_position.x - 250.0:
+        var late_gate_ready := gate_index == LATE_GATE_INDEX and _gate04_action_zone_frame >= 0 and frame >= _gate04_action_zone_frame + LATE_ACTION_DELAY_FRAMES
+        var regular_gate_ready := gate_index != LATE_GATE_INDEX and player.global_position.x >= gate.global_position.x - 250.0
+        if gate_index != submitted_gate and (regular_gate_ready or late_gate_ready):
             await _press_space_one_frame()
+            if gate_index == LATE_GATE_INDEX:
+                _gate04_space_frame = frame
             var accepted: bool = coordinator.action_locked or coordinator.get_buffered_action() == 1
             replay_log.append("SPACE gate=%d frame=%d p=(%.1f, %.1f) floor=%s accepted=%s" % [
                 gate_index + 1,
@@ -73,6 +87,7 @@ func _run() -> void:
 
         await physics_frame
         _record_action_response(player, coordinator)
+        _record_gate04_frame(frame, player, coordinator)
         if frame % 60 == 0:
             _record_frame_sample(frame, player, coordinator)
 
@@ -82,6 +97,9 @@ func _run() -> void:
 
     _check(middle_probe_done, "Replay never reached the Gate 3 middle probe")
     _check(completed, "Replay did not pass all four Vine gates")
+    _check(_gate04_action_zone_frame >= 0, "Gate 4 replay never entered its action line")
+    _check(_gate04_space_frame >= _gate04_action_zone_frame + LATE_ACTION_DELAY_FRAMES, "Gate 4 Space input was not delayed by two decision frames")
+    _check(not _gate04_root_contact_seen, "Gate 4 delayed jump touched Root04/UpperCollision")
     _check(coordinator.get_player_history() == [1, 1, 1, 1], "Player action history is not four accepted Space/UP actions")
     for gate_index in 4:
         var minimum_velocity: float = float(_minimum_velocity_after_action.get(gate_index, 0.0))
@@ -180,6 +198,40 @@ func _record_action_response(player: CharacterBody2D, coordinator: Node) -> void
         var active_gate := history_size - 1
         var previous_minimum: float = float(_minimum_velocity_after_action.get(active_gate, player.velocity.y))
         _minimum_velocity_after_action[active_gate] = minf(previous_minimum, player.velocity.y)
+
+
+func _on_gate04_action_zone_entered(_gate_index: int, body: Node2D) -> void:
+    if body == _replay_player and _gate04_action_zone_frame < 0:
+        _gate04_action_zone_frame = _current_replay_frame
+        replay_log.append("GATE04 ACTION_ZONE frame=%d p=(%.1f, %.1f)" % [
+            _gate04_action_zone_frame,
+            _replay_player.global_position.x,
+            _replay_player.global_position.y,
+        ])
+
+
+func _record_gate04_frame(frame: int, player: CharacterBody2D, coordinator: Node) -> void:
+    if _gate04_action_zone_frame < 0 or frame > _gate04_action_zone_frame + 80:
+        return
+    var collision_text := "none"
+    for collision_index in player.get_slide_collision_count():
+        var collision := player.get_slide_collision(collision_index)
+        if collision == null or not (collision.get_collider() is Node):
+            continue
+        var collider_path := str((collision.get_collider() as Node).get_path())
+        collision_text = collider_path
+        if "Root04/UpperCollision" in collider_path:
+            _gate04_root_contact_seen = true
+    replay_log.append("GATE04 STEP frame=%d p=(%.1f, %.1f) v=(%.1f, %.1f) floor=%s locked=%s hit=%s" % [
+        frame,
+        player.global_position.x,
+        player.global_position.y,
+        player.velocity.x,
+        player.velocity.y,
+        player.is_on_floor(),
+        coordinator.action_locked,
+        collision_text,
+    ])
 
 
 func _check(condition: bool, message: String) -> void:

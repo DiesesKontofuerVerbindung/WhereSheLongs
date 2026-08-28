@@ -13,7 +13,6 @@ const EXTRA_SHAPE_PATHS := [
     ^"../Gameplay/Segment02_Vines/RootObstacles/Root02/UpperCollision/CollisionShape2D",
     ^"../Gameplay/Segment02_Vines/RootObstacles/Root03/UpperCollision/CollisionShape2D",
     ^"../Gameplay/Segment02_Vines/RootObstacles/Root04/UpperCollision/CollisionShape2D",
-    ^"../Gameplay/Segment02_Vines/RootObstacles/Root05/UpperCollision/CollisionShape2D",
     ^"../Gameplay/Segment02_Vines/Gate01/DecisionZone/CollisionShape2D",
     ^"../Gameplay/Segment02_Vines/Gate01/ActionZone/CollisionShape2D",
     ^"../Gameplay/Segment02_Vines/Gate01/PassZone/CollisionShape2D",

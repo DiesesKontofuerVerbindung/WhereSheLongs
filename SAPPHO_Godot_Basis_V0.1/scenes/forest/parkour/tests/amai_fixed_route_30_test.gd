@@ -5,10 +5,10 @@ const COORDINATOR_SCRIPT := preload("res://scenes/forest/parkour/vine_echo/vine_
 const RUN_COUNT := 30
 var expected_route := PackedVector2Array([
     Vector2(2070.0, 584.0),
-    Vector2(2089.0, 584.0),
-    Vector2(2462.0, 584.0),
-    Vector2(2781.0, 584.0),
-    Vector2(3110.0, 584.0),
+    Vector2(2122.0, 584.0),
+    Vector2(2538.0, 584.0),
+    Vector2(2946.0, 584.0),
+    Vector2(3371.0, 584.0),
     Vector2(3820.0, 584.0),
 ])
 

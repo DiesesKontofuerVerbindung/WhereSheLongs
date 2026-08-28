@@ -3,6 +3,6 @@
 [ext_resource type="Script" path="res://scenes/forest/parkour/characters/xiaoling_parkour_animation.gd" id="1_animation"]
 
 [node name="XiaolingParkourVisual" type="AnimatedSprite2D"]
-position = Vector2(0, -20)
-scale = Vector2(0.09, 0.09)
+position = Vector2(0, -68)
+scale = Vector2(0.15, 0.15)
 script = ExtResource("1_animation")

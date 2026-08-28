@@ -5,6 +5,7 @@ class_name RootObstacle
 @export var root_id: StringName = &"Root01"
 @export var root_size := Vector2(215.0, 104.0)
 @export var collision_size := Vector2(130.0, 22.0)
+@export var collision_x := 0.0
 @export var collision_y := -42.0
 @export_range(0, 5, 1) var visual_variant := 0
 @export var debug_marker_visible := false
@@ -35,7 +36,7 @@ func _configure_collision() -> void:
     var rectangle := RectangleShape2D.new()
     rectangle.size = collision_size
     collision_shape.shape = rectangle
-    collision_shape.position = Vector2(0.0, collision_y)
+    collision_shape.position = Vector2(collision_x, collision_y)
 
 
 func get_outer_width() -> float:

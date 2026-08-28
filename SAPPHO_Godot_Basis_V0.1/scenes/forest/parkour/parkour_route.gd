@@ -6,7 +6,7 @@ const FOREST_ORDER: Array[StringName] = [&"J1", &"J2", &"J3", &"J3_5", &"J4"]
 const MECHANICS_ORDER: Array[StringName] = [&"A", &"B", &"C", &"D"]
 const SEGMENT_CENTERS := {
     1: Vector2(960.0, 540.0),
-    2: Vector2(2880.0, 540.0),
+    2: Vector2(2880.0, 340.0),
     3: Vector2(4800.0, 540.0),
 }
 const SEGMENT_SPAWNS := {

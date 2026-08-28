@@ -5,8 +5,8 @@ const AMAI_SCRIPT_PATH := "res://scenes/forest/parkour/amai_parkour_placeholder.
 const MECHANICS_SCENE_PATH := "res://scenes/forest/parkour/parkour_mechanics_test.tscn"
 const PROTOTYPE_SCENE_PATH := "res://scenes/forest/parkour/parkour_prototype.tscn"
 const SEGMENT01_ART_PATH := "res://scenes/forest/parkour/reference/segment01_layout_authority_20260828.jpg"
-const SEGMENT02_BACKDROP_ART_PATH := "res://scenes/forest/parkour/art/segment02_backdrop.jpg"
-const SEGMENT02_ROOT_ART_PATH := "res://scenes/forest/parkour/art/segment02_roots.png"
+const SEGMENT02_BACKDROP_ART_PATH := "res://scenes/forest/parkour/art/segment02_backdrop_v2.png"
+const SEGMENT02_ROOT_ART_PATH := "res://scenes/forest/parkour/art/segment02_roots_v2.png"
 const SEGMENT02_FOREGROUND_ART_PATH := "res://scenes/forest/parkour/art/segment02_foreground.png"
 const SEGMENT03_CLOSED_ART_PATH := "res://scenes/forest/parkour/art/segment03_backdrop_closed.jpg"
 const SEGMENT03_OPEN_ART_PATH := "res://scenes/forest/parkour/art/segment03_backdrop_open.jpg"
@@ -238,23 +238,42 @@ func _test_segment_02_geometry(scene: Node, motor: Node, normal_height: float, s
         _check(segment.get_node_or_null(removed_name) == null, "Segment 02 still contains obsolete platform %s" % removed_name)
     var roots := scene.get_node("Gameplay/Segment02_Vines/RootObstacles")
     var segment_art := segment.get_node("Segment02Art")
-    _check(segment_art.get_node("Backdrop").texture.resource_path == SEGMENT02_BACKDROP_ART_PATH, "Segment 02 backdrop art is missing")
-    _check(segment_art.get_node("Roots").texture.resource_path == SEGMENT02_ROOT_ART_PATH, "Segment 02 supplied root art is missing")
-    _check(segment_art.get_node("Foreground").texture.resource_path == SEGMENT02_FOREGROUND_ART_PATH, "Segment 02 foreground art is missing")
-    _check(segment_art.get_node("Foreground").z_index > scene.get_node("Player").z_index, "Segment 02 foreground does not pass in front of the characters")
-    _check(roots.get_child_count() == 5, "Segment 02 must contain five reusable RootObstacle collision instances")
-    var expected_sizes := ["MEDIUM", "SMALL", "LARGE", "MEDIUM", "SMALL"]
+    var segment_center: Vector2 = scene.get_node("ParkourRoute").get_segment_center(2)
+    var expected_art := {
+        "Backdrop": SEGMENT02_BACKDROP_ART_PATH,
+        "Roots": SEGMENT02_ROOT_ART_PATH,
+        "Foreground": SEGMENT02_FOREGROUND_ART_PATH,
+    }
+    for sprite_name in expected_art:
+        var sprite := segment_art.get_node(sprite_name) as Sprite2D
+        _check(sprite.texture != null, "Segment 02 %s texture failed to load" % sprite_name)
+        if sprite.texture != null:
+            _check(sprite.texture.resource_path == expected_art[sprite_name], "Segment 02 %s art is missing" % sprite_name)
+    for sprite_name in ["Backdrop", "Roots", "Foreground"]:
+        var sprite := segment_art.get_node(sprite_name) as Sprite2D
+        if sprite.texture != null:
+            _check(sprite.texture.get_width() == 2560 and sprite.texture.get_height() == 1440, "Segment 02 %s is not sourced at 2560x1440" % sprite_name)
+    _check(segment_art.get_node("Roots").z_index > scene.get_node("Player").z_index, "Segment 02 front roots do not pass in front of the characters")
+    _check(segment_art.get_node("Foreground").z_index > segment_art.get_node("Roots").z_index, "Segment 02 foreground order does not match the supplied layers")
+    _check(segment_center.is_equal_approx(segment_art.get_node("Backdrop").global_position), "Segment 02 camera center exposes space below the supplied art")
+    _check(roots.get_child_count() == 4, "Segment 02 must contain four reusable RootObstacle collision instances")
+    var expected_outer_widths := [365.0, 322.0, 333.0, 341.0]
+    var expected_collision_x := [2212.0, 2628.0, 3036.0, 3461.0]
+    var expected_collision_widths := [135.0, 132.0, 160.0, 226.0]
     var previous_right := -INF
     for index in roots.get_child_count():
         var root_obstacle := roots.get_child(index) as Node2D
         var width: float = root_obstacle.get_outer_width()
         var height: float = root_obstacle.get_outer_height()
-        var size_class := "LARGE" if width >= 200.0 else ("SMALL" if width <= 130.0 else "MEDIUM")
-        _check(size_class == expected_sizes[index], "%s breaks the MEDIUM-SMALL-LARGE rhythm" % root_obstacle.name)
+        var collision_shape := root_obstacle.get_node("UpperCollision/CollisionShape2D") as CollisionShape2D
+        var collision_rectangle := collision_shape.shape as RectangleShape2D
+        _check(is_equal_approx(width, expected_outer_widths[index]), "%s no longer follows the supplied silhouette width" % root_obstacle.name)
+        _check(is_equal_approx(collision_shape.global_position.x, expected_collision_x[index]), "%s collision center is detached from the visible opening" % root_obstacle.name)
+        _check(is_equal_approx(collision_rectangle.size.x, expected_collision_widths[index]), "%s collision width is detached from the visible opening" % root_obstacle.name)
         var left_edge: float = root_obstacle.global_position.x - width * 0.5
         _check(left_edge - previous_right >= 65.0, "%s has no independent landing/run-up space" % root_obstacle.name)
         previous_right = root_obstacle.global_position.x + width * 0.5
-        _check(height >= 70.0, "%s has collapsed into a flat bar" % root_obstacle.name)
+        _check(height >= 300.0, "%s has collapsed away from the supplied tall root silhouette" % root_obstacle.name)
         _check(root_obstacle.scene_file_path == "res://scenes/forest/parkour/root_obstacle.tscn", "%s does not reuse root_obstacle.tscn" % root_obstacle.name)
         _check(not root_obstacle.visual_enabled, "%s still draws development art over the supplied root layer" % root_obstacle.name)
 
@@ -271,7 +290,8 @@ func _test_segment_02_geometry(scene: Node, motor: Node, normal_height: float, s
     for gate_index in 4:
         var gate := scene.get_node("Gameplay/Segment02_Vines/Gate%02d" % (gate_index + 1)) as Node2D
         var root_obstacle := roots.get_child(gate_index) as Node2D
-        _check(is_equal_approx(gate.global_position.x, root_obstacle.global_position.x), "Gate %d is detached from its Root obstacle" % (gate_index + 1))
+        var root_collision := root_obstacle.get_node("UpperCollision/CollisionShape2D") as CollisionShape2D
+        _check(is_equal_approx(gate.global_position.x, root_collision.global_position.x), "Gate %d is detached from its Root opening" % (gate_index + 1))
     _check(scene.get_node("Gameplay/Checkpoints/S2AfterVine") != null, "S2_AFTER_VINE checkpoint is missing")
 
 
@@ -335,7 +355,7 @@ func _test_debug_overlay_coverage(scene: Node) -> void:
     var debug = scene.get_node("ParkourDebug")
     var required_shapes := [
         ^"../Gameplay/Segment02_Vines/RootObstacles/Root01/UpperCollision/CollisionShape2D",
-        ^"../Gameplay/Segment02_Vines/RootObstacles/Root05/UpperCollision/CollisionShape2D",
+        ^"../Gameplay/Segment02_Vines/RootObstacles/Root04/UpperCollision/CollisionShape2D",
         ^"../Gameplay/Segment02_Vines/Gate01/DecisionZone/CollisionShape2D",
         ^"../Gameplay/Segment02_Vines/Gate01/ActionZone/CollisionShape2D",
         ^"../Gameplay/Segment02_Vines/Gate04/PassZone/CollisionShape2D",
@@ -351,7 +371,7 @@ func _test_debug_overlay_coverage(scene: Node) -> void:
     for shape_path in required_shapes:
         _check(shape_path in debug.EXTRA_SHAPE_PATHS, "F4 overlay is missing %s" % shape_path)
     _check(root.get_tree().get_nodes_in_group("parkour_greybox_surface").size() >= 5, "F4 overlay cannot find the Segment 01/03 greybox surfaces")
-    _check(root.get_tree().get_nodes_in_group("segment02_root_obstacle").size() == 5, "F4 overlay cannot find all five Segment 02 Root obstacles")
+    _check(root.get_tree().get_nodes_in_group("segment02_root_obstacle").size() == 4, "F4 overlay cannot find all four Segment 02 Root obstacles")
 
 
 func _surfaces_have_multiple_heights(scene: Node, paths: Array, minimum_count: int) -> bool:
