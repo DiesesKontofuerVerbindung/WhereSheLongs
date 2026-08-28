@@ -1,12 +1,14 @@
-"""Runnable v0.3 UI: armed gesture segmentation plus experiment logging."""
+"""Runnable v0.3 UI: p1 scene + fullscreen invisible ✓; success swaps to p2."""
 
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import cv2
 import numpy as np
+from PIL import Image, ImageDraw, ImageFont
 
 import config
 from gesture_detector import GestureDetector, Point
@@ -21,6 +23,82 @@ class AppState:
     gesture_success: bool = False
     last_finger: FingerPoint | None = None
     status_message: str = ""
+    scene: str = "p1"  # p1 -> p2 after successful gesture/mouse check
+    hint_started_at: float = field(default_factory=time.perf_counter)
+
+
+def _load_scene(path: Path) -> np.ndarray:
+    image = None
+    try:
+        data = np.fromfile(str(path), dtype=np.uint8)
+        if data.size > 0:
+            image = cv2.imdecode(data, cv2.IMREAD_COLOR)
+    except OSError:
+        image = None
+    if image is None:
+        blank = np.full((config.WINDOW_HEIGHT, config.WINDOW_WIDTH, 3), 32, dtype=np.uint8)
+        cv2.putText(
+            blank,
+            f"Missing scene: {path.name}",
+            (40, config.WINDOW_HEIGHT // 2),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (80, 80, 255),
+            2,
+            cv2.LINE_AA,
+        )
+        return blank
+    if image.shape[1] != config.WINDOW_WIDTH or image.shape[0] != config.WINDOW_HEIGHT:
+        image = cv2.resize(image, (config.WINDOW_WIDTH, config.WINDOW_HEIGHT), interpolation=cv2.INTER_AREA)
+    return image
+
+
+def _chinese_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    candidates = (
+        Path(r"C:\Windows\Fonts\msyh.ttc"),
+        Path(r"C:\Windows\Fonts\msyh.ttf"),
+        Path(r"C:\Windows\Fonts\simhei.ttf"),
+        Path(r"C:\Windows\Fonts\simsun.ttc"),
+    )
+    for path in candidates:
+        if path.exists():
+            try:
+                return ImageFont.truetype(str(path), size=size)
+            except OSError:
+                continue
+    return ImageFont.load_default()
+
+
+_HINT_FONT = _chinese_font(config.HINT_FONT_SIZE)
+
+
+def _draw_hint(canvas: np.ndarray, text: str, center: tuple[int, int], alpha: float = 1.0) -> None:
+    """Draw centered Chinese hint below the checklist; alpha fades out."""
+
+    if alpha <= 0.02:
+        return
+    rgb = cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)
+    pil = Image.fromarray(rgb)
+    draw = ImageDraw.Draw(pil)
+    bbox = draw.textbbox((0, 0), text, font=_HINT_FONT)
+    text_w = bbox[2] - bbox[0]
+    text_h = bbox[3] - bbox[1]
+    x = int(center[0] - text_w / 2)
+    y = int(center[1] - text_h / 2)
+    pad = 10
+    # Soft dark plate so light checklist background stays readable.
+    overlay = Image.new("RGBA", pil.size, (0, 0, 0, 0))
+    overlay_draw = ImageDraw.Draw(overlay)
+    plate_alpha = int(110 * alpha)
+    text_alpha = int(255 * alpha)
+    overlay_draw.rounded_rectangle(
+        (x - pad, y - pad // 2, x + text_w + pad, y + text_h + pad // 2),
+        radius=8,
+        fill=(30, 28, 24, plate_alpha),
+    )
+    overlay_draw.text((x, y), text, font=_HINT_FONT, fill=(245, 240, 230, text_alpha))
+    composed = Image.alpha_composite(pil.convert("RGBA"), overlay).convert("RGB")
+    canvas[:, :, :] = cv2.cvtColor(np.asarray(composed), cv2.COLOR_RGB2BGR)
 
 
 class PrototypeApp:
@@ -33,12 +111,14 @@ class PrototypeApp:
         self.fps = 0.0
         self._last_frame_time = time.perf_counter()
         self._fps_samples: list[float] = []
+        self.scene_p1 = _load_scene(config.SCENE_P1_PATH)
+        self.scene_p2 = _load_scene(config.SCENE_P2_PATH)
 
     def reset(self) -> None:
         now = time.perf_counter()
         if self.logger.active is not None:
             self.logger.finish_trial("aborted", "reset", now)
-        self.state = AppState()
+        self.state = AppState(scene="p1", hint_started_at=now)
         self.detector.reset()
 
     def complete(self, source: str) -> None:
@@ -49,13 +129,14 @@ class PrototypeApp:
         self.state.check_source = source
         self.state.gesture_success = source == "gesture"
         self.detector.mark_checked()
+        self.state.scene = "p2"
+        self.state.status_message = f"checked via {source} -> p2"
 
     def mouse_callback(self, event: int, x: int, y: int, _flags: int, _param) -> None:
-        if event != cv2.EVENT_LBUTTONDOWN or self.state.checked:
+        # Fullscreen hit area: any click on p1 completes (mouse fallback).
+        if event != cv2.EVENT_LBUTTONDOWN or self.state.checked or self.state.scene != "p1":
             return
-        center = config.CHECK_CENTER
-        if (x - center[0]) ** 2 + (y - center[1]) ** 2 <= config.CHECK_RADIUS ** 2:
-            self.complete("mouse")
+        self.complete("mouse")
 
     def update_fps(self) -> None:
         now = time.perf_counter()
@@ -69,7 +150,7 @@ class PrototypeApp:
         now = time.perf_counter()
         finger = self.tracker.read_index_finger()
         self.state.last_finger = finger
-        if not self.state.checked:
+        if self.state.scene == "p1" and not self.state.checked:
             point = None if finger is None else Point(finger.screen_x, finger.screen_y)
             result = self.detector.update(point, now)
             if result.started:
@@ -93,70 +174,41 @@ class PrototypeApp:
         self.update_fps()
 
     def render(self) -> np.ndarray:
-        canvas = np.zeros((config.WINDOW_HEIGHT, config.WINDOW_WIDTH, 3), dtype=np.uint8)
-        center = config.CHECK_CENTER
-        cv2.putText(
-            canvas,
-            "Air check: P positive | N negative | R next/reset | Mouse fallback | Q quit",
-            (24, 36), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (190, 190, 190), 1, cv2.LINE_AA,
-        )
-        circle_colors = {
-            "TRACKING": (180, 180, 180),
-            "ARMING": (0, 140, 255),
-            "ARMED": (0, 220, 255),
-            "DRAWING": (255, 160, 60),
-            "FAILED": (70, 70, 255),
-            "CHECKED": (60, 210, 120),
-        }
-        circle_color = circle_colors.get(self.detector.state.value, (220, 220, 220))
-        cv2.circle(canvas, center, config.CHECK_RADIUS, circle_color, 3, cv2.LINE_AA)
-        for first, second in zip(self.detector.trail, self.detector.trail[1:]):
-            cv2.line(canvas, (int(first.x), int(first.y)), (int(second.x), int(second.y)), (90, 150, 255), 3, cv2.LINE_AA)
+        canvas = (self.scene_p2 if self.state.scene == "p2" else self.scene_p1).copy()
 
-        if self.state.checked:
-            check_points = [
-                (center[0] - int(config.CHECK_RADIUS * 0.47), center[1] - int(config.CHECK_RADIUS * 0.02)),
-                (center[0] - int(config.CHECK_RADIUS * 0.11), center[1] + int(config.CHECK_RADIUS * 0.36)),
-                (center[0] + int(config.CHECK_RADIUS * 0.56), center[1] - int(config.CHECK_RADIUS * 0.44)),
-            ]
-            cv2.line(canvas, check_points[0], check_points[1], (60, 220, 120), 8, cv2.LINE_AA)
-            cv2.line(canvas, check_points[1], check_points[2], (60, 220, 120), 8, cv2.LINE_AA)
-            cv2.putText(canvas, "CHECKED", (center[0] - 68, center[1] + config.CHECK_RADIUS + 58), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (60, 220, 120), 2, cv2.LINE_AA)
+        if self.state.scene == "p1":
+            if config.SHOW_DETECTION_CIRCLE:
+                cv2.circle(
+                    canvas,
+                    config.CHECK_CENTER,
+                    config.CHECK_RADIUS,
+                    (0, 200, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
+            if config.SHOW_STROKE_TRAIL:
+                for first, second in zip(self.detector.trail, self.detector.trail[1:]):
+                    cv2.line(
+                        canvas,
+                        (int(first.x), int(first.y)),
+                        (int(second.x), int(second.y)),
+                        (90, 150, 255),
+                        3,
+                        cv2.LINE_AA,
+                    )
+
+            elapsed = time.perf_counter() - self.state.hint_started_at
+            if elapsed < config.HINT_DURATION_SEC:
+                # Soft fade in the last 0.4s.
+                remain = config.HINT_DURATION_SEC - elapsed
+                alpha = 1.0 if remain > 0.4 else max(0.0, remain / 0.4)
+                _draw_hint(canvas, config.HINT_TEXT, config.HINT_CENTER, alpha)
 
         if self.state.last_finger is not None:
             finger = self.state.last_finger
             cursor = (finger.screen_x, finger.screen_y)
             cv2.circle(canvas, cursor, config.CURSOR_RADIUS, (0, 180, 255), -1, cv2.LINE_AA)
             cv2.circle(canvas, cursor, config.CURSOR_RADIUS + 4, (255, 255, 255), 1, cv2.LINE_AA)
-
-        finger_text = "-- / --"
-        if self.state.last_finger is not None:
-            finger_text = f"{self.state.last_finger.normalized_x:.2f} / {self.state.last_finger.normalized_y:.2f}"
-        now = time.perf_counter()
-        debug_lines = [
-            f"FPS: {self.fps:5.1f}",
-            f"Hand detected: {'YES' if self.state.last_finger else 'NO'}",
-            f"Finger: x/y={finger_text}",
-            f"State: {self.detector.state.value}",
-            f"Gesture phase: {self.detector.phase.value}",
-            f"Ready to draw: {'YES' if self.detector.ready_to_draw else 'NO'}",
-            f"Candidate points: {self.detector.candidate_points}",
-            f"Candidate reject: {self.detector.last_candidate_reject_reason or '--'}",
-            f"Matched ✓ family: {self.detector.last_match_profile or '--'}",
-            f"Progress: {self.detector.progress} / 3",
-            f"Path points: {len(self.detector.points)}",
-            f"Draw time: {self.detector.draw_time(now):.2f}s",
-            f"Checked: {'TRUE' if self.state.checked else 'FALSE'}",
-            f"Expected trial: {self.expected_type.upper()}",
-            f"Completed: {self.logger.completed_trials} / {self.logger.target_total}",
-        ]
-        if config.SHOW_ARMING_PROGRESS:
-            debug_lines.insert(5, f"Arming: {self.detector.arming_progress(now) * 100:.0f}%")
-        for index, line in enumerate(debug_lines):
-            cv2.putText(canvas, line, (24, config.WINDOW_HEIGHT - 335 + index * 21), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (170, 210, 230), 1, cv2.LINE_AA)
-
-        if self.tracker.error:
-            cv2.putText(canvas, self.tracker.error[:120], (24, 76), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (80, 120, 255), 1, cv2.LINE_AA)
         return canvas
 
     def close(self) -> None:
