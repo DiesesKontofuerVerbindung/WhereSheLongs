@@ -11,6 +11,9 @@ const ForestFrontTexture := preload("res://assets/backgrounds/forest_before_wate
 const ForestEntryCurtainTexture := preload("res://assets/backgrounds/forest_before_waterfall/forest_entry_curtain.png")
 const ForestAmaiLightTexture := preload("res://assets/backgrounds/forest_before_waterfall/forest_amai_light.png")
 const ForestParticlesTexture := preload("res://assets/backgrounds/forest_before_waterfall/forest_particles.png")
+const WaterfallBackTexture := preload("res://assets/backgrounds/forest_waterfall/waterfall_back.jpg")
+const WaterfallFrontTexture := preload("res://assets/backgrounds/forest_waterfall/waterfall_front.png")
+const WaterfallParticlesTexture := preload("res://assets/backgrounds/forest_waterfall/waterfall_particles.png")
 
 const STAGE_SCENES := ["环境背景图1", "环境背景图2", "环境背景图3", "环境背景图4"]
 const XIAOLING_START_RATIO := 0.16
@@ -19,21 +22,34 @@ const AMAI_FACE_RATIO := 0.78
 # 人物使用真实脚底作原点，并踩在连续森林地表上；对白 UI 独立覆盖在舞台之上。
 const ACTOR_GROUND_RATIO := 0.84
 const ACTOR_MARGIN := 112.0
-const ACTOR_VISUAL_SCALE := 0.28
+const XIAOLING_VISUAL_SCALE := 0.28
+const AMAI_VISUAL_SCALE := 0.34
+const XIAOLING_GAUSSIAN_BLUR_STRENGTH := 0.50
 # 两套角色原图均以画布中心为 Sprite2D 原点；以下数值来自首帧非透明像素脚底。
 const XIAOLING_FOOT_FROM_CENTER := 558.0
 const AMAI_FOOT_FROM_CENTER := 545.0
+# 阿麦原图中心口暖黄六边形到脚底的垂直距离；缩放后仍按身体比例定位。
+const AMAI_HEART_FROM_FEET := 735.0
+const HEART_GLOW_COLOR := Color(1.0, 0.72, 0.20, 1.0)
 # 世界根节点为 -20：后景最终为 -20，前景最终为 -16，人物必须夹在二者之间。
 const ACTOR_LAYER_Z := -17
 const LIGHT_WALK_SPEED := 190.0
 const MANUAL_WALK_SPEED := 205.0
 const PROMPT_LIGHT := "将鼠标持续停留在右侧光源"
-const LONG_SCENE_SOURCE_SIZE := Vector2(9342.0, 1440.0)
+const FOREST_SOURCE_SIZE := Vector2(9342.0, 1440.0)
+const WATERFALL_SOURCE_SIZE := Vector2(2560.0, 1440.0)
+const WATERFALL_SOURCE_X := FOREST_SOURCE_SIZE.x
+const CONTINUOUS_WORLD_SOURCE_SIZE := Vector2(11902.0, 1440.0)
+# 瀑布前的可站立地形沿画面向右上抬升；人物终点位于瀑布水体左侧。
+const WATERFALL_SLOPE_START_RATIO := Vector2(0.22, 0.76)
+const WATERFALL_SLOPE_END_RATIO := Vector2(0.56, 0.63)
+const WATERFALL_XIAOLING_STOP_RATIO := 0.34
+const WATERFALL_AMAI_STOP_RATIO := 0.50
 const LIGHT_SOURCE_POSITION := Vector2(2534.0, 720.0)
 const SCENE_SCROLL_RATIOS := {
 	"环境背景图1": 0.0,
-	"环境背景图2": 0.31,
-	"环境背景图3": 0.65,
+	"环境背景图2": 0.225,
+	"环境背景图3": 0.472,
 	"环境背景图4": 1.0,
 }
 const CONTINUOUS_TRAVEL_SECONDS := {
@@ -69,6 +85,9 @@ var _forest_front: Sprite2D
 var _entry_curtain: Sprite2D
 var _amai_light_art: Sprite2D
 var _forest_particles: Sprite2D
+var _waterfall_back: Sprite2D
+var _waterfall_front: Sprite2D
+var _waterfall_particles: Sprite2D
 var _world_dark_overlay: ColorRect
 var _xiaoling: CharacterBody2D
 var _amai: CharacterBody2D
@@ -93,7 +112,7 @@ func _ready() -> void:
 
 func _build_long_scene() -> void:
 	_world_root = Node2D.new()
-	_world_root.name = "ForestBeforeWaterfallLongScene"
+	_world_root.name = "ForestToWaterfallContinuousWorld"
 	_world_root.z_index = -20
 	add_child(_world_root)
 
@@ -103,6 +122,12 @@ func _build_long_scene() -> void:
 	_forest_front = _make_world_layer("ForestFront", ForestFrontTexture, 4)
 	_forest_particles = _make_world_layer("ForestParticles", ForestParticlesTexture, 5)
 	_forest_particles.visible = false
+
+	_waterfall_back = _make_world_layer("WaterfallBack", WaterfallBackTexture, 0)
+	_waterfall_front = _make_world_layer("WaterfallFront", WaterfallFrontTexture, 4)
+	_waterfall_particles = _make_world_layer("WaterfallParticles", WaterfallParticlesTexture, 5)
+	for waterfall_layer in [_waterfall_back, _waterfall_front, _waterfall_particles]:
+		waterfall_layer.position.x = WATERFALL_SOURCE_X
 
 	_world_dark_overlay = ColorRect.new()
 	_world_dark_overlay.name = "LongSceneDarknessOverlay"
@@ -134,9 +159,10 @@ func _build_characters() -> void:
 	add_child(_xiaoling)
 	_xiaoling_visual = XiaolingVisualScene.instantiate() as AnimatedSprite2D
 	_xiaoling_visual.name = "StoryXiaolingVisual"
-	_xiaoling_visual.scale = Vector2.ONE * ACTOR_VISUAL_SCALE
-	_xiaoling_visual.position = Vector2(0.0, -XIAOLING_FOOT_FROM_CENTER * ACTOR_VISUAL_SCALE)
+	_xiaoling_visual.scale = Vector2.ONE * XIAOLING_VISUAL_SCALE
+	_xiaoling_visual.position = Vector2(0.0, -XIAOLING_FOOT_FROM_CENTER * XIAOLING_VISUAL_SCALE)
 	_xiaoling_visual.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_xiaoling_visual.material = _make_xiaoling_blur_material()
 	_xiaoling.add_child(_xiaoling_visual)
 
 	_amai = CharacterBody2D.new()
@@ -146,11 +172,38 @@ func _build_characters() -> void:
 	add_child(_amai)
 	_amai_visual = AmaiVisualScene.instantiate() as AnimatedSprite2D
 	_amai_visual.name = "StoryAmaiVisual"
-	_amai_visual.scale = Vector2.ONE * ACTOR_VISUAL_SCALE
-	_amai_visual.position = Vector2(0.0, -AMAI_FOOT_FROM_CENTER * ACTOR_VISUAL_SCALE)
+	_amai_visual.scale = Vector2.ONE * AMAI_VISUAL_SCALE
+	_amai_visual.position = Vector2(0.0, -AMAI_FOOT_FROM_CENTER * AMAI_VISUAL_SCALE)
 	_amai_visual.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_amai.add_child(_amai_visual)
 	_amai.visible = false
+
+
+func _make_xiaoling_blur_material() -> ShaderMaterial:
+	var blur_shader := Shader.new()
+	blur_shader.code = """
+shader_type canvas_item;
+
+uniform float blur_strength : hint_range(0.0, 1.0) = 0.50;
+
+void fragment() {
+	vec2 offset = TEXTURE_PIXEL_SIZE * (blur_strength * 32.0);
+	vec4 blurred = texture(TEXTURE, UV) * 0.25;
+	blurred += texture(TEXTURE, UV + vec2(offset.x, 0.0)) * 0.125;
+	blurred += texture(TEXTURE, UV - vec2(offset.x, 0.0)) * 0.125;
+	blurred += texture(TEXTURE, UV + vec2(0.0, offset.y)) * 0.125;
+	blurred += texture(TEXTURE, UV - vec2(0.0, offset.y)) * 0.125;
+	blurred += texture(TEXTURE, UV + offset) * 0.0625;
+	blurred += texture(TEXTURE, UV - offset) * 0.0625;
+	blurred += texture(TEXTURE, UV + vec2(offset.x, -offset.y)) * 0.0625;
+	blurred += texture(TEXTURE, UV + vec2(-offset.x, offset.y)) * 0.0625;
+	COLOR = blurred * COLOR;
+}
+"""
+	var blur_material := ShaderMaterial.new()
+	blur_material.shader = blur_shader
+	blur_material.set_shader_parameter("blur_strength", XIAOLING_GAUSSIAN_BLUR_STRENGTH)
+	return blur_material
 
 
 func _build_light_hover_area() -> void:
@@ -208,7 +261,7 @@ func _layout_stage() -> void:
 func _layout_long_scene() -> void:
 	if _world_root == null:
 		return
-	_world_scale = size.y / LONG_SCENE_SOURCE_SIZE.y
+	_world_scale = size.y / CONTINUOUS_WORLD_SOURCE_SIZE.y
 	_world_root.scale = Vector2(_world_scale, _world_scale)
 	_apply_world_scroll_ratio(_world_scroll_ratio)
 
@@ -224,12 +277,12 @@ func _draw() -> void:
 	if not visible:
 		return
 	if _heart_glow_visible and _amai != null and _amai.visible:
-		var heart_position := _amai.position + Vector2(0.0, -72.0)
+		var heart_position := _amai_heart_position()
 		var pulse := 1.0 + sin(_phase * 2.2) * 0.07
 		for ring in range(7, 0, -1):
 			var radius := (16.0 + float(ring) * 13.0) * pulse
-			draw_circle(heart_position, radius, Color(0.82, 0.65, 0.96, 0.020 * float(8 - ring)))
-		draw_circle(heart_position, 10.0 * pulse, Color(0.94, 0.84, 1.0, 0.90))
+			draw_circle(heart_position, radius, Color(HEART_GLOW_COLOR.r, HEART_GLOW_COLOR.g, HEART_GLOW_COLOR.b, 0.018 * float(8 - ring)))
+		draw_circle(heart_position, 10.0 * pulse, Color(1.0, 0.88, 0.42, 0.94))
 
 
 func set_scene(scene_name: String, instant_scroll := false) -> void:
@@ -243,8 +296,7 @@ func set_scene(scene_name: String, instant_scroll := false) -> void:
 	if scene_name == "环境背景图1" and changed:
 		_reset_for_light_approach()
 	elif scene_name == "环境背景图4" and changed:
-		_set_actor_ratio(_xiaoling, 0.48)
-		_set_actor_ratio(_amai, 0.64)
+		_place_actors_before_waterfall()
 		_xiaoling.visible = true
 		_amai.visible = true
 		_set_facing(_xiaoling_visual, true)
@@ -284,9 +336,25 @@ func travel_to_scene(scene_name: String, transition_id: String, verify_mode: boo
 	_world_scroll_tween.set_trans(Tween.TRANS_SINE)
 	_world_scroll_tween.set_ease(Tween.EASE_IN_OUT)
 	_world_scroll_tween.tween_method(_apply_world_scroll_ratio, _world_scroll_ratio, target_ratio, duration)
+	if scene_name == "环境背景图4":
+		_world_scroll_tween.parallel().tween_property(
+			_xiaoling,
+			"position",
+			_waterfall_actor_position(WATERFALL_XIAOLING_STOP_RATIO),
+			duration
+		)
+		_world_scroll_tween.parallel().tween_property(
+			_amai,
+			"position",
+			_waterfall_actor_position(WATERFALL_AMAI_STOP_RATIO),
+			duration
+		)
 	await _world_scroll_tween.finished
-	_xiaoling.velocity = Vector2.ZERO
-	_amai.velocity = Vector2.ZERO
+	if scene_name == "环境背景图4":
+		_place_actors_before_waterfall()
+	else:
+		_xiaoling.velocity = Vector2.ZERO
+		_amai.velocity = Vector2.ZERO
 	_face_actors_toward_each_other()
 	queue_redraw()
 
@@ -323,7 +391,7 @@ func _apply_world_scroll_ratio(scroll_ratio: float) -> void:
 	_world_scroll_ratio = clampf(scroll_ratio, 0.0, 1.0)
 	if _world_root == null:
 		return
-	var scaled_width := LONG_SCENE_SOURCE_SIZE.x * _world_scale
+	var scaled_width := CONTINUOUS_WORLD_SOURCE_SIZE.x * _world_scale
 	var max_scroll := maxf(0.0, scaled_width - size.x)
 	_world_root.position = Vector2(-max_scroll * _world_scroll_ratio, 0.0)
 	if _light_hover_area != null:
@@ -550,7 +618,10 @@ func restore_for_source(source: int, scene_name: String) -> void:
 	if _forest_particles != null:
 		_forest_particles.visible = source >= 58
 	set_darkness_level(0.0)
-	if source <= 51:
+	if scene_name == "环境背景图4":
+		_place_actors_before_waterfall()
+		_face_actors_toward_each_other()
+	elif source <= 51:
 		_reset_for_light_approach()
 		if source == 51:
 			begin_light_interaction()
@@ -636,6 +707,31 @@ func _set_actor_ratio(actor: CharacterBody2D, ratio: float) -> void:
 	actor.velocity = Vector2.ZERO
 
 
+func _waterfall_ground_y_for_ratio(x_ratio: float) -> float:
+	var slope_progress := clampf(
+		inverse_lerp(WATERFALL_SLOPE_START_RATIO.x, WATERFALL_SLOPE_END_RATIO.x, x_ratio),
+		0.0,
+		1.0
+	)
+	return size.y * lerpf(WATERFALL_SLOPE_START_RATIO.y, WATERFALL_SLOPE_END_RATIO.y, slope_progress)
+
+
+func _waterfall_actor_position(x_ratio: float) -> Vector2:
+	return Vector2(
+		clampf(size.x * x_ratio, ACTOR_MARGIN, size.x - ACTOR_MARGIN),
+		_waterfall_ground_y_for_ratio(x_ratio)
+	)
+
+
+func _place_actors_before_waterfall() -> void:
+	if _xiaoling != null:
+		_xiaoling.position = _waterfall_actor_position(WATERFALL_XIAOLING_STOP_RATIO)
+		_xiaoling.velocity = Vector2.ZERO
+	if _amai != null:
+		_amai.position = _waterfall_actor_position(WATERFALL_AMAI_STOP_RATIO)
+		_amai.velocity = Vector2.ZERO
+
+
 func _set_facing(visual: AnimatedSprite2D, facing_right: bool) -> void:
 	if visual != null:
 		visual.flip_h = not facing_right
@@ -650,7 +746,13 @@ func verify_contract() -> bool:
 	if _xiaoling == null or _amai == null or _light_hover_area == null or _world_root == null:
 		return false
 	for texture in [ForestBackTexture, ForestFrontTexture, ForestEntryCurtainTexture, ForestAmaiLightTexture, ForestParticlesTexture]:
-		if texture == null or texture.get_size() != LONG_SCENE_SOURCE_SIZE:
+		if texture == null or texture.get_size() != FOREST_SOURCE_SIZE:
+			return false
+	for texture in [WaterfallBackTexture, WaterfallFrontTexture, WaterfallParticlesTexture]:
+		if texture == null or texture.get_size() != WATERFALL_SOURCE_SIZE:
+			return false
+	for waterfall_layer in [_waterfall_back, _waterfall_front, _waterfall_particles]:
+		if waterfall_layer == null or not is_equal_approx(waterfall_layer.position.x, WATERFALL_SOURCE_X):
 			return false
 	if _prompt_label == null or _prompt_label.text != PROMPT_LIGHT:
 		return false
@@ -664,13 +766,28 @@ func verify_contract() -> bool:
 	var front_final_z := _world_root.z_index + _forest_front.z_index
 	if not back_final_z < _xiaoling.z_index or not _xiaoling.z_index < front_final_z:
 		return false
+	var waterfall_back_final_z := _world_root.z_index + _waterfall_back.z_index
+	var waterfall_front_final_z := _world_root.z_index + _waterfall_front.z_index
+	if not waterfall_back_final_z < _xiaoling.z_index or not _xiaoling.z_index < waterfall_front_final_z:
+		return false
 	if _amai.z_index != _xiaoling.z_index:
 		return false
-	if not is_equal_approx(_xiaoling_visual.scale.x, ACTOR_VISUAL_SCALE) or not is_equal_approx(_amai_visual.scale.x, ACTOR_VISUAL_SCALE):
+	if not is_equal_approx(_xiaoling_visual.scale.x, XIAOLING_VISUAL_SCALE) or not is_equal_approx(_amai_visual.scale.x, AMAI_VISUAL_SCALE):
+		return false
+	var blur_material := _xiaoling_visual.material as ShaderMaterial
+	if blur_material == null or not is_equal_approx(float(blur_material.get_shader_parameter("blur_strength")), XIAOLING_GAUSSIAN_BLUR_STRENGTH):
 		return false
 	if absf(_actor_feet_y(_xiaoling, _xiaoling_visual, XIAOLING_FOOT_FROM_CENTER) - _xiaoling.position.y) > 0.5:
 		return false
 	if absf(_actor_feet_y(_amai, _amai_visual, AMAI_FOOT_FROM_CENTER) - _amai.position.y) > 0.5:
+		return false
+	if not WATERFALL_SLOPE_START_RATIO.x < WATERFALL_XIAOLING_STOP_RATIO:
+		return false
+	if not WATERFALL_XIAOLING_STOP_RATIO < WATERFALL_AMAI_STOP_RATIO:
+		return false
+	if not WATERFALL_AMAI_STOP_RATIO < WATERFALL_SLOPE_END_RATIO.x:
+		return false
+	if not WATERFALL_SLOPE_START_RATIO.y > WATERFALL_SLOPE_END_RATIO.y:
 		return false
 	return LIGHT_TRIGGER_RATIO < AMAI_FACE_RATIO and AMAI_FACE_RATIO < 0.90 and SCENE_SCROLL_RATIOS.size() == STAGE_SCENES.size()
 
@@ -693,12 +810,21 @@ func _actor_feet_y(actor: CharacterBody2D, visual: AnimatedSprite2D, foot_from_c
 	return actor.position.y + visual.position.y + foot_from_center * visual.scale.y
 
 
+func _amai_heart_position() -> Vector2:
+	if _amai == null:
+		return Vector2.ZERO
+	return _amai.position + Vector2(0.0, -AMAI_HEART_FROM_FEET * AMAI_VISUAL_SCALE)
+
+
 func get_debug_snapshot() -> Dictionary:
 	return {
 		"scene": _current_scene,
 		"visible": visible,
 		"light_visible": _light_visible,
 		"heart_glow_visible": _heart_glow_visible,
+		"heart_glow_x": _amai_heart_position().x,
+		"heart_glow_y": _amai_heart_position().y,
+		"heart_glow_warm_yellow": HEART_GLOW_COLOR.r > HEART_GLOW_COLOR.b and HEART_GLOW_COLOR.g > HEART_GLOW_COLOR.b,
 		"light_active": _light_interaction_active,
 		"light_hovered": _light_hovered,
 		"darkness": _darkness_level,
@@ -708,6 +834,7 @@ func get_debug_snapshot() -> Dictionary:
 		"xiaoling_facing_right": not _xiaoling_visual.flip_h if _xiaoling_visual != null else false,
 		"xiaoling_z_index": _xiaoling.z_index if _xiaoling != null else 0,
 		"xiaoling_visual_scale": _xiaoling_visual.scale.x if _xiaoling_visual != null else 0.0,
+		"xiaoling_gaussian_blur_strength": XIAOLING_GAUSSIAN_BLUR_STRENGTH,
 		"xiaoling_feet_y": _actor_feet_y(_xiaoling, _xiaoling_visual, XIAOLING_FOOT_FROM_CENTER),
 		"amai_x": _amai.position.x if _amai != null else 0.0,
 		"amai_visible": _amai.visible if _amai != null else false,
@@ -720,7 +847,9 @@ func get_debug_snapshot() -> Dictionary:
 		"actor_ground_y": size.y * ACTOR_GROUND_RATIO,
 		"stage_width": size.x,
 		"long_scene_enabled": _world_root != null,
-		"long_scene_source_size": LONG_SCENE_SOURCE_SIZE,
+		"forest_source_size": FOREST_SOURCE_SIZE,
+		"waterfall_source_size": WATERFALL_SOURCE_SIZE,
+		"long_scene_source_size": CONTINUOUS_WORLD_SOURCE_SIZE,
 		"world_scroll_ratio": _world_scroll_ratio,
 		"world_scroll_x": -_world_root.position.x if _world_root != null else 0.0,
 		"continuous_travel_seconds": CONTINUOUS_TRAVEL_SECONDS,
@@ -730,7 +859,19 @@ func get_debug_snapshot() -> Dictionary:
 		"world_z_index": _world_root.z_index if _world_root != null else -100,
 		"forest_back_z_index": (_world_root.z_index + _forest_back.z_index) if _world_root != null and _forest_back != null else -100,
 		"forest_front_z_index": (_world_root.z_index + _forest_front.z_index) if _world_root != null and _forest_front != null else -100,
-		"world_width": LONG_SCENE_SOURCE_SIZE.x * _world_scale,
+		"waterfall_back_z_index": (_world_root.z_index + _waterfall_back.z_index) if _world_root != null and _waterfall_back != null else -100,
+		"waterfall_front_z_index": (_world_root.z_index + _waterfall_front.z_index) if _world_root != null and _waterfall_front != null else -100,
+		"waterfall_particles_z_index": (_world_root.z_index + _waterfall_particles.z_index) if _world_root != null and _waterfall_particles != null else -100,
+		"waterfall_anchor_source_x": _waterfall_back.position.x if _waterfall_back != null else -1.0,
+		"waterfall_active": _current_scene == "环境背景图4",
+		"waterfall_assets_loaded": _waterfall_back != null and _waterfall_front != null and _waterfall_particles != null,
+		"waterfall_slope_start_ratio": WATERFALL_SLOPE_START_RATIO,
+		"waterfall_slope_end_ratio": WATERFALL_SLOPE_END_RATIO,
+		"waterfall_xiaoling_stop_ratio": WATERFALL_XIAOLING_STOP_RATIO,
+		"waterfall_amai_stop_ratio": WATERFALL_AMAI_STOP_RATIO,
+		"waterfall_slope_up_right": WATERFALL_SLOPE_START_RATIO.y > WATERFALL_SLOPE_END_RATIO.y,
+		"waterfall_stop_before_fall": WATERFALL_AMAI_STOP_RATIO < WATERFALL_SLOPE_END_RATIO.x,
+		"world_width": CONTINUOUS_WORLD_SOURCE_SIZE.x * _world_scale,
 		"entry_curtain_visible": _entry_curtain.visible if _entry_curtain != null else false,
 		"particles_visible": _forest_particles.visible if _forest_particles != null else false,
 		"darkness_z_index": _world_dark_overlay.z_index if _world_dark_overlay != null else 0,

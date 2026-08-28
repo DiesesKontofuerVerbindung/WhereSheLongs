@@ -31,8 +31,12 @@ func _ready() -> void:
 	var amai_z := int(initial.get("amai_z_index", -100))
 	if not back_z < xiaoling_z or not xiaoling_z < front_z or amai_z != xiaoling_z:
 		failures.append("人物没有稳定夹在森林后景与前景之间")
-	if float(initial.get("xiaoling_visual_scale", 0.0)) < 0.28 or float(initial.get("amai_visual_scale", 0.0)) < 0.28:
-		failures.append("剧情人物没有按要求统一放大")
+	if float(initial.get("xiaoling_visual_scale", 0.0)) < 0.28:
+		failures.append("小凌人物尺寸低于剧情舞台基准")
+	if float(initial.get("amai_visual_scale", 0.0)) < 0.34:
+		failures.append("阿麦没有按要求再次放大")
+	if not is_equal_approx(float(initial.get("xiaoling_gaussian_blur_strength", -1.0)), 0.50):
+		failures.append("小凌没有应用50%高斯模糊")
 	if float(initial.get("actor_ground_ratio", 0.0)) < 0.83:
 		failures.append("人物地面基准线仍然过高，视觉上会悬空")
 	var ground_y := float(initial.get("actor_ground_y", -100.0))
@@ -80,8 +84,13 @@ func _ready() -> void:
 	if not bool(face_to_face.get("xiaoling_facing_right", false)) or bool(face_to_face.get("amai_facing_right", true)):
 		failures.append("对白出现时小凌与阿麦没有自动面对面")
 	await stage.play_action("heart_light", true)
-	if not bool(stage.get_debug_snapshot().get("heart_glow_visible", false)):
+	var heart_snapshot: Dictionary = stage.get_debug_snapshot()
+	if not bool(heart_snapshot.get("heart_glow_visible", false)):
 		failures.append("阿麦出现后心口光源没有启用")
+	if float(heart_snapshot.get("actor_ground_y", 0.0)) - float(heart_snapshot.get("heart_glow_y", 0.0)) < 220.0:
+		failures.append("阿麦光晕仍停在腰胯区域，没有对准心口")
+	if not bool(heart_snapshot.get("heart_glow_warm_yellow", false)):
+		failures.append("阿麦心口光晕不是暖黄色")
 
 	var before_back := float(stage.get_debug_snapshot().get("xiaoling_x", 0.0))
 	await stage.play_action("xiaoling_back_two", true)
@@ -119,6 +128,38 @@ func _ready() -> void:
 	var waterfall_snapshot: Dictionary = stage.get_debug_snapshot()
 	if not is_equal_approx(float(waterfall_snapshot.get("world_scroll_ratio", 0.0)), 1.0):
 		failures.append("瀑布前锚点没有到达长场景最右端")
+	if not bool(waterfall_snapshot.get("waterfall_active", false)) or not bool(waterfall_snapshot.get("waterfall_assets_loaded", false)):
+		failures.append("环境背景图4没有切入真实瀑布三层美术")
+	if waterfall_snapshot.get("waterfall_source_size", Vector2.ZERO) != Vector2(2560.0, 1440.0):
+		failures.append("瀑布美术尺寸契约不是2560x1440")
+	if not is_equal_approx(float(waterfall_snapshot.get("waterfall_anchor_source_x", -1.0)), 9342.0):
+		failures.append("瀑布没有无缝追加在森林长图右端")
+	var waterfall_back_z := int(waterfall_snapshot.get("waterfall_back_z_index", -100))
+	var waterfall_front_z := int(waterfall_snapshot.get("waterfall_front_z_index", -100))
+	if not waterfall_back_z < int(waterfall_snapshot.get("xiaoling_z_index", -100)) or not int(waterfall_snapshot.get("xiaoling_z_index", -100)) < waterfall_front_z:
+		failures.append("小凌在瀑布段没有夹在后景与前景之间")
+	var stage_width := float(waterfall_snapshot.get("stage_width", 0.0))
+	var stage_height := float(stage.size.y)
+	var xiaoling_stop_ratio := float(waterfall_snapshot.get("waterfall_xiaoling_stop_ratio", 0.0))
+	var amai_stop_ratio := float(waterfall_snapshot.get("waterfall_amai_stop_ratio", 0.0))
+	if not is_equal_approx(float(waterfall_snapshot.get("xiaoling_x", 0.0)), stage_width * xiaoling_stop_ratio):
+		failures.append("小凌没有停在瀑布左侧蓝框区域")
+	if not is_equal_approx(float(waterfall_snapshot.get("amai_x", 0.0)), stage_width * amai_stop_ratio):
+		failures.append("阿麦没有停在瀑布左侧蓝框区域")
+	if not bool(waterfall_snapshot.get("waterfall_slope_up_right", false)):
+		failures.append("瀑布前地面没有按要求向右上形成小斜坡")
+	if not bool(waterfall_snapshot.get("waterfall_stop_before_fall", false)):
+		failures.append("人物终点仍然进入了瀑布水体")
+	if float(waterfall_snapshot.get("xiaoling_feet_y", 0.0)) <= float(waterfall_snapshot.get("amai_feet_y", 0.0)):
+		failures.append("人物脚底没有沿向右上坡道逐渐抬升")
+	if float(waterfall_snapshot.get("amai_feet_y", stage_height)) > stage_height * 0.68:
+		failures.append("瀑布前停靠点仍然过低，人物会站进水里")
+	stage.restore_for_source(125, "环境背景图4")
+	var restored_waterfall: Dictionary = stage.get_debug_snapshot()
+	if not is_equal_approx(float(restored_waterfall.get("xiaoling_x", 0.0)), stage_width * xiaoling_stop_ratio):
+		failures.append("开发者跳到第125行后，小凌又被放回瀑布水体")
+	if not is_equal_approx(float(restored_waterfall.get("amai_x", 0.0)), stage_width * amai_stop_ratio):
+		failures.append("开发者跳到第125行后，阿麦又被放回瀑布水体")
 	var expected_scroll := float(waterfall_snapshot.get("world_width", 0.0)) - float(waterfall_snapshot.get("stage_width", 0.0))
 	if not is_equal_approx(float(waterfall_snapshot.get("world_scroll_x", 0.0)), expected_scroll):
 		failures.append("长场景最右端卷动距离与画布宽度不匹配")
@@ -126,7 +167,7 @@ func _ready() -> void:
 		failures.append("原环境背景图锚点没有统一映射到持续森林长场景")
 
 	if failures.is_empty():
-		print("STORY_STAGE_PASS persistent_dialogue_stage=true continuous_long_scene=true source_size=9342x1440 scroll_right=true no_scene_hard_cut=true light_hover_walk=true mouse_exit_stop=true light_trigger=true darkness=80_percent face_to_face=true heart_glow=true scripted_steps=true amai_bounded=true animations=idle_run_start_run")
+		print("STORY_STAGE_PASS persistent_dialogue_stage=true continuous_long_scene=true source_size=11902x1440 waterfall_source_size=2560x1440 waterfall_appended=true waterfall_layers=back_front_particles actor_between_waterfall_layers=true waterfall_slope_up_right=true waterfall_stop_before_fall=true dev_jump_125_restores_waterfall_approach=true scroll_right=true no_scene_hard_cut=true light_hover_walk=true mouse_exit_stop=true light_trigger=true darkness=80_percent face_to_face=true heart_glow=true heart_glow_chest_aligned=true heart_glow_warm_yellow=true xiaoling_gaussian_blur=0.50 amai_visual_scale=0.34 scripted_steps=true amai_bounded=true animations=idle_run_start_run")
 		get_tree().quit(0)
 		return
 	for failure in failures:
