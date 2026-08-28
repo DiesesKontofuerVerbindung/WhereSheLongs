@@ -20,10 +20,11 @@
 - 文字等待推进时，画面左上角显示“按 Enter / Space 继续”；快捷键提示与按钮文案分离。
 - 全局字体优先使用 `Times New Roman`；中文缺字通过 `SimSun / 宋体` 回退，保持同类衬线字体观感。
 - DOCX 第 122 行进入真实 `ForestRun`；监听原场景的 `parkour_completed`，完成三段跑酷并抵达瀑布引导后返回剧情第 123 行。
+- DOCX 第 157 行进入独立 `TextInput`；玩家补完“小凌：因为……”后的理由，空输入无法提交。提交后进入与 GitHub `Prototype_2_Fan` 同规则的张掌状态机：稳定 0.12 秒、水平往返、两次有效换向；文字随强度向两侧散开，回程不反推文字，完成后再按叙事设计回到原位。玩家原文不会进入模块结果或运行日志。
 - DOCX 第 193 行进入真实 `LakeJump / River Jump` v0.5.7；源码来自 commit `2220f68`，玩法通过原场景 `finished(result)` 返回剧情第 195 行。
 - DOCX 第 238 行进入真实 `StarJar / Firefly Bottle`；把五团星光拖入瓶内后，由原场景 `finished(result)` 返回剧情第 240 行。
 - 三个绑定均运行在独立 `SubViewport` 中，Forest 的摄像机与屏幕坐标不会拖动剧情 UI；F4 行回溯仍能直接抵达对应模块。
-- `WaterfallInteraction`、`TextInput`、`HandInspect`、`BlinkInteraction` 暂保留原 hook，并立即返回 continue/success。
+- `WaterfallInteraction`、`HandInspect`、`BlinkInteraction` 暂保留原 hook，并立即返回 continue/success。
 - 运行到黑暗森林章节终点后停止，不生成下一章。
 
 ## 操作
@@ -33,6 +34,7 @@
 - 跟随/追赶：按 `D / →`；在“走/不走”段按 `A / ←` 会触发入口消失与重新陷入黑暗。
 - 跳水：点击画面上的“跳水”按钮。
 - ForestRun：`A / D` 或方向键移动，`Space` 跳跃，`S / ↓` 下滑；完成三段路线后自动回到剧情。
+- TextInput：输入至少一个非空白字符；按 `Enter` 或点击“说出来”提交，最长 120 个字符。宿主正式契约为 `ingest_gesture("Fan")`；也可逐帧调用 `ingest_hand_sample(...)`，或接收 Python 原型的 `fan_update {strength, direction, sweep_count}`。未连接摄像头桥接时可按 `F` 或点击“触发 Fan”预览。
 - Firefly Bottle：按住星光拖入瓶口，共完成五次后自动回到剧情。
 - LakeJump：按住鼠标左键、`Space` 或 `Enter` 蓄力，松开后起跳；落水或点击“返回”后回到剧情。
 - 诊断面板：按 `F3` 显示/隐藏。

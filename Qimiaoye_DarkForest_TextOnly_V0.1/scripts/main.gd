@@ -27,6 +27,7 @@ const STORY_SHAKE_END_STRENGTH := 18.0
 const MODULE_VIEW_SIZE := Vector2i(1280, 720)
 const EXPECTED_MODULE_BINDINGS := {
 	"ForestRun": {"source": 122, "type": "module", "scene": "res://scenes/forest/parkour/parkour_prototype.tscn", "signal": "parkour_completed"},
+	"TextInput": {"source": 157, "type": "module", "scene": "res://levels/minigames/text_input.tscn", "signal": "finished"},
 	"LakeJump": {"source": 193, "type": "module", "scene": "res://levels/river_jump.tscn", "signal": "finished"},
 	"StarJar": {"source": 238, "type": "module", "scene": "res://levels/minigames/firefly_bottle.tscn", "signal": "finished"},
 }
@@ -1261,6 +1262,11 @@ func _run_embedded_module(event: Dictionary, is_placeholder: bool) -> void:
 		_record_module_failure(module_id, source, "LakeJump 根节点必须是 Node2D")
 	if module_id == "StarJar" and not module_instance is Control:
 		_record_module_failure(module_id, source, "StarJar 根节点必须是 Control")
+	if module_id == "TextInput":
+		if not module_instance is Control:
+			_record_module_failure(module_id, source, "TextInput 根节点必须是 Control")
+		elif not module_instance.has_method("verify_contract") or not bool(module_instance.call("verify_contract")):
+			_record_module_failure(module_id, source, "TextInput 输入、提交与空值保护契约不完整")
 	if is_placeholder and (not module_instance.has_method("verify_contract") or not bool(module_instance.call("verify_contract"))):
 		_record_module_failure(module_id, source, "LakeJump 占位页结构不完整")
 
@@ -1824,7 +1830,7 @@ func _validate_runtime_completion() -> PackedStringArray:
 			errors.append("全流程未经过模块 hook：%s" % module_id)
 		elif int(_module_run_counts.get(module_id, 0)) != 1:
 			errors.append("全流程模块 %s 执行次数异常：%d/1" % [module_id, int(_module_run_counts.get(module_id, 0))])
-	for required_source in [54, 122, 193, 238, 308, 360, 366]:
+	for required_source in [54, 122, 157, 193, 238, 308, 360, 366]:
 		if not _visited_sources.has(required_source):
 			errors.append("全流程未执行 DOCX 行：%d" % required_source)
 	if _module_active or (_module_host != null and _module_host.visible):
@@ -2055,7 +2061,7 @@ func _refresh_diagnostics() -> void:
 
 func _finish_verification(success: bool, issues: PackedStringArray) -> void:
 	if success:
-		var message := "FULL_FLOW_PASS events=%d scenes=%d modules=%d endpoint=%s narration_lines=%d dialogue_lines=%d psychology_lines=%d narration_queue_max=%d dialogue_queue_max=%d narration_layout_samples=%d dialogue_layout_samples=%d choice_layout_samples=%d split_ui=true narration_top_2_20=true narration_centered=true narration_direct_reveal=true dialogue_progressive_reveal=true psychology_in_dialogue=true psychology_parentheses=true dialogue_left_aligned=true dialogue_body_top=true continue_button_centered=true choices_centered=true shortcut_hint=true shake_start_source=354 shake_peak_source=365 shake_end_source=366 shake_progressive=true shake_reset=true dev_docx_jump=true docx_jump_all_sources_resolvable=true dev_jump_logs_preserved=true font=Times_New_Roman cjk_fallback=SimSun narrative_shell_text_only=true ForestRun_source=122 ForestRun_ready=true LakeJump_source=193 LakeJump_ready=true LakeJump_placeholder=false StarJar_source=238 StarJar_ready=true module_subviewport_isolated=true" % [
+		var message := "FULL_FLOW_PASS events=%d scenes=%d modules=%d endpoint=%s narration_lines=%d dialogue_lines=%d psychology_lines=%d narration_queue_max=%d dialogue_queue_max=%d narration_layout_samples=%d dialogue_layout_samples=%d choice_layout_samples=%d split_ui=true narration_top_2_20=true narration_centered=true narration_direct_reveal=true dialogue_progressive_reveal=true psychology_in_dialogue=true psychology_parentheses=true dialogue_left_aligned=true dialogue_body_top=true continue_button_centered=true choices_centered=true shortcut_hint=true shake_start_source=354 shake_peak_source=365 shake_end_source=366 shake_progressive=true shake_reset=true dev_docx_jump=true docx_jump_all_sources_resolvable=true dev_jump_logs_preserved=true font=Times_New_Roman cjk_fallback=SimSun narrative_shell_text_only=true ForestRun_source=122 ForestRun_ready=true TextInput_source=157 TextInput_ready=true TextInput_raw_text_logged=false LakeJump_source=193 LakeJump_ready=true LakeJump_placeholder=false StarJar_source=238 StarJar_ready=true module_subviewport_isolated=true" % [
 			_events.size(),
 			_visited_scenes.size(),
 			_visited_modules.size(),

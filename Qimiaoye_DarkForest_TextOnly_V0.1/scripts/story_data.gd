@@ -120,7 +120,7 @@ static func get_events() -> Array[Dictionary]:
 		{"type": "line", "source": 154, "speaker": "小凌", "text": "哪有那么简单。"},
 		{"type": "line", "source": 155, "speaker": "阿麦", "text": "为什么不简单？"},
 		{"type": "line", "source": 156, "speaker": "小凌", "text": "因为……"},
-		{"type": "module_skip", "source": 157, "id": "TextInput", "result": "continue"},
+		{"type": "module", "source": 157, "id": "TextInput", "scene": "res://levels/minigames/text_input.tscn", "completion_signal": "finished", "result": "success"},
 		{"type": "action", "source": 158, "id": "amai_take_hand", "status": "阿麦拉起小凌的手。"},
 		{"type": "line", "source": 158, "speaker": "阿麦", "text": "那就只做你最想做的那件事"},
 		{"type": "action", "source": 159, "id": "switch_stream_states", "status": "小凌2切换到小凌3，阿麦2切换到阿麦3。"},
