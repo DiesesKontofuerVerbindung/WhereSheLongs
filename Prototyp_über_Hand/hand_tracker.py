@@ -1,9 +1,4 @@
-"""Webcam + MediaPipe Hand Landmarker wrapper.
-
-The rest of the prototype only receives a screen-space index-finger point.
-Camera/model failures are converted into a readable error string so the UI
-can remain usable with the mouse fallback.
-"""
+"""Webcam + MediaPipe Hand Landmarker wrapper."""
 
 from __future__ import annotations
 
@@ -14,7 +9,7 @@ from typing import Optional
 try:
     import cv2
     import mediapipe as mp
-except ImportError as exc:  # Keep importable enough for the mouse-only fallback.
+except ImportError as exc:
     cv2 = None
     mp = None
     IMPORT_ERROR = exc
@@ -26,8 +21,6 @@ import config
 
 @dataclass(frozen=True)
 class FingerPoint:
-    """Index fingertip in both MediaPipe-normalized and window coordinates."""
-
     normalized_x: float
     normalized_y: float
     screen_x: int
@@ -35,8 +28,6 @@ class FingerPoint:
 
 
 class HandTracker:
-    """Owns the camera and one MediaPipe Hand Landmarker instance."""
-
     def __init__(
         self,
         model_path: Path = config.MODEL_PATH,
@@ -48,15 +39,15 @@ class HandTracker:
         self.landmarker = None
         self.error: Optional[str] = None
         self._timestamp_ms = 0
+        self.last_frame = None  # BGR preview frame
+        self._fail_reads = 0
 
     @property
     def available(self) -> bool:
         return self.capture is not None and self.landmarker is not None
 
     def camera_info(self) -> dict[str, object]:
-        """Return only values OpenCV can actually report for this opened camera."""
-
-        if self.capture is None:
+        if self.capture is None or cv2 is None:
             return {"resolution": "unknown", "fps": "unknown"}
         width = int(self.capture.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(self.capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -64,24 +55,40 @@ class HandTracker:
         return {
             "resolution": f"{width}x{height}" if width > 0 and height > 0 else "unknown",
             "fps": round(fps, 3) if fps > 0 else "unknown",
+            "index": self.camera_index,
         }
 
-    def start(self) -> bool:
-        """Try to initialize MediaPipe and the webcam; never raises to the UI."""
+    def _open_capture(self, index: int):
+        backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY]
+        for backend in backends:
+            cap = cv2.VideoCapture(index, backend)
+            if not cap.isOpened():
+                cap.release()
+                continue
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.CAMERA_WIDTH)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.CAMERA_HEIGHT)
+            # Warm up — some webcams return empty frames for the first few reads.
+            ok = False
+            frame = None
+            for _ in range(12):
+                ok, frame = cap.read()
+                if ok and frame is not None and frame.size > 0:
+                    break
+            if ok and frame is not None:
+                self.last_frame = frame.copy()
+                return cap
+            cap.release()
+        return None
 
+    def start(self) -> bool:
         if IMPORT_ERROR is not None:
             self.error = f"依赖缺失: {IMPORT_ERROR}"
             return False
         if not self.model_path.exists():
-            self.error = (
-                f"缺少模型文件: {self.model_path.name}。"
-                "先运行 python download_model.py。"
-            )
+            self.error = f"缺少模型文件: {self.model_path.name}"
             return False
 
         try:
-            # Passing bytes avoids a Windows/MediaPipe native-loader issue with
-            # non-ASCII project paths such as "Prototyp_über_Hand".
             model_bytes = self.model_path.read_bytes()
             base_options = mp.tasks.BaseOptions(model_asset_buffer=model_bytes)
             options = mp.tasks.vision.HandLandmarkerOptions(
@@ -94,42 +101,63 @@ class HandTracker:
             )
             self.landmarker = mp.tasks.vision.HandLandmarker.create_from_options(options)
 
-            self.capture = cv2.VideoCapture(self.camera_index, cv2.CAP_DSHOW)
-            if not self.capture.isOpened():
-                # CAP_DSHOW is reliable on many Windows machines, but not all.
-                self.capture.release()
-                self.capture = cv2.VideoCapture(self.camera_index)
-            if not self.capture.isOpened():
-                self.error = f"无法打开摄像头 index={self.camera_index}。"
-                self.close()
-                return False
+            indices = [self.camera_index] + [i for i in range(3) if i != self.camera_index]
+            for index in indices:
+                cap = self._open_capture(index)
+                if cap is not None:
+                    self.capture = cap
+                    self.camera_index = index
+                    self.error = None
+                    self._fail_reads = 0
+                    print(f"[camera] opened index={index} info={self.camera_info()}")
+                    return True
 
-            self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, config.CAMERA_WIDTH)
-            self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, config.CAMERA_HEIGHT)
-            self.error = None
-            return True
-        except Exception as exc:  # MediaPipe/OpenCV errors must not kill fallback UI.
+            self.error = "无法打开摄像头（请检查隐私设置：允许桌面应用访问相机）"
+            self.close()
+            print(f"[camera] FAILED: {self.error}")
+            return False
+        except Exception as exc:
             self.error = f"手部追踪初始化失败: {exc}"
             self.close()
+            print(f"[camera] EXCEPTION: {self.error}")
             return False
+
+    def _reopen(self) -> None:
+        print("[camera] reopening after read failures...")
+        if self.capture is not None:
+            self.capture.release()
+            self.capture = None
+        for index in range(3):
+            cap = self._open_capture(index)
+            if cap is not None:
+                self.capture = cap
+                self.camera_index = index
+                self._fail_reads = 0
+                self.error = None
+                print(f"[camera] reopened index={index}")
+                return
+        self.error = "摄像头重连失败"
 
     def read_index_finger(
         self,
         window_width: int = config.WINDOW_WIDTH,
         window_height: int = config.WINDOW_HEIGHT,
     ) -> Optional[FingerPoint]:
-        """Read one frame and return INDEX_FINGER_TIP mapped to window pixels."""
-
         if not self.available:
             return None
 
         ok, frame = self.capture.read()
-        if not ok or frame is None:
+        if not ok or frame is None or frame.size == 0:
+            self._fail_reads += 1
             self.error = "摄像头暂时无法读取画面。"
+            if self._fail_reads >= 15:
+                self._reopen()
             return None
 
+        self._fail_reads = 0
         if config.MIRROR_CAMERA:
             frame = cv2.flip(frame, 1)
+        self.last_frame = frame
 
         try:
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -139,7 +167,6 @@ class HandTracker:
             if not result.hand_landmarks:
                 return None
 
-            # Landmark 8 is INDEX_FINGER_TIP in MediaPipe's 21-point hand model.
             tip = result.hand_landmarks[0][8]
             normalized_x = min(1.0, max(0.0, float(tip.x)))
             normalized_y = min(1.0, max(0.0, float(tip.y)))
@@ -163,3 +190,4 @@ class HandTracker:
             except Exception:
                 pass
             self.landmarker = None
+        self.last_frame = None
