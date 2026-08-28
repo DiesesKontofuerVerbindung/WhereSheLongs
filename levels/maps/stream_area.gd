@@ -2,6 +2,7 @@ extends BaseExplorationMap
 
 var _heart_light: PointLight2D
 var _amai: Node2D
+var _choice_layer: CanvasLayer
 
 
 func _build_environment() -> void:
@@ -31,20 +32,9 @@ func _spawn_amai() -> void:
 	_heart_light.color = Color(0.85, 0.5, 0.95)
 	_amai.add_child(_heart_light)
 	add_child(_amai)
-	var pulse := Timer.new()
-	pulse.wait_time = 0.6
-	pulse.autostart = true
-	pulse.timeout.connect(_pulse_heart)
-	_amai.add_child(pulse)
-
-
-func _pulse_heart() -> void:
-	if _heart_light:
-		_heart_light.energy = randf_range(0.6, 1.3)
 
 
 func _start_descent_end() -> void:
 	_show_inline_dialogue([
-		{"speaker": "旁白", "text": "他们跳下了瀑布，落进了小溪里。"},
-		{"speaker": "旁白", "text": "阿麦接住小凌，小凌看到他心脏闪烁的光，如同自己的呼吸一般，小凌忍不住触摸，光线散出一团光丝缠绕着小凌的手。"},
+		{"speaker": "旁白", "text": "阿麦接住了小凌。小凌看到他心脏中闪烁的光，如同自己的呼吸一般。"},
 	], func(): _complete({"result": "success"}))

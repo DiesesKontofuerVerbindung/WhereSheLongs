@@ -1,0 +1,27 @@
+﻿Implement 黑暗森林 chapter per tools/forest_dark_doc.txt (extracted from 黑暗森林喂给ai的-1.docx).
+
+CRITICAL RULES from doc:
+- Do NOT implement ForestRun/LakeJump minigame internals; keep placeholder skip (space to continue)
+- Skip modules: 眨眼互动, 手交互, 星星, 打字(keep text_input placeholder only)
+- 阿麦 appears AFTER player enters forest, never as lure
+- Never call 陌生女孩 "母亲" in player-visible text
+- Do not add new dialogue/branches/endings beyond the doc
+- Use placeholders for missing assets
+- If code conflicts with doc state machine, follow doc for forest_dark/forest_path/lake/stream/part4 dialogue
+
+PRIORITY TASKS:
+1. Rewrite levels/maps/forest_dark.gd state machine:
+   - Phase: approach light (mouse hover on right light OR move right), light vanishes, 20% visibility dark 2-3s
+   - Amai heart light 40%, dialogue per doc lines 16-44
+   - 【走/不走】choice: walk toward amai = continue; walk opposite = dark reset message then can retry or force continue
+   - After 走: transition dialogue line 50, complete level
+2. Update forest_path.gd dialogue per doc lines 50-82 (through 喂!)
+3. Update data/dialogue/part2_waterfall.json per lines 86-96
+4. Update stream_area.gd + part2_stream.json per lines 100-117 (text_input placeholder for 因为……)
+5. Update lake_area.gd per lines 120-147 with choice 想/不想 nodes (不想 path as doc, 想 skips to placeholder)
+6. Update part3_lake_end.json, part4_mystery_girl.json per lines 148-311 (女孩->神秘女孩, exact doc text)
+7. Keep GameState+SceneManager; Dialogue/Level no cross-calls
+
+Dialogue must match doc text exactly (including 心理/动作 markers in text where doc has them).
+
+Verify with godot --headless --quit-after 1. List changed files.
