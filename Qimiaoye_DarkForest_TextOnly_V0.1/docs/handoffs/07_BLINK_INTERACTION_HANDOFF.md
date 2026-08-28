@@ -121,3 +121,93 @@ finished.emit({
 - 实际运行过的验证命令和日志路径。
 - 尚未验证的风险。
 - 给集成人员的一句明确说明：用哪个完成信号、返回什么 payload、是否需要新增资源白名单路径。
+
+## 9. 实施状态与交付记录（2026-08-28 已实装）
+
+本节记录本次推送的实际情况，供主程 agent 快速了解现状。**机制 6（HandInspect）不在本节范围内，本次未触碰其任何代码。**
+
+### 9.1 落点
+
+| 项 | 值 |
+|---|---|
+| 目标分支 | `codex/20260828-gespielt-grounded` |
+| 集成分支 HEAD | `183b28c8763ddcef64b953658678ac770a219b6e`（merge commit） |
+| 模块提交 | `b915fb5`，原建于 `codex/qimiaoye-blink-interaction`（基线 `c92bdad`） |
+| 合并方式 | `--no-ff`；目标分支当时仅有 docs 提交，无代码冲突 |
+| 推送状态 | **未推送**，待授权 |
+
+### 9.2 变更文件清单（9 个文件，+900 行）
+
+| 文件 | 说明 |
+|---|---|
+| `modules/blink_interaction/blink_interaction.gd` | 新增，模块本体（全屏 `Control`，1280×720 逻辑坐标） |
+| `modules/blink_interaction/blink_interaction.tscn` | 新增，模块场景 |
+| `modules/blink_interaction/blink_interaction.gd.uid` | 新增，编辑器生成 |
+| `tests/blink_interaction_module_test.gd` | 新增，模块定向测试 |
+| `tests/blink_interaction_module_test.tscn` | 新增，测试场景 |
+| `tests/blink_interaction_module_test.gd.uid` | 新增，编辑器生成 |
+| `scripts/story_data.gd` | 第 360 行 `module_skip` → `module` |
+| `scripts/main.gd` | `EXPECTED_MODULE_BINDINGS` 注册 + 根节点/契约守卫（+5 行） |
+| `README.md` | 绑定清单、操作说明、待实装模块列表 |
+
+### 9.3 交互与时序
+
+- 按住 `Space` / `Enter` / 鼠标左键 = 闭眼，松开 = 睁眼。单独单击也会完整走完一次闭眼—睁眼，保证键盘、鼠标、触控都能继续。
+- 入场 0.45s（从两手紧握的暖光特写开始）→ 闭眼 0.40s → 最短停顿 0.16s → 睁眼 0.45s → 收尾 0.32s。
+- 闭眼与睁眼均落在交接文档要求的 0.25–0.5 秒区间，无高频白闪。
+- 局部漂移幅度 ≤ 4 逻辑像素，低频可预测；**不创建第二套全局相机抖动，不复位主流程 shake**。
+- 25 秒无输入会走一次自动眨眼兜底，payload 中以 `auto_blink:true` 区分。
+
+### 9.4 验证命令与结果
+
+```powershell
+$godot = "D:\gamejamshe\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe"
+$proj  = "D:\gamejamshe\Peking26082026\worktrees\godot-dev\Qimiaoye_DarkForest_TextOnly_V0.1"
+
+# 模块定向测试
+& $godot --headless --path $proj res://tests/blink_interaction_module_test.tscn
+
+# 全流程验证（三种 16:9 分辨率）
+& $godot --headless --path $proj --resolution 1280x720  -- --verify
+& $godot --headless --path $proj --resolution 1920x1080 -- --verify
+& $godot --headless --path $proj --resolution 2560x1440 -- --verify
+```
+
+结果：
+
+| 检查 | 结果 |
+|---|---|
+| 模块定向测试 | `BLINK_INTERACTION_MODULE_PASS source=360 finished_once=true blinks=1 resolution_cases=3 logical_viewport=1280x720 layout_relative=true flicker_safe=true` |
+| 全流程 `--verify` | 1280×720 / 1920×1080 / 2560×1440 均 `FULL_FLOW_PASS` |
+| 真实交互 360→362 | `BLINK_HOST_SMOKE_PASS module_complete=1 blinks=1 shake_start=1 shake_stop=0 real_interaction=true` |
+| `git diff --check` | 干净 |
+
+日志目录：`%APPDATA%\Qimiaoye_DarkForest_TextOnly_V0.1\logs\`（`runtime.log` / `trace_steps.log`）。
+
+**注意**：`--verify` 模式下模块是**模拟完成**的（日志里会出现 `verification":"simulated_after_ready"`），无法证明真实交互链路。因此另写了临时脚手架，在不传 `--verify` 的情况下用 F4 跳到 360 行并真实按键驱动一次，确认：
+
+```
+MODULE_COMPLETE id=BlinkInteraction source=360 kind=playable
+  result={"auto_blink":false,"blinks":1,"module":"BlinkInteraction","result":"success","source":360}
+SHAKE_LEVEL source=362 progress=0.727 target_strength=13.01
+LINE channel=DIALOGUE source=362 speaker=小凌（很着急地）text=什么时候？在哪儿见过？
+```
+
+`auto_blink:false` 证明是玩家真实输入完成，而非超时兜底；震动 9.79 → 13.01 持续增强，未被模块复位。该脚手架为临时文件，验证后已删除，不在提交内。
+
+### 9.5 尚未验证的风险
+
+1. **手部造型未经人眼确认。** 已用像素探针验证渲染正确（闭眼时 `warm_px=0`，四角遮罩取样值一致 `0.02,0.02,0.04`，无漏光），但"两只手看起来像不像手"属于视觉判断，本次无法给出结论。建议实机确认：`F4` → 输入 `360` → 从此行开始。
+2. **闭眼期间世界仍在低频漂移。** 这是刻意保留的效果；若与主流程 shake 叠加后观感不适，把 `_current_drift()` 返回值改为 `Vector2.ZERO` 即可关闭。
+3. **触控路径未实机验证**，仅走通了 `_gui_input` 中的 `InputEventScreenTouch` 分支。
+4. 三种分辨率均在 headless 下验证，未覆盖导出包的实机窗口缩放行为。
+
+### 9.6 给集成人员的一句话
+
+完成信号用 `finished(result: Dictionary)`，宿主以 `CONNECT_ONE_SHOT` 接收，payload 为
+`{"result":"success","blinks":1,"source":360,"auto_blink":false}`（宿主会补一个 `module` 字段）；
+**无需新增资源白名单路径**——手部与遮罩全部由 `_draw()` 程序化绘制，模块目录内没有任何图片资源，因此 `ALLOWED_MODULE_IMAGE_ROOTS` 保持原样即可。
+
+### 9.7 遗留项
+
+`docs/agent_start/AGENTS.md` 中机制 6 与机制 7 的复选框（`- [ ]`）尚未勾选。机制 6 的提交未更新该文档，机制 7 本次也未改动它，以免在功能提交里夹带 docs 变更。需要时可单独补一个 docs 提交把两格一起勾掉。
