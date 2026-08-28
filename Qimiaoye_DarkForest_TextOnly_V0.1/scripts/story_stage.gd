@@ -16,9 +16,15 @@ const STAGE_SCENES := ["环境背景图1", "环境背景图2", "环境背景图3
 const XIAOLING_START_RATIO := 0.16
 const LIGHT_TRIGGER_RATIO := 0.66
 const AMAI_FACE_RATIO := 0.78
-# 人物脚位必须停在底部对白框上沿之上，避免持续舞台穿进对白 UI。
-const ACTOR_GROUND_RATIO := 0.60
+# 人物使用真实脚底作原点，并踩在连续森林地表上；对白 UI 独立覆盖在舞台之上。
+const ACTOR_GROUND_RATIO := 0.75
 const ACTOR_MARGIN := 78.0
+const ACTOR_VISUAL_SCALE := 0.18
+# 两套角色原图均以画布中心为 Sprite2D 原点；以下数值来自首帧非透明像素脚底。
+const XIAOLING_FOOT_FROM_CENTER := 558.0
+const AMAI_FOOT_FROM_CENTER := 545.0
+# 世界根节点为 -20：后景最终为 -20，前景最终为 -16，人物必须夹在二者之间。
+const ACTOR_LAYER_Z := -17
 const LIGHT_WALK_SPEED := 190.0
 const MANUAL_WALK_SPEED := 205.0
 const PROMPT_LIGHT := "将鼠标持续停留在右侧光源"
@@ -111,24 +117,24 @@ func _build_characters() -> void:
 	_xiaoling = CharacterBody2D.new()
 	_xiaoling.name = "StoryXiaoling"
 	_xiaoling.motion_mode = CharacterBody2D.MOTION_MODE_FLOATING
-	_xiaoling.z_index = 8
+	_xiaoling.z_index = ACTOR_LAYER_Z
 	add_child(_xiaoling)
 	_xiaoling_visual = XiaolingVisualScene.instantiate() as AnimatedSprite2D
 	_xiaoling_visual.name = "StoryXiaolingVisual"
-	_xiaoling_visual.scale = Vector2(0.125, 0.125)
-	_xiaoling_visual.position = Vector2(0.0, -20.0)
+	_xiaoling_visual.scale = Vector2.ONE * ACTOR_VISUAL_SCALE
+	_xiaoling_visual.position = Vector2(0.0, -XIAOLING_FOOT_FROM_CENTER * ACTOR_VISUAL_SCALE)
 	_xiaoling_visual.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_xiaoling.add_child(_xiaoling_visual)
 
 	_amai = CharacterBody2D.new()
 	_amai.name = "StoryAmai"
 	_amai.motion_mode = CharacterBody2D.MOTION_MODE_FLOATING
-	_amai.z_index = 8
+	_amai.z_index = ACTOR_LAYER_Z
 	add_child(_amai)
 	_amai_visual = AmaiVisualScene.instantiate() as AnimatedSprite2D
 	_amai_visual.name = "StoryAmaiVisual"
-	_amai_visual.scale = Vector2(0.125, 0.125)
-	_amai_visual.position = Vector2(0.0, -20.0)
+	_amai_visual.scale = Vector2.ONE * ACTOR_VISUAL_SCALE
+	_amai_visual.position = Vector2(0.0, -AMAI_FOOT_FROM_CENTER * ACTOR_VISUAL_SCALE)
 	_amai_visual.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_amai.add_child(_amai_visual)
 	_amai.visible = false
@@ -594,6 +600,18 @@ func verify_contract() -> bool:
 		return false
 	if not _visual_has_motions(_amai_visual, {"idle": 60, "run_start": 21, "run": 14}):
 		return false
+	var back_final_z := _world_root.z_index + _forest_back.z_index
+	var front_final_z := _world_root.z_index + _forest_front.z_index
+	if not back_final_z < _xiaoling.z_index or not _xiaoling.z_index < front_final_z:
+		return false
+	if _amai.z_index != _xiaoling.z_index:
+		return false
+	if not is_equal_approx(_xiaoling_visual.scale.x, ACTOR_VISUAL_SCALE) or not is_equal_approx(_amai_visual.scale.x, ACTOR_VISUAL_SCALE):
+		return false
+	if absf(_actor_feet_y(_xiaoling, _xiaoling_visual, XIAOLING_FOOT_FROM_CENTER) - _xiaoling.position.y) > 0.5:
+		return false
+	if absf(_actor_feet_y(_amai, _amai_visual, AMAI_FOOT_FROM_CENTER) - _amai.position.y) > 0.5:
+		return false
 	return LIGHT_TRIGGER_RATIO < AMAI_FACE_RATIO and AMAI_FACE_RATIO < 0.90 and SCENE_SCROLL_RATIOS.size() == STAGE_SCENES.size()
 
 
@@ -609,6 +627,12 @@ func _visual_has_motions(visual: AnimatedSprite2D, expected: Dictionary) -> bool
 	return true
 
 
+func _actor_feet_y(actor: CharacterBody2D, visual: AnimatedSprite2D, foot_from_center: float) -> float:
+	if actor == null or visual == null:
+		return 0.0
+	return actor.position.y + visual.position.y + foot_from_center * visual.scale.y
+
+
 func get_debug_snapshot() -> Dictionary:
 	return {
 		"scene": _current_scene,
@@ -621,15 +645,24 @@ func get_debug_snapshot() -> Dictionary:
 		"xiaoling_x": _xiaoling.position.x if _xiaoling != null else 0.0,
 		"xiaoling_visible": _xiaoling.visible if _xiaoling != null else false,
 		"xiaoling_animation": str(_xiaoling_visual.animation) if _xiaoling_visual != null else "",
+		"xiaoling_z_index": _xiaoling.z_index if _xiaoling != null else 0,
+		"xiaoling_visual_scale": _xiaoling_visual.scale.x if _xiaoling_visual != null else 0.0,
+		"xiaoling_feet_y": _actor_feet_y(_xiaoling, _xiaoling_visual, XIAOLING_FOOT_FROM_CENTER),
 		"amai_x": _amai.position.x if _amai != null else 0.0,
 		"amai_visible": _amai.visible if _amai != null else false,
 		"amai_animation": str(_amai_visual.animation) if _amai_visual != null else "",
+		"amai_z_index": _amai.z_index if _amai != null else 0,
+		"amai_visual_scale": _amai_visual.scale.x if _amai_visual != null else 0.0,
+		"amai_feet_y": _actor_feet_y(_amai, _amai_visual, AMAI_FOOT_FROM_CENTER),
+		"actor_ground_y": size.y * ACTOR_GROUND_RATIO,
 		"stage_width": size.x,
 		"long_scene_enabled": _world_root != null,
 		"long_scene_source_size": LONG_SCENE_SOURCE_SIZE,
 		"world_scroll_ratio": _world_scroll_ratio,
 		"world_scroll_x": -_world_root.position.x if _world_root != null else 0.0,
 		"world_z_index": _world_root.z_index if _world_root != null else -100,
+		"forest_back_z_index": (_world_root.z_index + _forest_back.z_index) if _world_root != null and _forest_back != null else -100,
+		"forest_front_z_index": (_world_root.z_index + _forest_front.z_index) if _world_root != null and _forest_front != null else -100,
 		"world_width": LONG_SCENE_SOURCE_SIZE.x * _world_scale,
 		"entry_curtain_visible": _entry_curtain.visible if _entry_curtain != null else false,
 		"particles_visible": _forest_particles.visible if _forest_particles != null else false,

@@ -25,6 +25,19 @@ func _ready() -> void:
 		failures.append("森林到瀑布前没有启用持续长场景")
 	if int(initial.get("world_z_index", -100)) <= -100:
 		failures.append("森林长图层级没有高于主黑色底板")
+	var back_z := int(initial.get("forest_back_z_index", -100))
+	var front_z := int(initial.get("forest_front_z_index", -100))
+	var xiaoling_z := int(initial.get("xiaoling_z_index", -100))
+	var amai_z := int(initial.get("amai_z_index", -100))
+	if not back_z < xiaoling_z or not xiaoling_z < front_z or amai_z != xiaoling_z:
+		failures.append("人物没有稳定夹在森林后景与前景之间")
+	if float(initial.get("xiaoling_visual_scale", 0.0)) < 0.18 or float(initial.get("amai_visual_scale", 0.0)) < 0.18:
+		failures.append("剧情人物没有按要求统一放大")
+	var ground_y := float(initial.get("actor_ground_y", -100.0))
+	if absf(float(initial.get("xiaoling_feet_y", -200.0)) - ground_y) > 0.5:
+		failures.append("小凌脚底没有落在森林地面基准线上")
+	if absf(float(initial.get("amai_feet_y", -200.0)) - ground_y) > 0.5:
+		failures.append("阿麦脚底没有落在森林地面基准线上")
 	if float(initial.get("world_width", 0.0)) <= float(initial.get("stage_width", 0.0)):
 		failures.append("长场景宽度不足，无法持续向右卷动")
 	if not is_zero_approx(float(initial.get("world_scroll_ratio", -1.0))):
