@@ -1,0 +1,33 @@
+; 独立并行灰盒：黑暗森林纯文本版
+config_version=5
+
+[application]
+
+config/name="奇妙夜·黑暗森林·纯文本并行版"
+config/description="无人物、无图片的剧情流程与交互灰盒"
+config/version="0.9.0"
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+config/use_custom_user_dir=true
+config/custom_user_dir_name="Qimiaoye_DarkForest_TextOnly_V0.1"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/size/window_width_override=1280
+window/size/window_height_override=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[debug]
+
+file_logging/enable_file_logging=true
+file_logging/log_path="user://logs/godot.log"
+file_logging/max_log_files=5
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/default_filters/use_nearest_mipmap_filter=false
