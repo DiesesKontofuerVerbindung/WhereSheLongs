@@ -4,6 +4,7 @@ signal interaction_completed
 signal embedded_module_finished(result: Dictionary)
 
 const StoryData := preload("res://scripts/story_data.gd")
+const StorySourceLock := preload("res://scripts/story_source_lock.gd")
 const NarrationUIScript := preload("res://scripts/narration_ui.gd")
 const DialogueUIScript := preload("res://scripts/dialogue_ui.gd")
 const RUNTIME_LOG_PATH := "user://logs/runtime.log"
@@ -25,6 +26,13 @@ const STORY_SHAKE_END_SOURCE := 366
 const STORY_SHAKE_START_STRENGTH := 1.35
 const STORY_SHAKE_END_STRENGTH := 18.0
 const MODULE_VIEW_SIZE := Vector2i(1280, 720)
+const MODULE_RENDER_TEST_CASES := [
+	[Vector2i(1280, 720), Vector2i(1280, 720)],
+	[Vector2i(1920, 1080), Vector2i(1920, 1080)],
+	[Vector2i(2560, 1440), Vector2i(2560, 1440)],
+	[Vector2i(2560, 1080), Vector2i(1920, 1080)],
+	[Vector2i(1024, 768), Vector2i(1024, 576)],
+]
 const EXPECTED_MODULE_BINDINGS := {
 	"ForestRun": {"source": 122, "type": "module", "scene": "res://scenes/forest/parkour/parkour_prototype.tscn", "signal": "parkour_completed"},
 	"TextInput": {"source": 157, "type": "module", "scene": "res://levels/minigames/text_input.tscn", "signal": "finished"},
@@ -75,7 +83,7 @@ var _module_active := false
 var _active_module_id := ""
 var _module_run_counts: Dictionary = {}
 
-# 剧情外壳只保存不可见人物状态；独立玩法在隔离的 SubViewport 内管理自己的节点与图片。
+# 剧情外壳只保存不可见人物状态；独立玩法在隔离的高分辨率 SubViewport 内管理自己的节点与图片。
 var _actor_states := {
 	"小凌": {"x": 0.18, "motion": "Idle", "direction": "right", "visible": false},
 	"阿麦": {"x": 0.82, "motion": "Idle", "direction": "right", "visible": false},
@@ -107,8 +115,12 @@ var _dev_jump_input: LineEdit
 var _dev_jump_button: Button
 var _dev_jump_feedback: Label
 var _module_host: Control
-var _module_viewport_container: SubViewportContainer
+var _module_texture_rect: TextureRect
 var _module_viewport: SubViewport
+var _module_output_size := Vector2i.ZERO
+var _module_render_size := MODULE_VIEW_SIZE
+var _module_pointer_inside := false
+var _module_pointer_captured := false
 var _primary_font: SystemFont
 var _cjk_fallback_font: SystemFont
 
@@ -178,6 +190,9 @@ func _ready() -> void:
 	_build_ui()
 	_story_shake_base_position = position
 	_initialize_logs(not _pending_dev_jump.is_empty())
+	if not get_viewport().size_changed.is_connected(_on_root_viewport_size_changed):
+		get_viewport().size_changed.connect(_on_root_viewport_size_changed)
+	_sync_module_render_resolution("startup")
 	_log_runtime("TYPOGRAPHY primary=%s cjk_fallback=%s latin_A=%s cjk_zhong=%s" % [
 		FONT_PRIMARY_NAME,
 		FONT_CJK_FALLBACK_NAME,
@@ -475,21 +490,165 @@ func _build_module_host() -> void:
 	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_module_host.add_child(backdrop)
 
-	_module_viewport_container = SubViewportContainer.new()
-	_module_viewport_container.name = "ModuleViewportContainer"
-	_module_viewport_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_module_viewport_container.stretch = true
-	_module_viewport_container.stretch_shrink = 1
-	_module_viewport_container.mouse_filter = Control.MOUSE_FILTER_STOP
-	_module_host.add_child(_module_viewport_container)
-
 	_module_viewport = SubViewport.new()
 	_module_viewport.name = "ModuleViewport"
 	_module_viewport.size = MODULE_VIEW_SIZE
+	_module_viewport.size_2d_override = MODULE_VIEW_SIZE
+	_module_viewport.size_2d_override_stretch = true
 	_module_viewport.handle_input_locally = true
 	_module_viewport.gui_disable_input = false
 	_module_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	_module_viewport_container.add_child(_module_viewport)
+	_module_host.add_child(_module_viewport)
+
+	_module_texture_rect = TextureRect.new()
+	_module_texture_rect.name = "ModuleViewportTexture"
+	_module_texture_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_module_texture_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_module_texture_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_module_texture_rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	_module_texture_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_module_texture_rect.texture = _module_viewport.get_texture()
+	_module_host.add_child(_module_texture_rect)
+
+
+func _module_output_pixel_size() -> Vector2i:
+	var output_size := get_window().size
+	return Vector2i(maxi(2, output_size.x), maxi(2, output_size.y))
+
+
+func _fit_module_render_size(output_size: Vector2i) -> Vector2i:
+	var safe_size := Vector2i(maxi(2, output_size.x), maxi(2, output_size.y))
+	var logical_aspect := float(MODULE_VIEW_SIZE.x) / float(MODULE_VIEW_SIZE.y)
+	var output_aspect := float(safe_size.x) / float(safe_size.y)
+	if output_aspect > logical_aspect:
+		return Vector2i(maxi(2, int(floor(float(safe_size.y) * logical_aspect))), safe_size.y)
+	return Vector2i(safe_size.x, maxi(2, int(floor(float(safe_size.x) / logical_aspect))))
+
+
+func _sync_module_render_resolution(reason: String) -> void:
+	if _module_viewport == null or _module_texture_rect == null:
+		return
+	var output_size := _module_output_pixel_size()
+	var render_size := _fit_module_render_size(output_size)
+	var changed := output_size != _module_output_size or render_size != _module_render_size
+	_module_output_size = output_size
+	_module_render_size = render_size
+	_module_viewport.size = render_size
+	_module_viewport.size_2d_override = MODULE_VIEW_SIZE
+	_module_viewport.size_2d_override_stretch = true
+	if changed or reason != "resize":
+		_log_runtime("MODULE_RENDER_RESOLUTION reason=%s output=%dx%d render=%dx%d logical=%dx%d aspect=keep" % [
+			reason,
+			output_size.x,
+			output_size.y,
+			render_size.x,
+			render_size.y,
+			MODULE_VIEW_SIZE.x,
+			MODULE_VIEW_SIZE.y,
+		])
+	_refresh_diagnostics()
+
+
+func _on_root_viewport_size_changed() -> void:
+	_sync_module_render_resolution("resize")
+
+
+func _module_display_rect() -> Rect2:
+	if _module_texture_rect == null:
+		return Rect2()
+	var bounds := _module_texture_rect.get_global_rect()
+	if bounds.size.x <= 0.0 or bounds.size.y <= 0.0:
+		return Rect2()
+	var scale := minf(bounds.size.x / float(MODULE_VIEW_SIZE.x), bounds.size.y / float(MODULE_VIEW_SIZE.y))
+	var content_size := Vector2(MODULE_VIEW_SIZE) * scale
+	return Rect2(bounds.position + (bounds.size - content_size) * 0.5, content_size)
+
+
+func _map_module_pointer_position(pointer_position: Vector2) -> Dictionary:
+	var display_rect := _module_display_rect()
+	if display_rect.size.x <= 0.0 or display_rect.size.y <= 0.0:
+		return {"inside": false, "position": Vector2.ZERO, "scale": Vector2.ONE}
+	var local_position := pointer_position - display_rect.position
+	var input_scale := Vector2(
+		float(MODULE_VIEW_SIZE.x) / display_rect.size.x,
+		float(MODULE_VIEW_SIZE.y) / display_rect.size.y
+	)
+	var logical_position := Vector2(
+		local_position.x * input_scale.x,
+		local_position.y * input_scale.y
+	)
+	return {"inside": display_rect.has_point(pointer_position), "position": logical_position, "scale": input_scale}
+
+
+func _set_module_pointer_inside(inside: bool) -> void:
+	if _module_viewport == null or inside == _module_pointer_inside:
+		return
+	_module_pointer_inside = inside
+	if inside:
+		_module_viewport.notify_mouse_entered()
+	else:
+		_module_viewport.notify_mouse_exited()
+
+
+func _forward_input_to_module(event: InputEvent) -> bool:
+	if _module_viewport == null:
+		return false
+	var forwarded_event := event.duplicate() as InputEvent
+	var should_forward := true
+	var release_pointer_after_forward := false
+	if event is InputEventMouse:
+		var mouse_event := event as InputEventMouse
+		var mapped := _map_module_pointer_position(mouse_event.position)
+		var inside := bool(mapped.get("inside", false))
+		if event is InputEventMouseButton:
+			var mouse_button := event as InputEventMouseButton
+			if mouse_button.button_index == MOUSE_BUTTON_LEFT:
+				if mouse_button.pressed and inside:
+					_module_pointer_captured = true
+				elif not mouse_button.pressed:
+					release_pointer_after_forward = _module_pointer_captured
+			should_forward = inside or _module_pointer_captured
+		else:
+			should_forward = inside or _module_pointer_captured
+		_set_module_pointer_inside(inside or _module_pointer_captured)
+		if should_forward:
+			var forwarded_mouse := forwarded_event as InputEventMouse
+			forwarded_mouse.position = Vector2(mapped.get("position", Vector2.ZERO))
+			forwarded_mouse.global_position = forwarded_mouse.position
+			if forwarded_mouse is InputEventMouseMotion:
+				var forwarded_motion := forwarded_mouse as InputEventMouseMotion
+				var input_scale := Vector2(mapped.get("scale", Vector2.ONE))
+				forwarded_motion.relative *= input_scale
+				forwarded_motion.velocity *= input_scale
+	elif event is InputEventScreenTouch:
+		var touch_event := event as InputEventScreenTouch
+		var mapped_touch := _map_module_pointer_position(touch_event.position)
+		var inside_touch := bool(mapped_touch.get("inside", false))
+		if touch_event.pressed and inside_touch:
+			_module_pointer_captured = true
+		elif not touch_event.pressed:
+			release_pointer_after_forward = _module_pointer_captured
+		should_forward = inside_touch or _module_pointer_captured
+		if should_forward:
+			var forwarded_touch := forwarded_event as InputEventScreenTouch
+			forwarded_touch.position = Vector2(mapped_touch.get("position", Vector2.ZERO))
+	elif event is InputEventScreenDrag:
+		var drag_event := event as InputEventScreenDrag
+		var mapped_drag := _map_module_pointer_position(drag_event.position)
+		should_forward = bool(mapped_drag.get("inside", false)) or _module_pointer_captured
+		if should_forward:
+			var forwarded_drag := forwarded_event as InputEventScreenDrag
+			var input_scale := Vector2(mapped_drag.get("scale", Vector2.ONE))
+			forwarded_drag.position = Vector2(mapped_drag.get("position", Vector2.ZERO))
+			forwarded_drag.relative *= input_scale
+			forwarded_drag.velocity *= input_scale
+	if not should_forward:
+		return false
+	_module_viewport.push_input(forwarded_event, true)
+	if release_pointer_after_forward:
+		_module_pointer_captured = false
+		_set_module_pointer_inside(false)
+	return true
 
 
 func _build_dev_jump_panel() -> void:
@@ -611,17 +770,23 @@ func _process(delta: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if not event is InputEventKey:
+	if event is InputEventKey:
+		var key_event := event as InputEventKey
+		if key_event.pressed and not key_event.echo:
+			if key_event.keycode == KEY_F4:
+				_toggle_dev_jump_panel()
+				get_viewport().set_input_as_handled()
+				return
+			if key_event.keycode == KEY_ESCAPE and _dev_jump_overlay != null and _dev_jump_overlay.visible:
+				_close_dev_jump_panel()
+				get_viewport().set_input_as_handled()
+				return
+	if _dev_jump_overlay != null and _dev_jump_overlay.visible:
 		return
-	var key_event := event as InputEventKey
-	if not key_event.pressed or key_event.echo:
+	if _module_active:
+		if _forward_input_to_module(event):
+			get_viewport().set_input_as_handled()
 		return
-	if key_event.keycode == KEY_F4:
-		_toggle_dev_jump_panel()
-		get_viewport().set_input_as_handled()
-	elif key_event.keycode == KEY_ESCAPE and _dev_jump_overlay != null and _dev_jump_overlay.visible:
-		_close_dev_jump_panel()
-		get_viewport().set_input_as_handled()
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -1243,18 +1408,23 @@ func _run_embedded_module(event: Dictionary, is_placeholder: bool) -> void:
 	_narration_ui.begin_fade_for_dialogue(_verify_mode)
 	_interaction_panel.visible = false
 	_endpoint_panel.visible = false
+	_sync_module_render_resolution("module_start:%s" % module_id)
 	_module_host.visible = true
 	_module_viewport.add_child(module_instance)
 	await get_tree().process_frame
 	await get_tree().process_frame
 
-	_log_runtime("MODULE_READY id=%s source=%d root_type=%s children=%d viewport=%dx%d" % [
+	_log_runtime("MODULE_READY id=%s source=%d root_type=%s children=%d logical=%dx%d render=%dx%d output=%dx%d" % [
 		module_id,
 		source,
 		module_instance.get_class(),
 		module_instance.get_child_count(),
 		MODULE_VIEW_SIZE.x,
 		MODULE_VIEW_SIZE.y,
+		_module_viewport.size.x,
+		_module_viewport.size.y,
+		_module_output_size.x,
+		_module_output_size.y,
 	])
 	if module_id == "ForestRun" and not module_instance is Node2D:
 		_record_module_failure(module_id, source, "ForestRun 根节点必须是 Node2D")
@@ -1266,7 +1436,7 @@ func _run_embedded_module(event: Dictionary, is_placeholder: bool) -> void:
 		if not module_instance is Control:
 			_record_module_failure(module_id, source, "TextInput 根节点必须是 Control")
 		elif not module_instance.has_method("verify_contract") or not bool(module_instance.call("verify_contract")):
-			_record_module_failure(module_id, source, "TextInput 输入、提交与空值保护契约不完整")
+			_record_module_failure(module_id, source, "TextInput 输入、杂念聚拢、Fan 驱散与空值保护契约不完整")
 	if is_placeholder and (not module_instance.has_method("verify_contract") or not bool(module_instance.call("verify_contract"))):
 		_record_module_failure(module_id, source, "LakeJump 占位页结构不完整")
 
@@ -1287,6 +1457,8 @@ func _run_embedded_module(event: Dictionary, is_placeholder: bool) -> void:
 	_module_host.visible = false
 	_module_active = false
 	_active_module_id = ""
+	_module_pointer_captured = false
+	_set_module_pointer_inside(false)
 	_status("[MODULE_RETURN] %s → 剧情继续" % module_id)
 
 
@@ -1641,6 +1813,29 @@ func _complete_story() -> void:
 				_log_runtime("COMPLETE_ERROR %s" % issue)
 
 
+func _validate_module_render_contract() -> PackedStringArray:
+	var errors := PackedStringArray()
+	if _module_host == null or _module_texture_rect == null or _module_viewport == null:
+		errors.append("独立模块高清宿主未完整建立")
+		return errors
+	if _module_texture_rect.texture != _module_viewport.get_texture():
+		errors.append("模块显示层未绑定独立 SubViewport 纹理")
+	if _module_texture_rect.stretch_mode != TextureRect.STRETCH_KEEP_ASPECT_CENTERED:
+		errors.append("模块显示层未保持16:9居中比例")
+	if _module_viewport.size_2d_override != MODULE_VIEW_SIZE or not _module_viewport.size_2d_override_stretch:
+		errors.append("模块逻辑坐标未固定为 %dx%d" % [MODULE_VIEW_SIZE.x, MODULE_VIEW_SIZE.y])
+	for test_case in MODULE_RENDER_TEST_CASES:
+		var output_size: Vector2i = test_case[0]
+		var expected_size: Vector2i = test_case[1]
+		var actual_size := _fit_module_render_size(output_size)
+		if actual_size != expected_size:
+			errors.append("模块渲染尺寸适配错误：%s -> %s/%s" % [output_size, actual_size, expected_size])
+	var expected_current_size := _fit_module_render_size(_module_output_pixel_size())
+	if _module_viewport.size != expected_current_size:
+		errors.append("模块当前渲染纹理未同步输出分辨率：%s/%s" % [_module_viewport.size, expected_current_size])
+	return errors
+
+
 func _validate_contract() -> PackedStringArray:
 	var errors := PackedStringArray()
 	var seen_scenes: Dictionary = {}
@@ -1773,9 +1968,8 @@ func _validate_contract() -> PackedStringArray:
 		errors.append("F4 DOCX 行跳转开发面板不完整")
 	elif _dev_jump_overlay.visible:
 		errors.append("F4 DOCX 行跳转开发面板不应默认显示")
-	if _module_host == null or _module_viewport_container == null or _module_viewport == null:
-		errors.append("独立模块宿主未完整建立")
-	elif _module_host.visible or _module_viewport.get_child_count() != 0:
+	errors.append_array(_validate_module_render_contract())
+	if _module_host != null and _module_viewport != null and (_module_host.visible or _module_viewport.get_child_count() != 0):
 		errors.append("模块宿主启动时应保持隐藏且为空")
 	var source_bounds := _docx_source_bounds()
 	if source_bounds != Vector2i(29, 366):
@@ -1795,6 +1989,7 @@ func _validate_contract() -> PackedStringArray:
 		if _resolve_docx_source_line(source_line).is_empty():
 			errors.append("DOCX 行无法解析至当前或下一事件：%d" % source_line)
 			break
+	errors.append_array(StorySourceLock.validate(_events))
 	if _scene_label.horizontal_alignment != HORIZONTAL_ALIGNMENT_CENTER or _scene_subtitle.horizontal_alignment != HORIZONTAL_ALIGNMENT_CENTER:
 		errors.append("场景标题未按画面中轴居中")
 	if _interaction_prompt.horizontal_alignment != HORIZONTAL_ALIGNMENT_CENTER:
@@ -1820,6 +2015,7 @@ func _validate_contract() -> PackedStringArray:
 
 func _validate_runtime_completion() -> PackedStringArray:
 	var errors := _preflight_errors.duplicate()
+	errors.append_array(_validate_module_render_contract())
 	if not _endpoint_reached:
 		errors.append("未到达 ENDPOINT")
 	for scene_name in StoryData.required_scene_names():
@@ -2036,7 +2232,7 @@ func _refresh_diagnostics() -> void:
 	var dev_jump_status := "当前会话未使用跳转"
 	if _dev_jump_active:
 		dev_jump_status = "请求第 %d 行 → 实际第 %d 行" % [_dev_jump_requested_source, _dev_jump_actual_source]
-	_diagnostic_label.text = "F3 诊断面板 · F4 DOCX 行跳转\n\n当前步骤：%d / %d\nDOCX 来源行：%s\n事件：%s / %s\n文本通道：%s\n场景：%s\n开发跳转：%s\n当前独立玩法：%s\n玩法执行计数：%s\n旁白队列：%d（峰值 %d）\n对白队列峰值：%d\n持续晃动：%s（目标强度 %.2f）\n\n剧情外壳人物状态：\n%s\n\n运行日志：\n%s\n\n逐步检测日志：\n%s\n\n引擎日志：\n%s" % [
+	_diagnostic_label.text = "F3 诊断面板 · F4 DOCX 行跳转\n\n当前步骤：%d / %d\nDOCX 来源行：%s\n事件：%s / %s\n文本通道：%s\n场景：%s\n开发跳转：%s\n当前独立玩法：%s\n玩法执行计数：%s\n输出 / 玩法渲染 / 逻辑：%dx%d / %dx%d / %dx%d\n旁白队列：%d（峰值 %d）\n对白队列峰值：%d\n持续晃动：%s（目标强度 %.2f）\n\n剧情外壳人物状态：\n%s\n\n运行日志：\n%s\n\n逐步检测日志：\n%s\n\n引擎日志：\n%s" % [
 		_current_event_index + 1,
 		_events.size(),
 		_current_event.get("source", 0),
@@ -2047,6 +2243,12 @@ func _refresh_diagnostics() -> void:
 		dev_jump_status,
 		_active_module_id if _module_active else "-",
 		JSON.stringify(_module_run_counts),
+		_module_output_size.x,
+		_module_output_size.y,
+		_module_render_size.x,
+		_module_render_size.y,
+		MODULE_VIEW_SIZE.x,
+		MODULE_VIEW_SIZE.y,
 		_narration_ui.get_visible_entry_count() if _narration_ui != null else 0,
 		_narration_ui.get_max_observed_count() if _narration_ui != null else 0,
 		_dialogue_ui.get_max_queue_depth() if _dialogue_ui != null else 0,
@@ -2061,7 +2263,7 @@ func _refresh_diagnostics() -> void:
 
 func _finish_verification(success: bool, issues: PackedStringArray) -> void:
 	if success:
-		var message := "FULL_FLOW_PASS events=%d scenes=%d modules=%d endpoint=%s narration_lines=%d dialogue_lines=%d psychology_lines=%d narration_queue_max=%d dialogue_queue_max=%d narration_layout_samples=%d dialogue_layout_samples=%d choice_layout_samples=%d split_ui=true narration_top_2_20=true narration_centered=true narration_direct_reveal=true dialogue_progressive_reveal=true psychology_in_dialogue=true psychology_parentheses=true dialogue_left_aligned=true dialogue_body_top=true continue_button_centered=true choices_centered=true shortcut_hint=true shake_start_source=354 shake_peak_source=365 shake_end_source=366 shake_progressive=true shake_reset=true dev_docx_jump=true docx_jump_all_sources_resolvable=true dev_jump_logs_preserved=true font=Times_New_Roman cjk_fallback=SimSun narrative_shell_text_only=true ForestRun_source=122 ForestRun_ready=true TextInput_source=157 TextInput_ready=true TextInput_raw_text_logged=false LakeJump_source=193 LakeJump_ready=true LakeJump_placeholder=false StarJar_source=238 StarJar_ready=true module_subviewport_isolated=true" % [
+		var message := "FULL_FLOW_PASS events=%d scenes=%d modules=%d endpoint=%s narration_lines=%d dialogue_lines=%d psychology_lines=%d narration_queue_max=%d dialogue_queue_max=%d narration_layout_samples=%d dialogue_layout_samples=%d choice_layout_samples=%d split_ui=true narration_top_2_20=true narration_centered=true narration_direct_reveal=true dialogue_progressive_reveal=true psychology_in_dialogue=true psychology_parentheses=true dialogue_left_aligned=true dialogue_body_top=true continue_button_centered=true choices_centered=true shortcut_hint=true shake_start_source=354 shake_peak_source=365 shake_end_source=366 shake_progressive=true shake_reset=true dev_docx_jump=true docx_jump_all_sources_resolvable=true docx_source_lock=53ba079 dev_jump_logs_preserved=true font=Times_New_Roman cjk_fallback=SimSun narrative_shell_text_only=true ForestRun_source=122 ForestRun_ready=true TextInput_source=157 TextInput_ready=true TextInput_interference=true TextInput_opencv_fan=true TextInput_raw_text_logged=false LakeJump_source=193 LakeJump_ready=true LakeJump_placeholder=false StarJar_source=238 StarJar_ready=true module_subviewport_isolated=true module_logical_size=1280x720 module_native_render=true module_aspect_keep=true module_resize_sync=true" % [
 			_events.size(),
 			_visited_scenes.size(),
 			_visited_modules.size(),
