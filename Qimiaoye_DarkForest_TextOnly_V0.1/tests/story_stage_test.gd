@@ -83,6 +83,29 @@ func _ready() -> void:
 	face_to_face = stage.get_debug_snapshot()
 	if not bool(face_to_face.get("xiaoling_facing_right", false)) or bool(face_to_face.get("amai_facing_right", true)):
 		failures.append("对白出现时小凌与阿麦没有自动面对面")
+	if not is_equal_approx(float(face_to_face.get("amai_alpha", 0.0)), 1.0):
+		failures.append("阿麦淡入结束后没有完全不透明")
+	stage.restore_for_source(53, "环境背景图1")
+	if not is_equal_approx(float(stage.get_debug_snapshot().get("amai_alpha", 0.0)), 1.0):
+		failures.append("开发跳转到第53行时阿麦停在半透明状态")
+	stage.set_scene("环境背景图1")
+	stage.begin_light_interaction()
+	await stage.play_action("light_trigger", true)
+	stage.prepare_dialogue("阿麦")
+
+	# 玩家按住 D 跟随时，阿麦必须同步进入奔跑，否则 idle 贴图会贴着地面漂移。
+	stage.update_manual_movement(1.0, 0.1, "follow_right")
+	await get_tree().physics_frame
+	var following: Dictionary = stage.get_debug_snapshot()
+	if str(following.get("amai_animation", "")) == "idle":
+		failures.append("跟随卷动时阿麦仍是 idle，会出现贴地漂移")
+	if is_zero_approx(float(following.get("amai_velocity_x", 0.0))):
+		failures.append("跟随卷动时阿麦没有同步速度信号")
+	stage.finish_manual_movement("follow_right")
+	await get_tree().physics_frame
+	if not is_zero_approx(float(stage.get_debug_snapshot().get("amai_velocity_x", 1.0))):
+		failures.append("跟随结束后阿麦没有停下")
+
 	await stage.play_action("heart_light", true)
 	var heart_snapshot: Dictionary = stage.get_debug_snapshot()
 	if not bool(heart_snapshot.get("heart_glow_visible", false)):

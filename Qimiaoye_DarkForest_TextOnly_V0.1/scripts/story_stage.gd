@@ -40,6 +40,8 @@ const HEART_GLOW_COLOR := Color(1.0, 0.72, 0.20, 1.0)
 const ACTOR_LAYER_Z := -17
 const LIGHT_WALK_SPEED := 190.0
 const MANUAL_WALK_SPEED := 205.0
+# 阿麦在光源熄灭后不再瞬间出现，而是从全透明淡入。
+const AMAI_FADE_IN_SECONDS := 0.9
 const PROMPT_LIGHT := "将鼠标持续停留在右侧光源"
 const FOREST_SOURCE_SIZE := Vector2(9342.0, 1440.0)
 const WATERFALL_SOURCE_SIZE := Vector2(2560.0, 1440.0)
@@ -89,6 +91,8 @@ var _world_scroll_ratio := 0.0
 var _world_scroll_tween: Tween
 var _lake_scale := 0.5
 var _lake_scroll_ratio := 0.0
+var _amai_fade_tween: Tween
+var _manual_follow_drives_amai := false
 var _last_continuous_transition := ""
 var _last_continuous_transition_duration := 0.0
 var _last_continuous_transition_ran_actors := false
@@ -581,6 +585,7 @@ func play_action(action_id: String, verify_mode: bool) -> void:
 	match action_id:
 		"light_trigger":
 			_apply_light_trigger()
+			await _fade_in_amai(verify_mode)
 		"heart_light":
 			_heart_glow_visible = true
 			queue_redraw()
@@ -648,11 +653,34 @@ func _apply_light_trigger() -> void:
 	_set_actor_ratio(_amai, AMAI_FACE_RATIO)
 	_xiaoling.visible = true
 	_amai.visible = true
+	# 基线是完全不透明；开发者跳转直接停在这里，只有正常流程才继续走淡入。
+	_amai_fade_tween_kill()
+	_amai.modulate.a = 1.0
 	_set_facing(_xiaoling_visual, true)
 	_set_facing(_amai_visual, false)
 	set_darkness_level(0.80)
 	hide_control_prompt()
 	queue_redraw()
+
+
+# 阿麦不再凭空出现：保留当前暗度对应的色调，只把不透明度从 0 淡入。
+func _fade_in_amai(verify_mode: bool) -> void:
+	if _amai == null:
+		return
+	_amai_fade_tween_kill()
+	var lit := _amai.modulate
+	_amai.modulate = Color(lit.r, lit.g, lit.b, 0.0)
+	var duration := 0.012 if verify_mode else AMAI_FADE_IN_SECONDS
+	_amai_fade_tween = create_tween()
+	_amai_fade_tween.set_trans(Tween.TRANS_SINE)
+	_amai_fade_tween.set_ease(Tween.EASE_OUT)
+	_amai_fade_tween.tween_property(_amai, "modulate:a", lit.a, duration)
+	await _amai_fade_tween.finished
+
+
+func _amai_fade_tween_kill() -> void:
+	if _amai_fade_tween != null and _amai_fade_tween.is_running():
+		_amai_fade_tween.kill()
 
 
 func set_darkness_level(level: float) -> void:
@@ -664,7 +692,8 @@ func set_darkness_level(level: float) -> void:
 	if _xiaoling != null:
 		_xiaoling.modulate = actor_modulate
 	if _amai != null:
-		_amai.modulate = actor_modulate
+		# 调暗只改色调，不能把正在进行的淡入不透明度冲掉。
+		_amai.modulate = Color(actor_modulate.r, actor_modulate.g, actor_modulate.b, _amai.modulate.a)
 
 
 func update_manual_movement(direction: float, delta: float, movement_id: String) -> void:
@@ -672,6 +701,7 @@ func update_manual_movement(direction: float, delta: float, movement_id: String)
 		return
 	if absf(direction) < 0.01:
 		_xiaoling.velocity = Vector2.ZERO
+		_release_manual_follow_amai()
 		return
 	_cancel_actor_tween("小凌")
 	var min_x := size.x * 0.12
@@ -689,11 +719,32 @@ func update_manual_movement(direction: float, delta: float, movement_id: String)
 		var scroll_ceiling := 0.48 if movement_id == "follow_right" else 0.82
 		var next_scroll := _world_scroll_ratio + direction * delta * 0.055
 		_apply_world_scroll_ratio(clampf(next_scroll, 0.0, scroll_ceiling))
+		# 阿麦在前方带路，屏幕位置不变但世界在卷动，相对地面其实一直在前进。
+		# 不同步驱动 velocity 的话他会保持 idle 贴图贴着地面平移，看起来像漂移。
+		_drive_manual_follow_amai(direction)
+
+
+func _drive_manual_follow_amai(direction: float) -> void:
+	# 有脚本 tween 在控制阿麦时不抢方向盘。
+	if _amai == null or not _amai.visible or _actor_tweens.has("阿麦"):
+		return
+	_amai.velocity = Vector2(direction * MANUAL_WALK_SPEED, 0.0)
+	_play_actor_motion_animation(_amai, direction)
+	_manual_follow_drives_amai = true
+
+
+func _release_manual_follow_amai() -> void:
+	if not _manual_follow_drives_amai:
+		return
+	_manual_follow_drives_amai = false
+	if _amai != null and not _actor_tweens.has("阿麦"):
+		_stop_actor("阿麦")
 
 
 func finish_manual_movement(movement_id: String) -> void:
 	if _xiaoling == null:
 		return
+	_release_manual_follow_amai()
 	var stop_ratio := 0.72
 	if movement_id == "forest_run_entry":
 		stop_ratio = 0.78
@@ -1023,6 +1074,9 @@ func get_debug_snapshot() -> Dictionary:
 		"waterfall_slope_up_right": WATERFALL_SLOPE_START_RATIO.y > WATERFALL_SLOPE_END_RATIO.y,
 		"waterfall_slope_gentle": WATERFALL_SLOPE_START_RATIO.y - WATERFALL_SLOPE_END_RATIO.y >= 0.04 and WATERFALL_SLOPE_START_RATIO.y - WATERFALL_SLOPE_END_RATIO.y <= 0.10,
 		"waterfall_stop_before_fall": WATERFALL_AMAI_STOP_RATIO < WATERFALL_SLOPE_END_RATIO.x,
+		"amai_alpha": _amai.modulate.a if _amai != null else 0.0,
+		"amai_velocity_x": _amai.velocity.x if _amai != null else 0.0,
+		"amai_fade_in_seconds": AMAI_FADE_IN_SECONDS,
 		"lake_stage_ready": _lake_root != null and _lake_back != null and _lake_front != null and _lake_particles != null,
 		"lake_source_width": LAKE_SOURCE_SIZE.x,
 		"lake_source_height": LAKE_SOURCE_SIZE.y,
