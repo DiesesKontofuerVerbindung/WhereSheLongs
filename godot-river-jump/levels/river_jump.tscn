@@ -1,0 +1,87 @@
+[gd_scene load_steps=2 format=3 uid="uid://criverjumplevel01"]
+
+[ext_resource type="Script" path="res://levels/river_jump.gd" id="1_river"]
+
+[node name="RiverJump" type="Node2D"]
+script = ExtResource("1_river")
+
+[node name="Stones" type="Node2D" parent="."]
+
+[node name="Reflections" type="Node2D" parent="."]
+
+[node name="TopLayer" type="Node2D" parent="."]
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position_smoothing_enabled = false
+
+[node name="HUD" type="CanvasLayer" parent="."]
+layer = 10
+
+[node name="Score" type="Label" parent="HUD"]
+mouse_filter = 2
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -80.0
+offset_top = 18.0
+offset_right = 80.0
+offset_bottom = 78.0
+theme_override_colors/font_color = Color(0.96, 0.98, 0.95, 1)
+theme_override_colors/font_shadow_color = Color(0.05, 0.12, 0.14, 0.7)
+theme_override_constants/shadow_offset_x = 0
+theme_override_constants/shadow_offset_y = 2
+theme_override_font_sizes/font_size = 42
+text = "0"
+horizontal_alignment = 1
+
+[node name="Best" type="Label" parent="HUD"]
+mouse_filter = 2
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -180.0
+offset_top = 16.0
+offset_right = -20.0
+offset_bottom = 44.0
+theme_override_colors/font_color = Color(1, 0.85, 0.42, 0.9)
+theme_override_font_sizes/font_size = 16
+text = "最高 0"
+horizontal_alignment = 2
+
+[node name="Hint" type="Label" parent="HUD"]
+mouse_filter = 2
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -380.0
+offset_top = -72.0
+offset_right = 380.0
+offset_bottom = -24.0
+theme_override_colors/font_color = Color(0.9, 0.96, 0.94, 0.92)
+theme_override_font_sizes/font_size = 17
+text = "跳到前方小光人那块石头上 · 按住蓄力，松手起跳"
+horizontal_alignment = 1
+
+[node name="ChargeBar" type="ProgressBar" parent="HUD"]
+mouse_filter = 2
+visible = false
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -140.0
+offset_top = -104.0
+offset_right = 140.0
+offset_bottom = -88.0
+max_value = 1.0
+show_percentage = false
+
+[node name="Back" type="Button" parent="HUD"]
+offset_left = 16.0
+offset_top = 14.0
+offset_right = 88.0
+offset_bottom = 46.0
+text = "返回"

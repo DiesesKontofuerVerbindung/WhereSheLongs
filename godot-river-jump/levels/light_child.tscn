@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://clightchild01"]
+
+[ext_resource type="Script" path="res://levels/light_child.gd" id="1_child"]
+
+[node name="LightChild" type="Node2D"]
+script = ExtResource("1_child")
