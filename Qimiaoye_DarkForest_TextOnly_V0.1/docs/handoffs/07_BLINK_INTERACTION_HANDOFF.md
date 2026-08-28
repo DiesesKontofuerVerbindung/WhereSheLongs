@@ -5,22 +5,28 @@
 这是一项独立模块开发任务。开始编码前必须取得并核对下面的基线：
 
 - 仓库：`https://github.com/DiesesKontofuerVerbindung/Peking26082026.git`
-- 基线分支：`codex/qimiaoye-demo`
-- 必须阅读的最新提交：`5fbf87e636d26fa80dfabb4090bfe51dc695af71`
-- 当前效果参考：`C:\Users\27532\Desktop\Gespielt.exe`（版本 `1.2.0.0`，SHA-256 `72175B99FF7F3254BF2693543411C6E7FF4BBF30832AD6FF1159B4D233610AC6`）
+- 基线分支：`codex/20260828-gespielt-grounded`
+- 必须阅读的最新提交：`c92bdad0beac9391c83b293bd2f708622a28c986`
+- 当前效果参考：`C:\Users\27532\Desktop\Gespielt.exe`（版本 `1.3.8.0`，SHA-256 `F10756C26F36B81AB36D0059E4CAC3E36D16FA3754347F7005FC52A2A9ADC963`）
 - 建议工作分支：`codex/qimiaoye-blink-interaction`
 
 建议命令：
 
 ```powershell
 git fetch origin
-git worktree add ..\qimiaoye-blink-interaction -b codex/qimiaoye-blink-interaction 5fbf87e636d26fa80dfabb4090bfe51dc695af71
+git worktree add ..\qimiaoye-blink-interaction -b codex/qimiaoye-blink-interaction c92bdad0beac9391c83b293bd2f708622a28c986
 git -C ..\qimiaoye-blink-interaction rev-parse HEAD
 ```
 
-最后一条命令必须输出完整提交号 `5fbf87e636d26fa80dfabb4090bfe51dc695af71`。`Gespielt.exe` 只用于观察当前风格和运行效果，源码权威仍是该提交。不要直接在集成分支上开发，也不要把机制 6 或其他玩法混进本模块提交。
+最后一条命令必须输出完整提交号 `c92bdad0beac9391c83b293bd2f708622a28c986`。`Gespielt.exe` 只用于观察当前风格和运行效果，源码权威仍是该提交。不要直接在集成分支上开发，也不要把机制 6 或其他玩法混进本模块提交。
 
-## 2. 编码前先看懂现有风格
+## 2. 当前项目进度
+
+基线已经完成 336 个剧情事件全流程、DOCX 行号开发者跳转、持续森林到瀑布舞台、ForestRun、TextInput、LakeJump、StarJar，以及独立模块高清 `SubViewport` 宿主。主流程的渐强世界震动范围仍为 DOCX 第 354–366 行，当前全流程验证会检查起点、峰值和复位。
+
+`BlinkInteraction` 目前仍是 `module_skip`，因此当前任务只需要替换这个钩子并补齐绑定。不得另建第二套全局震动，也不要改写已验证的震动范围。开始前必须运行 `git status --short --branch`、`git diff --stat`、`git rev-parse HEAD`，确认基线和工作树状态。
+
+## 3. 编码前先看懂现有风格
 
 先运行 `Qimiaoye_DarkForest_TextOnly_V0.1`，用 F4 开发者跳转定位到 DOCX 第 360 行附近，完整看一遍世界晃动开始、双手松开、眨眼和随后追问之间的节奏。随后阅读：
 
@@ -36,7 +42,7 @@ git -C ..\qimiaoye-blink-interaction rev-parse HEAD
 
 当前奇妙夜使用安静、克制、偏暗的视觉语言。全局字体优先 `Times New Roman`，中文回退 `SimSun / 宋体`；顶部旁白和底部对白完全分区。眨眼应当像梦境连接正在断裂的一瞬间，别做成白色闪光灯压力测试。
 
-## 3. 剧情位置与功能目标
+## 4. 剧情位置与功能目标
 
 当前提交的 `scripts/story_data.gd` 中：
 
@@ -52,7 +58,7 @@ git -C ..\qimiaoye-blink-interaction rev-parse HEAD
 
 主题是“梦境崩塌与失去连接”。模块内部不要显示第 362 行的对白，主对白系统会在返回后负责显示。
 
-## 4. 模块契约
+## 5. 模块契约
 
 建议文件范围：
 
@@ -80,13 +86,13 @@ finished.emit({
 
 模块必须只发射一次完成信号。交互层使用 anchors、容器或视口相对布局；输入区域不能依赖固定桌面像素坐标。鼠标、Enter/Space 至少提供一种清楚的等价操作，避免只有某个外设才能继续。
 
-## 5. 与全局晃动的边界
+## 6. 与全局晃动的边界
 
 主剧情已从 DOCX 第 354 行开始控制渐强屏幕晃动，并持续到章节末尾。BlinkInteraction 可以做自身的闭眼遮罩和轻微局部运动，但不能创建第二套全局相机抖动，也不能在退出时把主流程的 shake 状态清零。否则两套 tween 会互殴，最后只剩玩家晕。
 
 避免快速明暗闪烁。闭眼和睁眼建议分别使用约 `0.25–0.5` 秒的缓动，并设置低频、可预测的变化；不要使用高频白闪，以降低光敏风险。
 
-## 6. 当前正在修的分辨率问题
+## 7. 高清模块宿主边界
 
 旧版本把嵌入模块放进逻辑尺寸为 `1280×720` 的 `SubViewport`，随后将这张 720p 纹理放大到高分辨率窗口，导致 ForestRun 在 1080p、1440p 等环境中明显发糊。
 
@@ -97,7 +103,7 @@ finished.emit({
 - 在 `1280×720`、`1920×1080`、`2560×1440` 下，闭眼边缘、提示文字和输入区域保持一致。
 - 只使用逻辑视口坐标；渲染像素密度由宿主控制。
 
-## 7. 验收与交付
+## 8. 验收与交付
 
 至少完成以下检查，并把命令输出保存到项目日志目录：
 

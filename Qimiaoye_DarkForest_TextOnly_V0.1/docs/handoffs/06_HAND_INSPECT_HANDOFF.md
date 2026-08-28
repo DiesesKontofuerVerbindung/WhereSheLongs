@@ -5,22 +5,28 @@
 这是一项独立模块开发任务。开始编码前必须取得并核对下面的基线：
 
 - 仓库：`https://github.com/DiesesKontofuerVerbindung/Peking26082026.git`
-- 基线分支：`codex/qimiaoye-demo`
-- 必须阅读的最新提交：`5fbf87e636d26fa80dfabb4090bfe51dc695af71`
-- 当前效果参考：`C:\Users\27532\Desktop\Gespielt.exe`（版本 `1.2.0.0`，SHA-256 `72175B99FF7F3254BF2693543411C6E7FF4BBF30832AD6FF1159B4D233610AC6`）
+- 基线分支：`codex/20260828-gespielt-grounded`
+- 必须阅读的最新提交：`c92bdad0beac9391c83b293bd2f708622a28c986`
+- 当前效果参考：`C:\Users\27532\Desktop\Gespielt.exe`（版本 `1.3.8.0`，SHA-256 `F10756C26F36B81AB36D0059E4CAC3E36D16FA3754347F7005FC52A2A9ADC963`）
 - 建议工作分支：`codex/qimiaoye-hand-inspect`
 
 建议命令：
 
 ```powershell
 git fetch origin
-git worktree add ..\qimiaoye-hand-inspect -b codex/qimiaoye-hand-inspect 5fbf87e636d26fa80dfabb4090bfe51dc695af71
+git worktree add ..\qimiaoye-hand-inspect -b codex/qimiaoye-hand-inspect c92bdad0beac9391c83b293bd2f708622a28c986
 git -C ..\qimiaoye-hand-inspect rev-parse HEAD
 ```
 
-最后一条命令必须输出完整提交号 `5fbf87e636d26fa80dfabb4090bfe51dc695af71`。`Gespielt.exe` 只用于观察当前风格和运行效果，源码权威仍是该提交。不要直接在集成分支上开发，也不要把其他机制顺手塞进同一次提交。
+最后一条命令必须输出完整提交号 `c92bdad0beac9391c83b293bd2f708622a28c986`。`Gespielt.exe` 只用于观察当前风格和运行效果，源码权威仍是该提交。不要直接在集成分支上开发，也不要把其他机制顺手塞进同一次提交。
 
-## 2. 编码前先看懂现有风格
+## 2. 当前项目进度
+
+基线已经完成 336 个剧情事件全流程、DOCX 行号开发者跳转、持续森林到瀑布舞台、ForestRun、TextInput、LakeJump、StarJar，以及独立模块高清 `SubViewport` 宿主。瀑布段当前会沿小斜坡停在水体左侧；小凌与阿麦仍位于后景和前景之间。
+
+`HandInspect` 目前仍是 `module_skip`，因此当前任务只需要替换这个钩子并补齐绑定，不要重写已经通过验证的模块宿主。开始前必须运行 `git status --short --branch`、`git diff --stat`、`git rev-parse HEAD`，确认基线和工作树状态。
+
+## 3. 编码前先看懂现有风格
 
 先运行 `Qimiaoye_DarkForest_TextOnly_V0.1`，用 F4 开发者跳转定位到 DOCX 第 353 行附近，完整看一遍模块前后的剧情节奏。随后阅读：
 
@@ -36,7 +42,7 @@ git -C ..\qimiaoye-hand-inspect rev-parse HEAD
 
 当前奇妙夜的基调是安静、克制、偏暗的文字叙事。全局字体优先 `Times New Roman`，中文回退 `SimSun / 宋体`；旁白在顶部独立区域，对白和心理文字在底部对白区域。新模块应像这个世界里原本就存在的一段交互，别突然长成手游签到页。
 
-## 3. 剧情位置与功能目标
+## 4. 剧情位置与功能目标
 
 当前提交的 `scripts/story_data.gd` 中：
 
@@ -56,7 +62,7 @@ git -C ..\qimiaoye-hand-inspect rev-parse HEAD
 
 主题是“身体细节触发身份记忆”。模块内部不要抢先显示“我们以前是不是见过？”这句对白，否则合并后会重复。
 
-## 4. 模块契约
+## 5. 模块契约
 
 建议文件范围：
 
@@ -84,7 +90,7 @@ finished.emit({
 
 热点布局必须基于 anchors、容器或视口相对位置；不要依赖某一台电脑上的绝对屏幕坐标。模块所需图片应只放入自己的目录，交接时列出资源根目录。若集成层需要更新图片白名单，由集成人员做精确增补，别把允许范围一把扩到整个项目。
 
-## 5. 当前正在修的分辨率问题
+## 6. 高清模块宿主边界
 
 旧版本把嵌入模块放进逻辑尺寸为 `1280×720` 的 `SubViewport`，再由外层画布放大到高分辨率窗口。这样会把已经以 720p 渲染好的纹理二次放大，ForestRun 在 1080p、1440p 等高分辨率下明显发糊。
 
@@ -96,7 +102,7 @@ finished.emit({
 - 在 `1280×720`、`1920×1080`、`2560×1440` 下热点位置、文字和点击区域一致可用。
 - 只依赖逻辑视口坐标；渲染像素密度由宿主负责。
 
-## 6. 验收与交付
+## 7. 验收与交付
 
 至少完成以下检查，并把命令输出保存到项目日志目录：
 
