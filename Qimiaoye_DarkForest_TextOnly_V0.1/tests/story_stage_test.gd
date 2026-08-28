@@ -35,8 +35,8 @@ func _ready() -> void:
 		failures.append("小凌人物尺寸低于剧情舞台基准")
 	if float(initial.get("amai_visual_scale", 0.0)) < 0.34:
 		failures.append("阿麦没有按要求再次放大")
-	if not is_equal_approx(float(initial.get("xiaoling_gaussian_blur_strength", -1.0)), 0.50):
-		failures.append("小凌没有应用50%高斯模糊")
+	if not is_equal_approx(float(initial.get("xiaoling_gaussian_blur_strength", -1.0)), 0.90):
+		failures.append("小凌没有应用90%高斯模糊")
 	if float(initial.get("actor_ground_ratio", 0.0)) < 0.83:
 		failures.append("人物地面基准线仍然过高，视觉上会悬空")
 	var ground_y := float(initial.get("actor_ground_y", -100.0))
@@ -87,8 +87,12 @@ func _ready() -> void:
 	var heart_snapshot: Dictionary = stage.get_debug_snapshot()
 	if not bool(heart_snapshot.get("heart_glow_visible", false)):
 		failures.append("阿麦出现后心口光源没有启用")
-	if float(heart_snapshot.get("actor_ground_y", 0.0)) - float(heart_snapshot.get("heart_glow_y", 0.0)) < 220.0:
-		failures.append("阿麦光晕仍停在腰胯区域，没有对准心口")
+	var heart_offset := float(heart_snapshot.get("actor_ground_y", 0.0)) - float(heart_snapshot.get("heart_glow_y", 0.0))
+	var expected_heart_offset := 579.0 * float(heart_snapshot.get("amai_visual_scale", 0.0))
+	if absf(heart_offset - expected_heart_offset) > 0.5:
+		failures.append("阿麦光晕没有对准源图暖黄心口核心")
+	if not is_equal_approx(float(heart_snapshot.get("amai_heart_from_feet_source", 0.0)), 579.0):
+		failures.append("阿麦心口锚点仍使用旧的嘴部偏高坐标")
 	if not bool(heart_snapshot.get("heart_glow_warm_yellow", false)):
 		failures.append("阿麦心口光晕不是暖黄色")
 
@@ -115,14 +119,21 @@ func _ready() -> void:
 	if amai_after_walk >= float(stage.get_debug_snapshot().get("stage_width", 0.0)) - 70.0:
 		failures.append("阿麦慢走时跑出了画面")
 
-	stage.play_line_cue("amai_run_ahead", true)
-	await get_tree().process_frame
-	await get_tree().process_frame
+	stage.play_line_cue("amai_run_ahead", false)
+	await get_tree().physics_frame
+	var running_snapshot: Dictionary = stage.get_debug_snapshot()
+	if str(running_snapshot.get("amai_animation", "")) != "run":
+		failures.append("阿麦向右脚本位移时没有立即播放循环奔跑动作")
+	if not bool(running_snapshot.get("amai_facing_right", false)):
+		failures.append("阿麦向右脚本位移时奔跑方向仍然朝左")
+	await get_tree().create_timer(0.35).timeout
 	var run_snapshot: Dictionary = stage.get_debug_snapshot()
 	if float(run_snapshot.get("amai_x", 0.0)) <= amai_after_walk:
 		failures.append("旁白写阿麦跑起来时人物没有同步向前跑")
 	if float(run_snapshot.get("amai_x", 0.0)) > float(run_snapshot.get("stage_width", 0.0)) - 70.0:
 		failures.append("阿麦跑动后离开了屏幕约束")
+	if str(run_snapshot.get("amai_animation", "")) != "idle":
+		failures.append("阿麦脚本位移结束后没有恢复待机动作")
 
 	stage.set_scene("环境背景图4", true)
 	var waterfall_snapshot: Dictionary = stage.get_debug_snapshot()
@@ -148,12 +159,15 @@ func _ready() -> void:
 		failures.append("阿麦没有停在瀑布左侧蓝框区域")
 	if not bool(waterfall_snapshot.get("waterfall_slope_up_right", false)):
 		failures.append("瀑布前地面没有按要求向右上形成小斜坡")
+	if not bool(waterfall_snapshot.get("waterfall_slope_gentle", false)):
+		failures.append("瀑布前坡度过陡，人物脚底无法贴合美术地面")
 	if not bool(waterfall_snapshot.get("waterfall_stop_before_fall", false)):
 		failures.append("人物终点仍然进入了瀑布水体")
 	if float(waterfall_snapshot.get("xiaoling_feet_y", 0.0)) <= float(waterfall_snapshot.get("amai_feet_y", 0.0)):
 		failures.append("人物脚底没有沿向右上坡道逐渐抬升")
-	if float(waterfall_snapshot.get("amai_feet_y", stage_height)) > stage_height * 0.68:
-		failures.append("瀑布前停靠点仍然过低，人物会站进水里")
+	var amai_feet_ratio := float(waterfall_snapshot.get("amai_feet_y", stage_height)) / stage_height
+	if amai_feet_ratio < 0.66 or amai_feet_ratio > 0.69:
+		failures.append("阿麦脚底没有贴住瀑布前小斜坡")
 	stage.restore_for_source(125, "环境背景图4")
 	var restored_waterfall: Dictionary = stage.get_debug_snapshot()
 	if not is_equal_approx(float(restored_waterfall.get("xiaoling_x", 0.0)), stage_width * xiaoling_stop_ratio):
@@ -167,7 +181,7 @@ func _ready() -> void:
 		failures.append("原环境背景图锚点没有统一映射到持续森林长场景")
 
 	if failures.is_empty():
-		print("STORY_STAGE_PASS persistent_dialogue_stage=true continuous_long_scene=true source_size=11902x1440 waterfall_source_size=2560x1440 waterfall_appended=true waterfall_layers=back_front_particles actor_between_waterfall_layers=true waterfall_slope_up_right=true waterfall_stop_before_fall=true dev_jump_125_restores_waterfall_approach=true scroll_right=true no_scene_hard_cut=true light_hover_walk=true mouse_exit_stop=true light_trigger=true darkness=80_percent face_to_face=true heart_glow=true heart_glow_chest_aligned=true heart_glow_warm_yellow=true xiaoling_gaussian_blur=0.50 amai_visual_scale=0.34 scripted_steps=true amai_bounded=true animations=idle_run_start_run")
+		print("STORY_STAGE_PASS persistent_dialogue_stage=true continuous_long_scene=true source_size=11902x1440 waterfall_source_size=2560x1440 waterfall_appended=true waterfall_layers=back_front_particles actor_between_waterfall_layers=true waterfall_slope_up_right=true waterfall_slope_gentle=true waterfall_stop_before_fall=true dev_jump_125_restores_waterfall_approach=true scroll_right=true no_scene_hard_cut=true light_hover_walk=true mouse_exit_stop=true light_trigger=true darkness=80_percent face_to_face=true heart_glow=true heart_glow_source_y=606 heart_glow_source_offset=579 heart_glow_chest_aligned=true heart_glow_warm_yellow=true xiaoling_gaussian_blur=0.90 amai_visual_scale=0.34 amai_scripted_run_sync=true amai_run_facing_right=true scripted_steps=true amai_bounded=true animations=idle_run_start_run")
 		get_tree().quit(0)
 		return
 	for failure in failures:

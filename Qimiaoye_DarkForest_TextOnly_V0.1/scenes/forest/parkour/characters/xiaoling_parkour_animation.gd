@@ -8,69 +8,21 @@ enum MotionState {
     JUMP,
 }
 
-const IDLE_FRAMES := [
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/idle_01.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/idle_02.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/idle_03.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/idle_04.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/idle_05.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/idle_06.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/idle_07.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/idle_08.png"),
-]
-const RUN_START_FRAMES := [
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/run_start_01.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/run_start_02.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/run_start_03.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/run_start_04.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/run_start_05.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/run_start_06.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/run_start_07.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/run_start_08.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/run_start_09.png"),
-]
-const RUN_FRAMES := [
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/run_01.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/run_02.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/run_03.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/run_04.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/run_05.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/run_06.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/run_07.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/run_08.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/run_09.png"),
-]
-const JUMP_FRAMES := [
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/jump_01.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/jump_02.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/jump_03.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/jump_04.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/jump_05.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/jump_06.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/jump_07.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/jump_08.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/jump_09.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/jump_10.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/jump_11.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/jump_12.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/jump_13.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/jump_14.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/jump_15.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/jump_16.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/jump_17.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/jump_18.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/jump_19.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/jump_20.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/jump_21.png"),
-    preload("res://scenes/forest/parkour/characters/xiaoling_animation/jump_22.png"),
-]
+const HIGH_FRAME_ROOT := "res://scenes/forest/parkour/characters/xiaoling_animation_v2"
+const LEGACY_FRAME_ROOT := "res://scenes/forest/parkour/characters/xiaoling_animation"
+const IDLE_FRAME_COUNT := 151
+const RUN_START_FRAME_COUNT := 13
+const RUN_FRAME_COUNT := 30
+const JUMP_FRAME_COUNT := 22
 
 @export var movement_threshold := 24.0
 @export var vertical_motion_threshold := 24.0
-@export var idle_fps := 8.0
-@export var run_start_fps := 16.0
-@export var run_fps := 14.0
+@export var idle_fps := 30.0
+@export var run_start_fps := 30.0
+@export var run_fps := 30.0
 @export var jump_fps := 20.0
+
+static var _cached_sprite_frames: SpriteFrames
 
 var motion_state := MotionState.IDLE
 
@@ -78,7 +30,9 @@ var motion_state := MotionState.IDLE
 
 
 func _ready() -> void:
-    _build_sprite_frames()
+    if _cached_sprite_frames == null:
+        _cached_sprite_frames = _build_sprite_frames()
+    sprite_frames = _cached_sprite_frames
     animation_finished.connect(_on_animation_finished)
     _set_motion_state(MotionState.IDLE)
 
@@ -124,27 +78,53 @@ func get_motion_state_name() -> StringName:
             return &"idle"
 
 
-func _build_sprite_frames() -> void:
+func _build_sprite_frames() -> SpriteFrames:
     var next_frames := SpriteFrames.new()
     next_frames.remove_animation(&"default")
-    _add_animation(next_frames, &"idle", IDLE_FRAMES, idle_fps, true)
-    _add_animation(next_frames, &"run_start", RUN_START_FRAMES, run_start_fps, false)
-    _add_animation(next_frames, &"run", RUN_FRAMES, run_fps, true)
-    _add_animation(next_frames, &"jump", JUMP_FRAMES, jump_fps, false)
-    sprite_frames = next_frames
+    _add_animation(next_frames, &"idle", HIGH_FRAME_ROOT, "idle", "idle", IDLE_FRAME_COUNT, 3, idle_fps, true)
+    _add_animation(
+        next_frames,
+        &"run_start",
+        HIGH_FRAME_ROOT,
+        "run_start",
+        "run_start",
+        RUN_START_FRAME_COUNT,
+        3,
+        run_start_fps,
+        false
+    )
+    _add_animation(next_frames, &"run", HIGH_FRAME_ROOT, "run", "run", RUN_FRAME_COUNT, 3, run_fps, true)
+    _add_animation(next_frames, &"jump", LEGACY_FRAME_ROOT, "", "jump", JUMP_FRAME_COUNT, 2, jump_fps, false)
+    return next_frames
 
 
 func _add_animation(
         target: SpriteFrames,
         animation_name: StringName,
-        textures: Array,
+        frame_root: String,
+        folder_name: String,
+        file_prefix: String,
+        frame_count: int,
+        zero_padding: int,
         fps: float,
         loops: bool
 ) -> void:
     target.add_animation(animation_name)
     target.set_animation_speed(animation_name, fps)
     target.set_animation_loop(animation_name, loops)
-    for texture in textures:
+    for frame_index in range(1, frame_count + 1):
+        var frame_number := "%03d" % frame_index if zero_padding == 3 else "%02d" % frame_index
+        var folder_segment := "/%s" % folder_name if not folder_name.is_empty() else ""
+        var texture_path := "%s%s/%s_%s.png" % [
+            frame_root,
+            folder_segment,
+            file_prefix,
+            frame_number,
+        ]
+        var texture := load(texture_path) as Texture2D
+        if texture == null:
+            push_error("[XIAOLING ANIMATION] Missing frame: %s" % texture_path)
+            continue
         target.add_frame(animation_name, texture)
 
 

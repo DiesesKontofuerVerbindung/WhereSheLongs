@@ -175,6 +175,10 @@ func uses_progressive_reveal() -> bool:
 	return TextRevealProfile.is_valid()
 
 
+func get_reveal_speed_multiplier() -> float:
+	return TextRevealProfile.REVEAL_SPEED_MULTIPLIER
+
+
 func is_choice_group_centered() -> bool:
 	if _choice_box == null or _choice_box.size.x <= 0.0:
 		return false
@@ -290,7 +294,7 @@ func _animate_progressive_reveal(speaker: String, body_text: String) -> void:
 	_body_label.modulate.a = TextRevealProfile.START_ALPHA
 
 	if not speaker.is_empty():
-		var speaker_duration := clampf(float(speaker.length()) * 0.055, 0.18, 0.48)
+		var speaker_duration := TextRevealProfile.speaker_duration_for(speaker)
 		var speaker_tween := create_tween()
 		speaker_tween.set_parallel(true)
 		speaker_tween.tween_property(_speaker_label, "visible_ratio", 1.0, speaker_duration).set_trans(Tween.TRANS_LINEAR)

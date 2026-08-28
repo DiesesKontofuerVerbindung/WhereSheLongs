@@ -5,17 +5,21 @@ enum MotionState {
     IDLE,
     RUN_START,
     RUN,
+    JUMP,
 }
 
 const FRAME_ROOT := "res://scenes/forest/parkour/characters/amai_animation"
 const IDLE_FRAME_COUNT := 60
 const RUN_START_FRAME_COUNT := 21
 const RUN_FRAME_COUNT := 14
+const JUMP_FRAME_COUNT := 77
 
 @export var movement_threshold := 24.0
+@export var vertical_motion_threshold := 24.0
 @export var idle_fps := 12.0
 @export var run_start_fps := 30.0
 @export var run_fps := 15.0
+@export var jump_fps := 70.0
 @export var stop_grace_duration := 0.12
 
 static var _cached_sprite_frames: SpriteFrames
@@ -42,6 +46,23 @@ func _physics_process(delta: float) -> void:
     if moving:
         _stationary_time = 0.0
         flip_h = horizontal_speed < 0.0
+
+    var jump_motion := (
+        runner.velocity.y < -vertical_motion_threshold
+        or (
+            not runner.is_on_floor()
+            and (absf(runner.velocity.y) >= vertical_motion_threshold or motion_state == MotionState.JUMP)
+        )
+    )
+    if jump_motion:
+        if motion_state != MotionState.JUMP:
+            _set_motion_state(MotionState.JUMP)
+        return
+    if motion_state == MotionState.JUMP:
+        _set_motion_state(MotionState.RUN if moving else MotionState.IDLE)
+        return
+
+    if moving:
         if motion_state == MotionState.IDLE:
             _set_motion_state(MotionState.RUN_START)
         return
@@ -58,8 +79,22 @@ func get_motion_state_name() -> StringName:
             return &"run_start"
         MotionState.RUN:
             return &"run"
+        MotionState.JUMP:
+            return &"jump"
         _:
             return &"idle"
+
+
+func play_scripted_run(horizontal_direction: float = 1.0) -> void:
+    if not is_zero_approx(horizontal_direction):
+        flip_h = horizontal_direction < 0.0
+    _stationary_time = 0.0
+    _set_motion_state(MotionState.RUN)
+
+
+func play_scripted_idle() -> void:
+    _stationary_time = stop_grace_duration
+    _set_motion_state(MotionState.IDLE)
 
 
 func _build_sprite_frames() -> SpriteFrames:
@@ -76,6 +111,7 @@ func _build_sprite_frames() -> SpriteFrames:
         false
     )
     _add_animation(next_frames, &"run", "run", "run", RUN_FRAME_COUNT, run_fps, true)
+    _add_animation(next_frames, &"jump", "jump", "jump", JUMP_FRAME_COUNT, jump_fps, false)
     return next_frames
 
 

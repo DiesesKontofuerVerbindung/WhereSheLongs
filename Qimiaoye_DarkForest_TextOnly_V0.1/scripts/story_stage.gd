@@ -24,12 +24,12 @@ const ACTOR_GROUND_RATIO := 0.84
 const ACTOR_MARGIN := 112.0
 const XIAOLING_VISUAL_SCALE := 0.28
 const AMAI_VISUAL_SCALE := 0.34
-const XIAOLING_GAUSSIAN_BLUR_STRENGTH := 0.50
+const XIAOLING_GAUSSIAN_BLUR_STRENGTH := 0.90
 # 两套角色原图均以画布中心为 Sprite2D 原点；以下数值来自首帧非透明像素脚底。
 const XIAOLING_FOOT_FROM_CENTER := 558.0
 const AMAI_FOOT_FROM_CENTER := 545.0
-# 阿麦原图中心口暖黄六边形到脚底的垂直距离；缩放后仍按身体比例定位。
-const AMAI_HEART_FROM_FEET := 735.0
+# 阿麦 idle_001 源图：暖黄核心 y=606、脚底 y=1185，垂直距离为579px。
+const AMAI_HEART_FROM_FEET := 579.0
 const HEART_GLOW_COLOR := Color(1.0, 0.72, 0.20, 1.0)
 # 世界根节点为 -20：后景最终为 -20，前景最终为 -16，人物必须夹在二者之间。
 const ACTOR_LAYER_Z := -17
@@ -41,8 +41,8 @@ const WATERFALL_SOURCE_SIZE := Vector2(2560.0, 1440.0)
 const WATERFALL_SOURCE_X := FOREST_SOURCE_SIZE.x
 const CONTINUOUS_WORLD_SOURCE_SIZE := Vector2(11902.0, 1440.0)
 # 瀑布前的可站立地形沿画面向右上抬升；人物终点位于瀑布水体左侧。
-const WATERFALL_SLOPE_START_RATIO := Vector2(0.22, 0.76)
-const WATERFALL_SLOPE_END_RATIO := Vector2(0.56, 0.63)
+const WATERFALL_SLOPE_START_RATIO := Vector2(0.22, 0.74)
+const WATERFALL_SLOPE_END_RATIO := Vector2(0.56, 0.66)
 const WATERFALL_XIAOLING_STOP_RATIO := 0.34
 const WATERFALL_AMAI_STOP_RATIO := 0.50
 const LIGHT_SOURCE_POSITION := Vector2(2534.0, 720.0)
@@ -184,7 +184,7 @@ func _make_xiaoling_blur_material() -> ShaderMaterial:
 	blur_shader.code = """
 shader_type canvas_item;
 
-uniform float blur_strength : hint_range(0.0, 1.0) = 0.50;
+uniform float blur_strength : hint_range(0.0, 1.0) = 0.90;
 
 void fragment() {
 	vec2 offset = TEXTURE_PIXEL_SIZE * (blur_strength * 32.0);
@@ -329,6 +329,7 @@ func travel_to_scene(scene_name: String, transition_id: String, verify_mode: boo
 	_set_facing(_amai_visual, true)
 	_xiaoling.velocity = Vector2(speeds.x, 0.0)
 	_amai.velocity = Vector2(speeds.y, 0.0)
+	_play_actor_motion_animation(_amai, speeds.y)
 	_last_continuous_transition = transition_id
 	_last_continuous_transition_duration = configured_duration
 	_last_continuous_transition_ran_actors = true
@@ -353,8 +354,8 @@ func travel_to_scene(scene_name: String, transition_id: String, verify_mode: boo
 	if scene_name == "环境背景图4":
 		_place_actors_before_waterfall()
 	else:
-		_xiaoling.velocity = Vector2.ZERO
-		_amai.velocity = Vector2.ZERO
+		_stop_actor("小凌")
+		_stop_actor("阿麦")
 	_face_actors_toward_each_other()
 	queue_redraw()
 
@@ -666,6 +667,7 @@ func _start_actor_motion_to_x(actor: CharacterBody2D, target_x: float, speed: fl
 	actor.velocity = Vector2(signf(distance) * speed if absf(distance) > 0.5 else 0.0, 0.0)
 	if absf(distance) > 0.5:
 		_set_facing(_xiaoling_visual if actor == _xiaoling else _amai_visual, distance > 0.0)
+		_play_actor_motion_animation(actor, distance)
 	var tween := create_tween()
 	tween.set_trans(Tween.TRANS_QUAD)
 	tween.set_ease(Tween.EASE_IN_OUT)
@@ -698,13 +700,22 @@ func _stop_actor(actor_id: String) -> void:
 	var actor := _xiaoling if actor_id == "小凌" else _amai
 	if actor != null:
 		actor.velocity = Vector2.ZERO
+	if actor == _amai and _amai_visual != null and _amai_visual.has_method("play_scripted_idle"):
+		_amai_visual.call("play_scripted_idle")
+
+
+func _play_actor_motion_animation(actor: CharacterBody2D, horizontal_direction: float) -> void:
+	if actor != _amai or _amai_visual == null or is_zero_approx(horizontal_direction):
+		return
+	if _amai_visual.has_method("play_scripted_run"):
+		_amai_visual.call("play_scripted_run", horizontal_direction)
 
 
 func _set_actor_ratio(actor: CharacterBody2D, ratio: float) -> void:
 	if actor == null:
 		return
 	actor.position = Vector2(clampf(size.x * ratio, ACTOR_MARGIN, size.x - ACTOR_MARGIN), size.y * ACTOR_GROUND_RATIO)
-	actor.velocity = Vector2.ZERO
+	_stop_actor("小凌" if actor == _xiaoling else "阿麦")
 
 
 func _waterfall_ground_y_for_ratio(x_ratio: float) -> float:
@@ -726,10 +737,10 @@ func _waterfall_actor_position(x_ratio: float) -> Vector2:
 func _place_actors_before_waterfall() -> void:
 	if _xiaoling != null:
 		_xiaoling.position = _waterfall_actor_position(WATERFALL_XIAOLING_STOP_RATIO)
-		_xiaoling.velocity = Vector2.ZERO
+		_stop_actor("小凌")
 	if _amai != null:
 		_amai.position = _waterfall_actor_position(WATERFALL_AMAI_STOP_RATIO)
-		_amai.velocity = Vector2.ZERO
+		_stop_actor("阿麦")
 
 
 func _set_facing(visual: AnimatedSprite2D, facing_right: bool) -> void:
@@ -761,6 +772,8 @@ func verify_contract() -> bool:
 	if not _visual_has_motions(_xiaoling_visual, {"idle": 8, "run_start": 9, "run": 9}):
 		return false
 	if not _visual_has_motions(_amai_visual, {"idle": 60, "run_start": 21, "run": 14}):
+		return false
+	if not _amai_visual.has_method("play_scripted_run") or not _amai_visual.has_method("play_scripted_idle"):
 		return false
 	var back_final_z := _world_root.z_index + _forest_back.z_index
 	var front_final_z := _world_root.z_index + _forest_front.z_index
@@ -824,6 +837,7 @@ func get_debug_snapshot() -> Dictionary:
 		"heart_glow_visible": _heart_glow_visible,
 		"heart_glow_x": _amai_heart_position().x,
 		"heart_glow_y": _amai_heart_position().y,
+		"amai_heart_from_feet_source": AMAI_HEART_FROM_FEET,
 		"heart_glow_warm_yellow": HEART_GLOW_COLOR.r > HEART_GLOW_COLOR.b and HEART_GLOW_COLOR.g > HEART_GLOW_COLOR.b,
 		"light_active": _light_interaction_active,
 		"light_hovered": _light_hovered,
@@ -870,6 +884,7 @@ func get_debug_snapshot() -> Dictionary:
 		"waterfall_xiaoling_stop_ratio": WATERFALL_XIAOLING_STOP_RATIO,
 		"waterfall_amai_stop_ratio": WATERFALL_AMAI_STOP_RATIO,
 		"waterfall_slope_up_right": WATERFALL_SLOPE_START_RATIO.y > WATERFALL_SLOPE_END_RATIO.y,
+		"waterfall_slope_gentle": WATERFALL_SLOPE_START_RATIO.y - WATERFALL_SLOPE_END_RATIO.y >= 0.04 and WATERFALL_SLOPE_START_RATIO.y - WATERFALL_SLOPE_END_RATIO.y <= 0.10,
 		"waterfall_stop_before_fall": WATERFALL_AMAI_STOP_RATIO < WATERFALL_SLOPE_END_RATIO.x,
 		"world_width": CONTINUOUS_WORLD_SOURCE_SIZE.x * _world_scale,
 		"entry_curtain_visible": _entry_curtain.visible if _entry_curtain != null else false,
