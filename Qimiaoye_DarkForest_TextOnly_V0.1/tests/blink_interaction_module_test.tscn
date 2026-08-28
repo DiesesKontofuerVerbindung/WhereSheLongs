@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/blink_interaction_module_test.gd" id="1_blink_test"]
+
+[node name="BlinkInteractionModuleTest" type="Node"]
+script = ExtResource("1_blink_test")

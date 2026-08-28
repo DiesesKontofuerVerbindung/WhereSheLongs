@@ -39,6 +39,7 @@ const EXPECTED_MODULE_BINDINGS := {
 	"TextInput": {"source": 157, "type": "module", "scene": "res://levels/minigames/text_input.tscn", "signal": "finished"},
 	"LakeJump": {"source": 193, "type": "module", "scene": "res://levels/river_jump.tscn", "signal": "finished"},
 	"StarJar": {"source": 238, "type": "module", "scene": "res://levels/minigames/firefly_bottle.tscn", "signal": "finished"},
+	"BlinkInteraction": {"source": 360, "type": "module", "scene": "res://modules/blink_interaction/blink_interaction.tscn", "signal": "finished"},
 }
 const ALLOWED_MODULE_IMAGE_ROOTS := [
 	"res://assets/scene/",
@@ -1479,6 +1480,10 @@ func _run_embedded_module(event: Dictionary, is_placeholder: bool) -> void:
 		_record_module_failure(module_id, source, "LakeJump 根节点必须是 Node2D")
 	if module_id == "StarJar" and not module_instance is Control:
 		_record_module_failure(module_id, source, "StarJar 根节点必须是 Control")
+	if module_id == "BlinkInteraction" and not module_instance is Control:
+		_record_module_failure(module_id, source, "BlinkInteraction 根节点必须是 Control")
+	elif module_id == "BlinkInteraction" and (not module_instance.has_method("verify_contract") or not bool(module_instance.call("verify_contract"))):
+		_record_module_failure(module_id, source, "BlinkInteraction 遮罩、闭眼节奏或单次完成契约不完整")
 	if module_id == "TextInput":
 		if not module_instance is Control:
 			_record_module_failure(module_id, source, "TextInput 根节点必须是 Control")

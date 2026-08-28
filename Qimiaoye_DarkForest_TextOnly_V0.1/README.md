@@ -25,9 +25,10 @@
 - DOCX 第 157 行进入独立 `TextInput`；玩家补完“小凌：因为……”后的理由，空输入无法提交。开始输入后，12 条 DOCX 指定的现实杂念从屏幕四周聚向输入区；张开手掌稳定 0.12 秒并水平往返两次会把整句杂念驱散，输入框随后恢复焦点。继续输入时杂念会再回来，驱散后才能完成输入。Fan 状态机和连续 `fan_update` 契约来自 GitHub `Prototype_2_Fan`；玩家原文不会进入杂念、模块结果或运行日志。
 - DOCX 第 193 行进入真实 `LakeJump / River Jump` v0.5.7；源码来自 commit `2220f68`，玩法通过原场景 `finished(result)` 返回剧情第 195 行。
 - DOCX 第 238 行进入真实 `StarJar / Firefly Bottle`；把五团星光拖入瓶内后，由原场景 `finished(result)` 返回剧情第 240 行。
-- 四个绑定均运行在独立高清 `SubViewport` 中，Forest 的摄像机与屏幕坐标不会拖动剧情 UI；F4 行回溯仍能直接抵达对应模块。
+- DOCX 第 360 行进入真实 `BlinkInteraction`；承接第 358 行“世界开始震动、双手松开”与第 359 行“两个手松开的特写”。画面从两手紧握的暖光特写开始，按住 `Space` / `Enter` / 鼠标左键闭眼，松开睁眼；完成一次完整眨眼后由 `finished(result)` 返回剧情第 362 行。模块只做闭眼遮罩与轻微局部漂移，不创建第二套全局相机抖动，也不复位主流程的渐强晃动。
+- 五个绑定均运行在独立高清 `SubViewport` 中，Forest 的摄像机与屏幕坐标不会拖动剧情 UI；F4 行回溯仍能直接抵达对应模块。
 - 模块继续使用 `1280×720` 逻辑坐标，实际渲染纹理会随输出窗口提升至 1080p、1440p 或其他 16:9 内接尺寸，并在窗口分辨率变化时同步更新；这避免把固定 720p 纹理二次放大造成模糊，也为后续 Settings 分辨率切换保留统一接口。
-- `WaterfallInteraction`、`HandInspect`、`BlinkInteraction` 暂保留原 hook，并立即返回 continue/success。
+- `WaterfallInteraction`、`HandInspect` 暂保留原 hook，并立即返回 continue/success。
 - 运行到黑暗森林章节终点后停止，不生成下一章。
 
 ## 操作
@@ -41,6 +42,7 @@
 - TextInput：开始输入后，先处理从四周聚拢的“这样不好吗 / 别跑这么远 / 恭喜你被录用了 / 可是我们要结婚……”等杂念。宿主正式契约为 `ingest_gesture("Fan")`；也可逐帧调用 `ingest_hand_sample(...)`，或接收 OpenCV 原型的 `fan_update {strength, direction, sweep_count}`。驱散后输入框恢复，可继续输入或提交；最长 120 个字符。未连接摄像头桥接时可按 `F` 或点击“预览 Fan”代替手势。
 - Firefly Bottle：按住星光拖入瓶口，共完成五次后自动回到剧情。
 - LakeJump：按住鼠标左键、`Space` 或 `Enter` 蓄力，松开后起跳；落水或点击“返回”后回到剧情。
+- BlinkInteraction：按住 `Space` / `Enter` / 鼠标左键闭眼，松开睁眼；完成一次眨眼后自动回到剧情。单独单击也会完整走完一次闭眼—睁眼。
 - 诊断面板：按 `F3` 显示/隐藏。
 - DOCX 行回溯：按 `F4`，输入行号并选择“从此行开始”；再次按 `F4` 或 `Esc` 取消。当前可解析范围为第 29–366 行，空白行会落到下一条剧情事件，超过末行会被拒绝。
 
