@@ -1,0 +1,11 @@
+# Godot 4 generated project data
+.godot/
+export.cfg
+*.translation
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+
+# Godot 3 compatibility (if older tooling creates it)
+.import/

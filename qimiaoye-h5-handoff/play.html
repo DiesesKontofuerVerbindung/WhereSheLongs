@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#090611">
+  <title>正在游玩 · 奇妙夜</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="play-page">
+  <header class="play-bar">
+    <a class="back-link" href="index.html" aria-label="返回首页"><span aria-hidden="true">←</span> 返回</a>
+    <div class="play-title">奇妙夜 <small>RPG Demo v0.4</small></div>
+    <span class="play-status"><i></i> 游戏中</span>
+  </header>
+  <main class="game-shell">
+    <div class="game-frame-wrap">
+      <iframe class="game-frame" src="game/index.html" title="奇妙夜 RPG Demo" allow="autoplay; fullscreen; gamepad" allowfullscreen></iframe>
+      <div class="frame-fallback">游戏加载中… 若长时间无响应，请确认使用 HTTP 服务器打开。</div>
+    </div>
+  </main>
+  <footer class="play-footer">点击游戏画面后使用键盘或触控操作</footer>
+</body>
+</html>
