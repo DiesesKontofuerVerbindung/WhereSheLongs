@@ -7,6 +7,7 @@ const StoryData := preload("res://scripts/story_data.gd")
 const StorySourceLock := preload("res://scripts/story_source_lock.gd")
 const NarrationUIScript := preload("res://scripts/narration_ui.gd")
 const DialogueUIScript := preload("res://scripts/dialogue_ui.gd")
+const StoryStageScript := preload("res://scripts/story_stage.gd")
 const RUNTIME_LOG_PATH := "user://logs/runtime.log"
 const TRACE_LOG_PATH := "user://logs/trace_steps.log"
 const ENGINE_LOG_PATH := "user://logs/godot.log"
@@ -83,7 +84,7 @@ var _module_active := false
 var _active_module_id := ""
 var _module_run_counts: Dictionary = {}
 
-# 剧情外壳只保存不可见人物状态；独立玩法在隔离的高分辨率 SubViewport 内管理自己的节点与图片。
+# 剧情舞台持续保存人物站位与动作；独立玩法仍在隔离的高分辨率 SubViewport 内运行。
 var _actor_states := {
 	"小凌": {"x": 0.18, "motion": "Idle", "direction": "right", "visible": false},
 	"阿麦": {"x": 0.82, "motion": "Idle", "direction": "right", "visible": false},
@@ -104,6 +105,7 @@ var _light_button: Button
 var _action_button: Button
 var _dark_overlay: ColorRect
 var _vfx: Control
+var _story_stage
 var _diagnostic_panel: PanelContainer
 var _diagnostic_label: Label
 var _endpoint_panel: PanelContainer
@@ -130,6 +132,7 @@ var _light_hovered := false
 var _movement_active := false
 var _movement_allow_reverse := false
 var _movement_reverse_applied := false
+var _current_movement_id := ""
 var _right_held := false
 var _left_held := false
 
@@ -265,7 +268,7 @@ func _build_ui() -> void:
 	_scene_subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_scene_subtitle.add_theme_font_size_override("font_size", 16)
 	_scene_subtitle.add_theme_color_override("font_color", COLOR_MUTED)
-	_scene_subtitle.text = "剧情外壳纯文字 · 独立玩法按 DOCX 行切入"
+	_scene_subtitle.text = "剧情舞台 placeholder · 人物演出按 DOCX 行驱动"
 	_scene_subtitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_scene_subtitle)
 
@@ -278,6 +281,8 @@ func _build_ui() -> void:
 	_dark_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_dark_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_dark_overlay)
+
+	_build_story_stage()
 
 	var top_margin := MarginContainer.new()
 	top_margin.set_anchors_preset(Control.PRESET_CENTER_TOP)
@@ -316,6 +321,15 @@ func _build_ui() -> void:
 	_build_advance_hint()
 	_build_module_host()
 	_build_dev_jump_panel()
+
+
+func _build_story_stage() -> void:
+	_story_stage = StoryStageScript.new()
+	_story_stage.name = "PersistentDialogueStoryStage"
+	_story_stage.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_story_stage.light_progress_changed.connect(_on_story_light_progress_changed)
+	_story_stage.light_reached.connect(_on_story_light_reached)
+	add_child(_story_stage)
 
 
 func _build_narration_ui() -> void:
@@ -751,21 +765,24 @@ func _process(delta: float) -> void:
 		return
 	if _dev_jump_overlay != null and _dev_jump_overlay.visible:
 		return
-	if _light_active and _light_hovered:
-		_progress.value = minf(100.0, _progress.value + delta * 42.0)
-		if _progress.value >= 100.0:
-			_light_active = false
-			_light_hovered = false
-			interaction_completed.emit()
 	if _movement_active:
 		if _left_held and _movement_allow_reverse and not _movement_reverse_applied:
 			_apply_reverse_darkness()
+		var movement_direction := 0.0
+		if _right_held:
+			movement_direction = 1.0
+		elif _left_held and _movement_allow_reverse:
+			movement_direction = -1.0
+		if _story_stage != null:
+			_story_stage.update_manual_movement(movement_direction, delta, _current_movement_id)
 		if _right_held:
 			_progress.value = minf(100.0, _progress.value + delta * 48.0)
 			if _progress.value >= 100.0:
 				_movement_active = false
 				_right_held = false
 				_left_held = false
+				if _story_stage != null:
+					_story_stage.finish_manual_movement(_current_movement_id)
 				interaction_completed.emit()
 
 
@@ -1014,8 +1031,17 @@ func _restore_dev_jump_scene_context(target_index: int) -> void:
 				scene_context = str(event.get("to", scene_context))
 	_current_scene = scene_context
 	_scene_label.text = scene_context
-	_scene_subtitle.text = "剧情外壳纯文字 · 开发跳转场景恢复"
-	_dark_overlay.modulate.a = 0.0
+	_scene_subtitle.text = "剧情舞台 placeholder · 开发跳转状态恢复"
+	var target_source := int(_events[target_index].get("source", 0))
+	if target_source >= 52 and target_source <= 56:
+		_dark_overlay.modulate.a = 0.80
+	elif target_source >= 57 and target_source <= 58:
+		_dark_overlay.modulate.a = 0.20
+	else:
+		_dark_overlay.modulate.a = 0.0
+	if _story_stage != null:
+		_story_stage.restore_for_source(target_source, scene_context)
+	_sync_scene_chrome_visibility(scene_context)
 	_vfx.set_mode("none")
 
 
@@ -1132,6 +1158,9 @@ func _execute_event(event: Dictionary) -> void:
 func _show_line(event: Dictionary) -> void:
 	_interaction_panel.visible = false
 	_endpoint_panel.visible = false
+	var stage_cue := str(event.get("stage_cue", ""))
+	if not stage_cue.is_empty() and _story_stage != null:
+		_story_stage.play_line_cue(stage_cue, _verify_mode)
 	var channel := _resolve_line_channel(event)
 	var speaker := str(event.get("speaker", ""))
 	var text := str(event.get("text", ""))
@@ -1292,24 +1321,30 @@ func _run_choice(event: Dictionary) -> void:
 
 func _run_interaction(event: Dictionary) -> void:
 	_dialogue_ui.hide_dialogue()
+	var interaction_id := str(event.get("id", ""))
+	_status("等待玩家交互：%s" % interaction_id)
+	if interaction_id == "light_hover":
+		_interaction_panel.visible = false
+		_progress.value = 0
+		_light_active = true
+		if _story_stage != null:
+			_story_stage.begin_light_interaction()
+		if _verify_mode:
+			if _story_stage != null:
+				_story_stage.debug_advance_light(8.0, true)
+			await _brief_pause()
+		else:
+			await interaction_completed
+		_light_active = false
+		_log_runtime("INTERACTION_COMPLETE id=%s stage=light_approach" % interaction_id)
+		return
+
 	_interaction_panel.visible = true
 	_interaction_prompt.text = str(event.get("prompt", ""))
 	_progress.value = 0
 	_light_button.visible = false
 	_action_button.visible = false
-	var interaction_id := str(event.get("id", ""))
-	_status("等待玩家交互：%s" % interaction_id)
-	if interaction_id == "light_hover":
-		_vfx.set_mode("heart")
-		_light_button.visible = true
-		if _verify_mode:
-			_progress.value = 100
-			await _brief_pause()
-		else:
-			_light_active = true
-			await interaction_completed
-			_light_active = false
-	elif interaction_id == "jump_button":
+	if interaction_id == "jump_button":
 		_action_button.text = "跳水"
 		_action_button.visible = true
 		if _verify_mode:
@@ -1324,27 +1359,34 @@ func _run_interaction(event: Dictionary) -> void:
 
 func _run_movement(event: Dictionary) -> void:
 	_dialogue_ui.hide_dialogue()
-	_interaction_panel.visible = true
-	_interaction_prompt.text = str(event.get("prompt", ""))
+	_interaction_panel.visible = false
 	_progress.value = 0
 	_light_button.visible = false
 	_action_button.visible = false
+	_current_movement_id = str(event.get("id", ""))
 	_movement_allow_reverse = bool(event.get("allow_reverse", false))
 	_movement_reverse_applied = false
+	if _story_stage != null:
+		_story_stage.show_control_prompt(str(event.get("prompt", "")))
 	_status("玩家控制权：左右移动；等待右侧 trigger")
 	if _verify_mode:
 		if _movement_allow_reverse:
 			_apply_reverse_darkness()
 		_progress.value = 100
-		_actor_states["小凌"]["motion"] = "Run" if str(event.get("id", "")) == "forest_run_entry" else "Walk"
-		_actor_states["小凌"]["x"] = 0.88
+		_actor_states["小凌"]["motion"] = "Run" if _current_movement_id == "forest_run_entry" else "Walk"
+		_actor_states["小凌"]["x"] = 0.78 if _current_movement_id == "forest_run_entry" else 0.72
+		if _story_stage != null:
+			_story_stage.finish_manual_movement(_current_movement_id)
 		await _brief_pause()
 	else:
 		_movement_active = true
 		await interaction_completed
 		_movement_active = false
 	_actor_states["小凌"]["motion"] = "Idle"
+	if _story_stage != null:
+		_story_stage.finish_manual_movement(_current_movement_id)
 	_log_runtime("MOVEMENT_COMPLETE id=%s reverse=%s" % [event.get("id", ""), _movement_reverse_applied])
+	_current_movement_id = ""
 	_interaction_panel.visible = false
 
 
@@ -1428,6 +1470,8 @@ func _run_embedded_module(event: Dictionary, is_placeholder: bool) -> void:
 	])
 	if module_id == "ForestRun" and not module_instance is Node2D:
 		_record_module_failure(module_id, source, "ForestRun 根节点必须是 Node2D")
+	elif module_id == "ForestRun" and (not module_instance.has_method("verify_contract") or not bool(module_instance.call("verify_contract"))):
+		_record_module_failure(module_id, source, "ForestRun 第二段四树根、双动作通路、美术层级或阿麦路线契约不完整")
 	if module_id == "LakeJump" and not module_instance is Node2D:
 		_record_module_failure(module_id, source, "LakeJump 根节点必须是 Node2D")
 	if module_id == "StarJar" and not module_instance is Control:
@@ -1496,12 +1540,21 @@ func _run_module_skip(event: Dictionary) -> void:
 func _run_action(event: Dictionary) -> void:
 	var action_id := str(event.get("id", ""))
 	_status("[演出指令] %s" % str(event.get("status", action_id)))
+	if _story_stage != null:
+		await _story_stage.play_action(action_id, _verify_mode)
 	match action_id:
 		"light_trigger":
 			_dark_overlay.modulate.a = 0.80
+			_actor_states["小凌"]["visible"] = true
+			_actor_states["小凌"]["x"] = 0.66
 			_actor_states["小凌"]["motion"] = "Idle"
+			_actor_states["小凌"]["direction"] = "right"
+			_actor_states["阿麦"]["visible"] = true
+			_actor_states["阿麦"]["x"] = 0.78
+			_actor_states["阿麦"]["motion"] = "Idle"
+			_actor_states["阿麦"]["direction"] = "left"
 		"heart_light":
-			_vfx.set_mode("heart")
+			_vfx.set_mode("none")
 		"xiaoling_back_two", "xiaoling_back_lake":
 			_actor_states["小凌"]["motion"] = "BackStep"
 			_actor_states["小凌"]["x"] = maxf(0.05, float(_actor_states["小凌"]["x"]) - 0.08)
@@ -1515,16 +1568,20 @@ func _run_action(event: Dictionary) -> void:
 			_vfx.set_mode("single_firefly")
 		"amai_walk_waypoint":
 			_actor_states["阿麦"]["motion"] = "Walk"
-			_actor_states["阿麦"]["x"] = 0.72
+			_actor_states["阿麦"]["visible"] = true
+			_actor_states["阿麦"]["x"] = 0.84
 			await _brief_pause()
 			_actor_states["阿麦"]["motion"] = "Idle"
 		"amai_stop_idle":
 			_actor_states["阿麦"]["motion"] = "Idle"
 		"amai_run_entry":
 			_actor_states["阿麦"]["motion"] = "Run"
-			_actor_states["阿麦"]["x"] = 0.88
+			_actor_states["阿麦"]["visible"] = true
+			_actor_states["阿麦"]["x"] = 0.90
 		"xiaoling_run_follow":
 			_actor_states["小凌"]["motion"] = "Run"
+			_actor_states["小凌"]["visible"] = true
+			_actor_states["小凌"]["x"] = 0.68
 		"switch_wet_states":
 			_actor_states["小凌"]["state"] = "小凌2"
 			_actor_states["阿麦"]["state"] = "阿麦2"
@@ -1563,8 +1620,12 @@ func _play_transition(event: Dictionary) -> void:
 	match transition_id:
 		"EYE_OPEN":
 			_set_scene(target)
-			_dark_overlay.modulate.a = 1.0
-			await _tween_alpha(_dark_overlay, 0.0, duration)
+			if _story_stage != null and _story_stage.visible:
+				_story_stage.modulate.a = 0.0
+				await _tween_alpha(_story_stage, 1.0, duration)
+			else:
+				_dark_overlay.modulate.a = 1.0
+				await _tween_alpha(_dark_overlay, 0.0, duration)
 		"FIREFLY_GUIDE":
 			_vfx.set_mode("fireflies")
 			await _tween_alpha(_scene_label, 0.18, duration * 0.5)
@@ -1594,14 +1655,29 @@ func _set_scene(scene_name: String) -> void:
 	_visited_scenes[scene_name] = true
 	_scene_label.text = scene_name
 	_scene_label.modulate.a = 1.0
-	_scene_subtitle.text = "剧情外壳纯文字 · 独立玩法按 DOCX 行切入"
+	_scene_subtitle.text = "剧情舞台 placeholder · 人物演出按 DOCX 行驱动"
+	if _story_stage != null:
+		_story_stage.set_scene(scene_name, _verify_mode)
+	_sync_scene_chrome_visibility(scene_name)
 	_log_runtime("SCENE scene=%s" % scene_name)
 	_refresh_diagnostics()
+
+
+func _sync_scene_chrome_visibility(scene_name: String) -> void:
+	var uses_long_scene: bool = (
+		_story_stage != null
+		and _story_stage.has_method("uses_continuous_forest")
+		and bool(_story_stage.uses_continuous_forest(scene_name))
+	)
+	_scene_label.visible = not uses_long_scene
+	_scene_subtitle.visible = not uses_long_scene
 
 
 func _apply_reverse_darkness() -> void:
 	_movement_reverse_applied = true
 	_dark_overlay.modulate.a = 0.86
+	if _story_stage != null:
+		_story_stage.set_darkness_level(0.86)
 	_status("[TRIGGER] 重新陷入黑暗；森林入口不复存在。仍可按 D / → 跟上阿麦。")
 	_log_runtime("TRIGGER reverse_direction darkness=true forest_entrance=false")
 
@@ -1734,6 +1810,20 @@ func _on_light_mouse_entered() -> void:
 
 func _on_light_mouse_exited() -> void:
 	_light_hovered = false
+
+
+func _on_story_light_progress_changed(progress: float) -> void:
+	_progress.value = clampf(progress, 0.0, 1.0) * 100.0
+
+
+func _on_story_light_reached() -> void:
+	if not _light_active:
+		return
+	_light_active = false
+	_actor_states["小凌"]["visible"] = true
+	_actor_states["小凌"]["x"] = 0.66
+	_actor_states["小凌"]["motion"] = "Idle"
+	interaction_completed.emit()
 
 
 func _jump_to_label(label_id: String) -> void:
@@ -1968,6 +2058,8 @@ func _validate_contract() -> PackedStringArray:
 		errors.append("F4 DOCX 行跳转开发面板不完整")
 	elif _dev_jump_overlay.visible:
 		errors.append("F4 DOCX 行跳转开发面板不应默认显示")
+	if _story_stage == null or not _story_stage.has_method("verify_contract") or not bool(_story_stage.verify_contract()):
+		errors.append("持续剧情舞台、独立光源或人物三态动画契约不完整")
 	errors.append_array(_validate_module_render_contract())
 	if _module_host != null and _module_viewport != null and (_module_host.visible or _module_viewport.get_child_count() != 0):
 		errors.append("模块宿主启动时应保持隐藏且为空")
@@ -2145,7 +2237,7 @@ func _is_allowed_module_image_path(path: String) -> bool:
 func _find_forbidden_visual_nodes(node: Node) -> PackedStringArray:
 	var found := PackedStringArray()
 	for child in node.get_children():
-		if child == _module_host:
+		if child == _module_host or child == _story_stage:
 			continue
 		if child is Sprite2D or child is AnimatedSprite2D or child is TextureRect or child is CharacterBody2D:
 			found.append("%s (%s)" % [child.get_path(), child.get_class()])
@@ -2263,7 +2355,7 @@ func _refresh_diagnostics() -> void:
 
 func _finish_verification(success: bool, issues: PackedStringArray) -> void:
 	if success:
-		var message := "FULL_FLOW_PASS events=%d scenes=%d modules=%d endpoint=%s narration_lines=%d dialogue_lines=%d psychology_lines=%d narration_queue_max=%d dialogue_queue_max=%d narration_layout_samples=%d dialogue_layout_samples=%d choice_layout_samples=%d split_ui=true narration_top_2_20=true narration_centered=true narration_direct_reveal=true dialogue_progressive_reveal=true psychology_in_dialogue=true psychology_parentheses=true dialogue_left_aligned=true dialogue_body_top=true continue_button_centered=true choices_centered=true shortcut_hint=true shake_start_source=354 shake_peak_source=365 shake_end_source=366 shake_progressive=true shake_reset=true dev_docx_jump=true docx_jump_all_sources_resolvable=true docx_source_lock=53ba079 dev_jump_logs_preserved=true font=Times_New_Roman cjk_fallback=SimSun narrative_shell_text_only=true ForestRun_source=122 ForestRun_ready=true TextInput_source=157 TextInput_ready=true TextInput_interference=true TextInput_opencv_fan=true TextInput_raw_text_logged=false LakeJump_source=193 LakeJump_ready=true LakeJump_placeholder=false StarJar_source=238 StarJar_ready=true module_subviewport_isolated=true module_logical_size=1280x720 module_native_render=true module_aspect_keep=true module_resize_sync=true" % [
+		var message := "FULL_FLOW_PASS events=%d scenes=%d modules=%d endpoint=%s narration_lines=%d dialogue_lines=%d psychology_lines=%d narration_queue_max=%d dialogue_queue_max=%d narration_layout_samples=%d dialogue_layout_samples=%d choice_layout_samples=%d split_ui=true narration_top_2_20=true narration_centered=true narration_direct_reveal=true dialogue_progressive_reveal=true psychology_in_dialogue=true psychology_parentheses=true dialogue_left_aligned=true dialogue_body_top=true continue_button_centered=true choices_centered=true shortcut_hint=true shake_start_source=354 shake_peak_source=365 shake_end_source=366 shake_progressive=true shake_reset=true dev_docx_jump=true docx_jump_all_sources_resolvable=true docx_source_lock=53ba079 dev_jump_logs_preserved=true font=Times_New_Roman cjk_fallback=SimSun persistent_story_stage=true continuous_forest_long_scene=true forest_source_size=9342x1440 scene_hard_cut=false forest_scroll_right=true light_hover_walk=true light_mouse_exit_stop=true light_trigger_source=51 face_to_face=true heart_glow_at_amai=true actor_actions_from_story=true actor_screen_bounded=true ForestRun_entry_movement_source=121 ForestRun_source=122 ForestRun_ready=true ForestRun_segment02_roots=4 ForestRun_jump_each=true ForestRun_slide_each=true TextInput_source=157 TextInput_ready=true TextInput_interference=true TextInput_opencv_fan=true TextInput_raw_text_logged=false LakeJump_source=193 LakeJump_ready=true LakeJump_placeholder=false StarJar_source=238 StarJar_ready=true module_subviewport_isolated=true module_logical_size=1280x720 module_native_render=true module_aspect_keep=true module_resize_sync=true" % [
 			_events.size(),
 			_visited_scenes.size(),
 			_visited_modules.size(),

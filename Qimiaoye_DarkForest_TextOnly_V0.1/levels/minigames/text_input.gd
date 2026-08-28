@@ -8,9 +8,7 @@ const FanGestureDetectorScript := preload("res://levels/minigames/fan_gesture_de
 const VIEW_SIZE := Vector2(1280.0, 720.0)
 const MAX_LENGTH := 120
 const INTERFERENCE_ENTITY_COUNT := 12
-const MAX_INTERFERENCE_WAVES := 2
-const NEXT_WAVE_CHARACTER_STEP := 8
-const GATHER_DURATION := 1.35
+const MAX_INTERFERENCE_WAVES := 1
 const DISPERSE_DURATION := 0.62
 const RESUME_DELAY := 0.18
 const COLOR_BG := Color("05070c")
@@ -50,7 +48,6 @@ const INTERFERENCE_TARGETS := [
 
 enum InterferenceState {
 	DORMANT,
-	GATHERING,
 	BLOCKING,
 	DISPERSING,
 	CLEARED,
@@ -58,6 +55,8 @@ enum InterferenceState {
 
 var _source := 0
 var _input_panel: PanelContainer
+var _instruction_label: Label
+var _context_note: Label
 var _input: LineEdit
 var _submit_button: Button
 var _feedback: Label
@@ -69,7 +68,6 @@ var _fan_button: Button
 var _interference_state := InterferenceState.DORMANT
 var _wave_started_count := 0
 var _wave_cleared_count := 0
-var _next_wave_trigger_length := 1
 var _fan_waiting := false
 var _fan_animating := false
 var _fan_live_spread := 0.0
@@ -77,7 +75,6 @@ var _pending_character_count := 0
 var _submitted := false
 var _finish_emitted := false
 var _input_resumed_after_fan := false
-var _gather_tween: Tween
 var _fan_detector = FanGestureDetectorScript.new()
 
 
@@ -90,7 +87,7 @@ func _ready() -> void:
 	custom_minimum_size = VIEW_SIZE
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_build_ui()
-	call_deferred("_focus_input")
+	call_deferred("_start_interference_wave")
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -151,28 +148,29 @@ func _build_ui() -> void:
 	column.add_theme_constant_override("separation", 15)
 	margin.add_child(column)
 
-	var prompt := Label.new()
-	prompt.name = "Prompt"
-	prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	prompt.add_theme_color_override("font_color", COLOR_TEXT)
-	prompt.add_theme_font_size_override("font_size", 29)
-	prompt.text = "把没说完的话写下来"
-	column.add_child(prompt)
+	_instruction_label = Label.new()
+	_instruction_label.name = "Prompt"
+	_instruction_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_instruction_label.add_theme_color_override("font_color", COLOR_TEXT)
+	_instruction_label.add_theme_font_size_override("font_size", 29)
+	_instruction_label.text = "先为自己的声音清出空间"
+	column.add_child(_instruction_label)
 
-	var privacy := Label.new()
-	privacy.name = "PrivacyNote"
-	privacy.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	privacy.add_theme_color_override("font_color", COLOR_MUTED)
-	privacy.add_theme_font_size_override("font_size", 16)
-	privacy.text = "现实的声音会靠近。拨开它们，继续写自己的话。"
-	column.add_child(privacy)
+	_context_note = Label.new()
+	_context_note.name = "ContextNote"
+	_context_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_context_note.add_theme_color_override("font_color", COLOR_MUTED)
+	_context_note.add_theme_font_size_override("font_size", 16)
+	_context_note.text = "张开手掌，水平往返挥动"
+	column.add_child(_context_note)
 
 	_input = LineEdit.new()
 	_input.name = "ReasonInput"
 	_input.custom_minimum_size = Vector2(0, 62)
 	_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_input.max_length = MAX_LENGTH
-	_input.placeholder_text = "例如：我害怕让所有人失望……"
+	_input.editable = false
+	_input.placeholder_text = "清出空间后，在这里写下你的想法"
 	_input.add_theme_font_size_override("font_size", 22)
 	_input.text_changed.connect(_on_text_changed)
 	_input.text_submitted.connect(_on_text_submitted)
@@ -187,7 +185,7 @@ func _build_ui() -> void:
 	_feedback.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_feedback.add_theme_color_override("font_color", COLOR_MUTED)
 	_feedback.add_theme_font_size_override("font_size", 16)
-	_feedback.text = "开始输入后，杂念会从四周靠近"
+	_feedback.text = "张开手掌，水平往返挥扫"
 	status_row.add_child(_feedback)
 
 	_counter = Label.new()
@@ -272,13 +270,6 @@ func _on_text_changed(next_text: String) -> void:
 		return
 	_counter.text = "%d / %d" % [next_text.length(), MAX_LENGTH]
 	var normalized := next_text.strip_edges()
-	if (
-		not normalized.is_empty()
-		and _wave_started_count < MAX_INTERFERENCE_WAVES
-		and next_text.length() >= _next_wave_trigger_length
-		and _interference_state in [InterferenceState.DORMANT, InterferenceState.CLEARED]
-	):
-		_start_interference_wave()
 	_refresh_input_status(normalized)
 
 
@@ -287,26 +278,22 @@ func _refresh_input_status(normalized_text := "") -> void:
 		return
 	var normalized := normalized_text if not normalized_text.is_empty() else _input.text.strip_edges()
 	var interference_active := _interference_state in [
-		InterferenceState.GATHERING,
 		InterferenceState.BLOCKING,
 		InterferenceState.DISPERSING,
 	]
 	_submit_button.disabled = normalized.is_empty() or interference_active or _wave_cleared_count == 0
 	_feedback.add_theme_color_override("font_color", COLOR_MUTED)
-	if normalized.is_empty():
-		_feedback.text = "开始输入后，杂念会从四周靠近"
-	elif _interference_state == InterferenceState.GATHERING:
-		_feedback.text = "杂念正在靠近……可以继续写，也可以开始挥扫"
-	elif _interference_state == InterferenceState.BLOCKING:
+	if _interference_state == InterferenceState.BLOCKING:
 		_feedback.add_theme_color_override("font_color", COLOR_ERROR)
-		_feedback.text = "杂念堵住了输入。先用 Fan 把它们拨开"
+		_feedback.text = "保持张掌，左右挥动两次"
 	elif _interference_state == InterferenceState.DISPERSING:
-		_feedback.text = "正在把这些声音挥出去……"
-	elif _wave_cleared_count > 0:
+		_feedback.text = "这些声音正在散开……"
+	elif normalized.is_empty():
 		_feedback.add_theme_color_override("font_color", COLOR_ACCENT)
-		_feedback.text = "杂念被拨开了。继续写，或按 Enter 说出来"
+		_feedback.text = "现在，写下你自己的想法"
 	else:
-		_feedback.text = "继续写"
+		_feedback.add_theme_color_override("font_color", COLOR_ACCENT)
+		_feedback.text = "按 Enter 或点击“说出来”"
 
 
 func _on_text_submitted(_value: String) -> void:
@@ -326,13 +313,13 @@ func _attempt_submit() -> bool:
 		_feedback.text = "这句还空着。至少写下一个字。"
 		_input.grab_focus()
 		return false
-	if _interference_state in [InterferenceState.GATHERING, InterferenceState.BLOCKING, InterferenceState.DISPERSING]:
+	if _interference_state in [InterferenceState.BLOCKING, InterferenceState.DISPERSING]:
 		_feedback.add_theme_color_override("font_color", COLOR_ERROR)
-		_feedback.text = "这些声音还挡在这里。先把它们拨开。"
+		_feedback.text = "保持张掌，左右挥动两次"
 		return false
 	if _wave_cleared_count == 0:
-		_start_interference_wave()
-		_refresh_input_status(answer)
+		_feedback.add_theme_color_override("font_color", COLOR_ERROR)
+		_feedback.text = "先为自己的声音清出空间"
 		return false
 
 	_submitted = true
@@ -348,59 +335,29 @@ func _attempt_submit() -> bool:
 func _start_interference_wave() -> void:
 	if _submitted or _wave_started_count >= MAX_INTERFERENCE_WAVES:
 		return
-	if _interference_state in [InterferenceState.GATHERING, InterferenceState.BLOCKING, InterferenceState.DISPERSING]:
+	if _interference_state in [InterferenceState.BLOCKING, InterferenceState.DISPERSING]:
 		return
 	_wave_started_count += 1
-	_interference_state = InterferenceState.GATHERING
+	_interference_state = InterferenceState.BLOCKING
 	_fan_waiting = true
 	_fan_animating = false
 	_fan_live_spread = 0.0
 	_fan_detector.reset()
 	_interference_layer.visible = true
 	_fan_button.disabled = false
-	_fan_prompt.text = "杂念正在靠近 · 张开手掌，水平往返挥扫"
+	_fan_prompt.text = "张开手掌，水平往返挥扫"
 
 	for index in range(_interference_labels.size()):
 		var phrase := _interference_labels[index]
 		phrase.visible = true
 		phrase.reset_size()
-		phrase.position = _interference_start_position(index, phrase.size)
-		phrase.rotation = -0.10 if index % 2 == 0 else 0.10
-		phrase.scale = Vector2(0.88, 0.88)
-		phrase.modulate.a = 0.12
+		phrase.position = INTERFERENCE_TARGETS[index]
+		phrase.rotation = -0.035 if index % 2 == 0 else 0.035
+		phrase.scale = Vector2.ONE
+		phrase.modulate.a = 0.80 + float(index % 3) * 0.08
 
-	_gather_tween = create_tween().set_parallel(true)
-	_gather_tween.set_trans(Tween.TRANS_QUART)
-	_gather_tween.set_ease(Tween.EASE_OUT)
-	for index in range(_interference_labels.size()):
-		var phrase := _interference_labels[index]
-		_gather_tween.tween_property(phrase, "position", INTERFERENCE_TARGETS[index], GATHER_DURATION)
-		_gather_tween.tween_property(phrase, "rotation", -0.025 if index % 2 == 0 else 0.025, GATHER_DURATION)
-		_gather_tween.tween_property(phrase, "scale", Vector2.ONE, GATHER_DURATION)
-		_gather_tween.tween_property(phrase, "modulate:a", 0.78 + float(index % 3) * 0.07, GATHER_DURATION)
-	_gather_tween.finished.connect(_on_interference_gathered.bind(_wave_started_count))
-
-
-func _interference_start_position(index: int, phrase_size: Vector2) -> Vector2:
-	var lane := index / 4
-	match index % 4:
-		0:
-			return Vector2(-phrase_size.x - 90.0, 150.0 + float(lane) * 165.0)
-		1:
-			return Vector2(VIEW_SIZE.x + 90.0, 170.0 + float(lane) * 150.0)
-		2:
-			return Vector2(260.0 + float(lane) * 315.0, -phrase_size.y - 70.0)
-		_:
-			return Vector2(300.0 + float(lane) * 300.0, VIEW_SIZE.y + 70.0)
-
-
-func _on_interference_gathered(wave_number: int) -> void:
-	if wave_number != _wave_started_count or _interference_state != InterferenceState.GATHERING:
-		return
-	_interference_state = InterferenceState.BLOCKING
 	_input.editable = false
 	_input.release_focus()
-	_fan_prompt.text = "杂念堵住了输入 · 用 Fan 把它们拨开"
 	_refresh_input_status()
 
 
@@ -468,8 +425,6 @@ func trigger_fan(trigger_source := "preview") -> bool:
 	_fan_animating = true
 	_interference_state = InterferenceState.DISPERSING
 	_fan_button.disabled = true
-	if _gather_tween != null and _gather_tween.is_valid():
-		_gather_tween.kill()
 	call_deferred("_play_interference_dispersion", trigger_source)
 	return true
 
@@ -499,6 +454,9 @@ func _play_interference_dispersion(trigger_source: String) -> void:
 	_fan_animating = false
 	_interference_layer.visible = false
 	_input_resumed_after_fan = true
+	_instruction_label.text = "把没说完的话写下来"
+	_context_note.text = "现在轮到你的声音"
+	_input.placeholder_text = "例如：我害怕让所有人失望……"
 	var fan_result := {
 		"gesture": "Fan",
 		"trigger_source": trigger_source,
@@ -515,7 +473,6 @@ func _resume_input_after_fan() -> void:
 	if _submitted:
 		return
 	_input.editable = true
-	_next_wave_trigger_length = _input.text.length() + NEXT_WAVE_CHARACTER_STEP
 	_refresh_input_status()
 	call_deferred("_focus_input")
 
@@ -549,16 +506,20 @@ func verify_contract() -> bool:
 		and _submit_button != null
 		and _feedback != null
 		and _counter != null
+		and _instruction_label != null
+		and _context_note != null
 		and _interference_layer != null
 		and _fan_prompt != null
 		and _fan_button != null
 		and _interference_labels.size() == INTERFERENCE_ENTITY_COUNT
 		and phrase_counts.size() == INTERFERENCE_PHRASES.size()
 		and _input.max_length == MAX_LENGTH
-		and _input.editable
+		and not _input.editable
 		and _submit_button.disabled
 		and not _input.placeholder_text.is_empty()
-		and not _interference_layer.visible
+		and _interference_layer.visible
+		and _fan_waiting
+		and _wave_started_count == 1
 	)
 
 
@@ -583,7 +544,7 @@ func is_waiting_for_fan() -> bool:
 
 
 func is_interference_active() -> bool:
-	return _interference_state in [InterferenceState.GATHERING, InterferenceState.BLOCKING, InterferenceState.DISPERSING]
+	return _interference_state in [InterferenceState.BLOCKING, InterferenceState.DISPERSING]
 
 
 func is_input_editable() -> bool:
@@ -605,15 +566,13 @@ func get_interference_phrases() -> PackedStringArray:
 	return phrases
 
 
-func are_interference_entities_entering_from_edges() -> bool:
+func are_interference_entities_clustered() -> bool:
 	if not is_interference_active() or _interference_labels.is_empty():
 		return false
+	var center := VIEW_SIZE * 0.5
 	for phrase in _interference_labels:
-		if (
-			phrase.position.x < 0.0
-			or phrase.position.x > VIEW_SIZE.x
-			or phrase.position.y < 0.0
-			or phrase.position.y > VIEW_SIZE.y
-		):
-			return true
-	return false
+		if not phrase.visible:
+			return false
+		if phrase.position.distance_to(center) > 430.0:
+			return false
+	return true

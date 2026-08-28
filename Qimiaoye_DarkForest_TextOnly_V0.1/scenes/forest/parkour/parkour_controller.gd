@@ -575,3 +575,56 @@ func _place_player(target_position: Vector2) -> void:
     player.stop_external_movement()
     motor.reset_motion()
     player.set_external_velocity(Vector2.ZERO)
+
+
+func verify_contract() -> bool:
+    var roots := get_node_or_null("Gameplay/Segment02_Vines/RootObstacles")
+    var art := get_node_or_null("Gameplay/Segment02_Vines/Segment02Art")
+    if roots == null or art == null or roots.get_child_count() != 4:
+        return false
+    if roots.get_node_or_null("Root05") != null:
+        return false
+
+    var expected_root_x := [2228.0, 2649.0, 3069.0, 3495.0]
+    var expected_collision_x := [2212.0, 2628.0, 3036.0, 3461.0]
+    var expected_collision_width := [135.0, 132.0, 160.0, 226.0]
+    for index in roots.get_child_count():
+        var obstacle := roots.get_child(index) as Node2D
+        var collision_shape := obstacle.get_node_or_null("UpperCollision/CollisionShape2D") as CollisionShape2D
+        if obstacle == null or collision_shape == null or not collision_shape.shape is RectangleShape2D:
+            return false
+        var rectangle := collision_shape.shape as RectangleShape2D
+        if not is_equal_approx(obstacle.global_position.x, expected_root_x[index]):
+            return false
+        if not is_equal_approx(collision_shape.global_position.x, expected_collision_x[index]):
+            return false
+        if not is_equal_approx(rectangle.size.x, expected_collision_width[index]):
+            return false
+        var gate := get_node_or_null("Gameplay/Segment02_Vines/Gate%02d" % (index + 1)) as Node2D
+        if gate == null or not is_equal_approx(gate.global_position.x, collision_shape.global_position.x):
+            return false
+
+    var expected_art := {
+        "Backdrop": "res://scenes/forest/parkour/art/segment02_backdrop_v2.png",
+        "Roots": "res://scenes/forest/parkour/art/segment02_roots_v2.png",
+        "Foreground": "res://scenes/forest/parkour/art/segment02_foreground.png",
+    }
+    for sprite_name in expected_art:
+        var sprite := art.get_node_or_null(sprite_name) as Sprite2D
+        if sprite == null or sprite.texture == null:
+            return false
+        if sprite.texture.resource_path != expected_art[sprite_name] or sprite.texture.get_size() != Vector2(2560.0, 1440.0):
+            return false
+    if art.get_node("Roots").z_index <= player.z_index or art.get_node("Foreground").z_index <= art.get_node("Roots").z_index:
+        return false
+    if vine_echo == null or not vine_echo.has_method("get_echo_fixed_route"):
+        return false
+    var expected_route := PackedVector2Array([
+        Vector2(2070.0, 584.0),
+        Vector2(2122.0, 584.0),
+        Vector2(2538.0, 584.0),
+        Vector2(2946.0, 584.0),
+        Vector2(3371.0, 584.0),
+        Vector2(3820.0, 584.0),
+    ])
+    return vine_echo.get_echo_fixed_route() == expected_route

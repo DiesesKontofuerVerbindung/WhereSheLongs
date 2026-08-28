@@ -21,7 +21,7 @@ static func get_events() -> Array[Dictionary]:
 		# 环境背景图2
 		{"type": "line", "source": 61, "speaker": "阿麦", "text": "走吧。"},
 		{"type": "line", "source": 62, "speaker": "小凌", "text": "去哪儿？"},
-		{"type": "line", "source": 63, "speaker": "旁白", "text": "阿麦没有回答，也没有看她，径直往前走"},
+		{"type": "line", "source": 63, "speaker": "旁白", "text": "阿麦没有回答，也没有看她，径直往前走", "stage_cue": "amai_walk_waypoint"},
 		{"type": "action", "source": 64, "id": "amai_walk_waypoint", "status": "阿麦向右缓慢步行至画面中右侧 waypoint，随后切回 Idle。"},
 		{"type": "line", "source": 65, "speaker": "小凌", "text": "我又不知道你是谁，我为什么要跟你去。"},
 		{"type": "action", "source": 66, "id": "amai_stop_idle", "status": "阿麦立即停止位移，由 Walk 切换为 Idle。"},
@@ -35,7 +35,7 @@ static func get_events() -> Array[Dictionary]:
 		{"type": "line", "source": 74, "speaker": "小凌", "text": "那你还让我跟你走？"},
 		{"type": "action", "source": 75, "id": "amai_smile", "status": "阿麦笑。"},
 		{"type": "line", "source": 76, "speaker": "阿麦", "text": "我只是带路。"},
-		{"type": "line", "source": 77, "speaker": "旁白", "text": "他转过身，萤火虫重新排列成一条线，阿麦沿着萤火虫照亮的小路慢慢往前走。走了几步，他停下来，没有回头。"},
+		{"type": "line", "source": 77, "speaker": "旁白", "text": "他转过身，萤火虫重新排列成一条线，阿麦沿着萤火虫照亮的小路慢慢往前走。走了几步，他停下来，没有回头。", "stage_cue": "amai_walk_few_steps"},
 		{"type": "line", "source": 78, "speaker": "阿麦", "text": "你可以不跟。"},
 		{"type": "line", "source": 79, "speaker": "旁白", "text": "森林里又传来窸窸窣窣的声音。树枝上，一只眼睛圆溜溜的小动物探出脑袋，好奇地看着她。森林深处似乎有水源的痕迹，有什么东西在水里扑腾了一下。"},
 		{"type": "action", "source": 80, "id": "xiaoling_look_back", "status": "小凌看着阿麦的背影。"},
@@ -48,7 +48,7 @@ static func get_events() -> Array[Dictionary]:
 		{"type": "label", "id": "follow_move"},
 		{"type": "movement", "source": 84, "id": "follow_right", "prompt": "按 D / → 往阿麦方向走", "allow_reverse": false},
 		{"type": "label", "id": "walk_narration"},
-		{"type": "line", "source": 88, "speaker": "旁白", "text": "两个人一前一后走在森林里。路越来越窄。地形开始慢慢上坡。周围的障碍和树木越来越奇怪。直到，眼前出现了一条岔路。"},
+		{"type": "line", "source": 88, "speaker": "旁白", "text": "两个人一前一后走在森林里。路越来越窄。地形开始慢慢上坡。周围的障碍和树木越来越奇怪。直到，眼前出现了一条岔路。", "stage_cue": "both_walk_to_fork"},
 		{"type": "transition", "source": 89, "id": "WALK_CONTINUE", "to": "环境背景图3", "status": "两人保持 Walk 向右；背景2左移，背景3从右侧接入，再自然减速至 Idle。"},
 
 		# 环境背景图3
@@ -80,7 +80,7 @@ static func get_events() -> Array[Dictionary]:
 		{"type": "line", "source": 114, "speaker": "小凌", "text": "……"},
 		{"type": "line", "source": 115, "speaker": "旁白", "text": "阿麦忽然笑起来。"},
 		{"type": "line", "source": 116, "speaker": "旁白", "text": "他没有再问。"},
-		{"type": "line", "source": 117, "speaker": "旁白", "text": "只是朝着右边的路跑了起来"},
+		{"type": "line", "source": 117, "speaker": "旁白", "text": "只是朝着右边的路跑了起来", "stage_cue": "amai_run_ahead"},
 		{"type": "action", "source": 118, "id": "amai_run_entry", "status": "阿麦切换为 Run，向右跑至 ForestRun 入口并保持奔跑状态。"},
 		{"type": "line", "source": 119, "speaker": "小凌", "text": "喂！"},
 		{"type": "action", "source": 120, "id": "xiaoling_run_follow", "status": "小凌跑着跟了上去。"},

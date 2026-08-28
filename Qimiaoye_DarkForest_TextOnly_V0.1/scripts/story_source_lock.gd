@@ -91,6 +91,12 @@ const VISIBLE_LINES_BY_SOURCE := {
 }
 
 const REQUIRED_NON_LINE_EVENTS := {
+	51: {"type": "interaction", "id": "light_hover"},
+	52: {"type": "action", "id": "light_trigger"},
+	64: {"type": "action", "id": "amai_walk_waypoint"},
+	118: {"type": "action", "id": "amai_run_entry"},
+	121: {"type": "movement", "id": "forest_run_entry"},
+	122: {"type": "module", "id": "ForestRun"},
 	351: {"type": "action", "id": "hand_inspect_prepare"},
 }
 
