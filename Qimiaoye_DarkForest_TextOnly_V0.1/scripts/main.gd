@@ -1685,8 +1685,8 @@ func _set_scene(scene_name: String) -> void:
 func _sync_scene_chrome_visibility(scene_name: String) -> void:
 	var uses_long_scene: bool = (
 		_story_stage != null
-		and _story_stage.has_method("uses_continuous_forest")
-		and bool(_story_stage.uses_continuous_forest(scene_name))
+		and _story_stage.has_method("uses_art_stage")
+		and bool(_story_stage.uses_art_stage(scene_name))
 	)
 	_scene_label.visible = not uses_long_scene
 	_scene_subtitle.visible = not uses_long_scene
@@ -2394,7 +2394,7 @@ func _finish_verification(success: bool, issues: PackedStringArray) -> void:
 			_dialogue_ui.get_presented_line_count(),
 			_dialogue_ui.get_choice_layout_sample_count(),
 		]
-		message += " dialogue_reveal_speed=1.25x heart_glow_source_offset=579"
+		message += " dialogue_reveal_speed=1.25x heart_glow_source_offset=579 lake_stage=true lake_source_size=6117x1440 lake_layers=back_front_particles"
 		print(message)
 		_log_runtime(message)
 		get_tree().quit(0)

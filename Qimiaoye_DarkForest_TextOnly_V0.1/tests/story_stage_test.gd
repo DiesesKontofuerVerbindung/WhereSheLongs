@@ -180,8 +180,33 @@ func _ready() -> void:
 	if not stage.uses_continuous_forest("环境背景图3"):
 		failures.append("原环境背景图锚点没有统一映射到持续森林长场景")
 
+	# 神秘湖是独立世界：不得并入森林长场景，也不得与森林图层同时显示。
+	if stage.uses_continuous_forest("环境背景图6"):
+		failures.append("神秘湖被错误并入森林-瀑布连续长场景")
+	if not stage.uses_lake_stage("环境背景图6") or not stage.uses_art_stage("环境背景图6"):
+		failures.append("环境背景图6没有接入湖边美术舞台")
+	stage.set_scene("环境背景图6", true)
+	var lake_snapshot: Dictionary = stage.get_debug_snapshot()
+	if not bool(lake_snapshot.get("lake_stage_ready", false)):
+		failures.append("湖边三层美术没有全部建立")
+	if not is_equal_approx(float(lake_snapshot.get("lake_source_width", 0.0)), 6117.0):
+		failures.append("湖边底图宽度与交付素材 6117 不一致")
+	if not bool(lake_snapshot.get("lake_active", false)):
+		failures.append("进入环境背景图6后湖边世界没有显示")
+	if not bool(lake_snapshot.get("lake_world_exclusive", false)):
+		failures.append("湖边世界与森林长场景同时可见")
+	if not bool(lake_snapshot.get("lake_actor_between_layers", false)):
+		failures.append("人物没有夹在湖边后景与前景之间")
+	var lake_feet_ratio := float(lake_snapshot.get("amai_feet_y", 0.0)) / float(stage.size.y)
+	if not is_equal_approx(lake_feet_ratio, float(lake_snapshot.get("lake_ground_ratio", 0.0))):
+		failures.append("人物脚底没有踩在湖岸滩地上")
+	stage.set_scene("环境背景图4", true)
+	var back_to_forest: Dictionary = stage.get_debug_snapshot()
+	if bool(back_to_forest.get("lake_active", true)):
+		failures.append("离开环境背景图6后湖边世界没有关闭")
+
 	if failures.is_empty():
-		print("STORY_STAGE_PASS persistent_dialogue_stage=true continuous_long_scene=true source_size=11902x1440 waterfall_source_size=2560x1440 waterfall_appended=true waterfall_layers=back_front_particles actor_between_waterfall_layers=true waterfall_slope_up_right=true waterfall_slope_gentle=true waterfall_stop_before_fall=true dev_jump_125_restores_waterfall_approach=true scroll_right=true no_scene_hard_cut=true light_hover_walk=true mouse_exit_stop=true light_trigger=true darkness=80_percent face_to_face=true heart_glow=true heart_glow_source_y=606 heart_glow_source_offset=579 heart_glow_chest_aligned=true heart_glow_warm_yellow=true xiaoling_gaussian_blur=0.90 amai_visual_scale=0.34 amai_scripted_run_sync=true amai_run_facing_right=true scripted_steps=true amai_bounded=true animations=idle_run_start_run")
+		print("STORY_STAGE_PASS persistent_dialogue_stage=true continuous_long_scene=true source_size=11902x1440 waterfall_source_size=2560x1440 waterfall_appended=true waterfall_layers=back_front_particles actor_between_waterfall_layers=true waterfall_slope_up_right=true waterfall_slope_gentle=true waterfall_stop_before_fall=true dev_jump_125_restores_waterfall_approach=true scroll_right=true no_scene_hard_cut=true light_hover_walk=true mouse_exit_stop=true light_trigger=true darkness=80_percent face_to_face=true heart_glow=true heart_glow_source_y=606 heart_glow_source_offset=579 heart_glow_chest_aligned=true heart_glow_warm_yellow=true xiaoling_gaussian_blur=0.90 amai_visual_scale=0.34 amai_scripted_run_sync=true amai_run_facing_right=true scripted_steps=true amai_bounded=true animations=idle_run_start_run lake_stage=true lake_source_size=6117x1440 lake_layers=back_front_particles lake_world_exclusive=true lake_actor_between_layers=true lake_ground_ratio=0.86")
 		get_tree().quit(0)
 		return
 	for failure in failures:

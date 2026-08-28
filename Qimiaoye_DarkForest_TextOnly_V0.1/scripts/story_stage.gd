@@ -14,8 +14,13 @@ const ForestParticlesTexture := preload("res://assets/backgrounds/forest_before_
 const WaterfallBackTexture := preload("res://assets/backgrounds/forest_waterfall/waterfall_back.jpg")
 const WaterfallFrontTexture := preload("res://assets/backgrounds/forest_waterfall/waterfall_front.png")
 const WaterfallParticlesTexture := preload("res://assets/backgrounds/forest_waterfall/waterfall_particles.png")
+const LakeBackTexture := preload("res://assets/backgrounds/lake/lake_back.jpg")
+const LakeFrontTexture := preload("res://assets/backgrounds/lake/lake_front.png")
+const LakeParticlesTexture := preload("res://assets/backgrounds/lake/lake_particles.png")
 
 const STAGE_SCENES := ["环境背景图1", "环境背景图2", "环境背景图3", "环境背景图4"]
+# 神秘湖是与森林-瀑布长场景互不相连的独立世界，单独滚动、单独布局。
+const LAKE_SCENES := ["环境背景图6"]
 const XIAOLING_START_RATIO := 0.16
 const LIGHT_TRIGGER_RATIO := 0.66
 const AMAI_FACE_RATIO := 0.78
@@ -46,6 +51,13 @@ const WATERFALL_SLOPE_END_RATIO := Vector2(0.56, 0.66)
 const WATERFALL_XIAOLING_STOP_RATIO := 0.34
 const WATERFALL_AMAI_STOP_RATIO := 0.50
 const LIGHT_SOURCE_POSITION := Vector2(2534.0, 720.0)
+const LAKE_SOURCE_SIZE := Vector2(6117.0, 1440.0)
+# 湖岸比森林地表更靠近画面下沿；人物脚底踩在近岸滩地而不是水面。
+const LAKE_GROUND_RATIO := 0.86
+const LAKE_XIAOLING_START_RATIO := 0.22
+const LAKE_AMAI_START_RATIO := 0.40
+const LAKE_AMAI_SHORE_RATIO := 0.72
+const LAKE_SCROLL_CEILING := 0.62
 const SCENE_SCROLL_RATIOS := {
 	"环境背景图1": 0.0,
 	"环境背景图2": 0.225,
@@ -75,6 +87,8 @@ var _actor_tweens: Dictionary = {}
 var _world_scale := 0.5
 var _world_scroll_ratio := 0.0
 var _world_scroll_tween: Tween
+var _lake_scale := 0.5
+var _lake_scroll_ratio := 0.0
 var _last_continuous_transition := ""
 var _last_continuous_transition_duration := 0.0
 var _last_continuous_transition_ran_actors := false
@@ -88,6 +102,10 @@ var _forest_particles: Sprite2D
 var _waterfall_back: Sprite2D
 var _waterfall_front: Sprite2D
 var _waterfall_particles: Sprite2D
+var _lake_root: Node2D
+var _lake_back: Sprite2D
+var _lake_front: Sprite2D
+var _lake_particles: Sprite2D
 var _world_dark_overlay: ColorRect
 var _xiaoling: CharacterBody2D
 var _amai: CharacterBody2D
@@ -129,6 +147,8 @@ func _build_long_scene() -> void:
 	for waterfall_layer in [_waterfall_back, _waterfall_front, _waterfall_particles]:
 		waterfall_layer.position.x = WATERFALL_SOURCE_X
 
+	_build_lake_scene()
+
 	_world_dark_overlay = ColorRect.new()
 	_world_dark_overlay.name = "LongSceneDarknessOverlay"
 	_world_dark_overlay.color = Color.BLACK
@@ -140,14 +160,30 @@ func _build_long_scene() -> void:
 	add_child(_world_dark_overlay)
 
 
+func _build_lake_scene() -> void:
+	_lake_root = Node2D.new()
+	_lake_root.name = "MysteriousLakeWorld"
+	_lake_root.z_index = -20
+	_lake_root.visible = false
+	add_child(_lake_root)
+
+	_lake_back = _make_layer(_lake_root, "LakeBack", LakeBackTexture, 0)
+	_lake_front = _make_layer(_lake_root, "LakeFront", LakeFrontTexture, 4)
+	_lake_particles = _make_layer(_lake_root, "LakeParticles", LakeParticlesTexture, 5)
+
+
 func _make_world_layer(layer_name: String, texture: Texture2D, layer_z: int) -> Sprite2D:
+	return _make_layer(_world_root, layer_name, texture, layer_z)
+
+
+func _make_layer(parent: Node2D, layer_name: String, texture: Texture2D, layer_z: int) -> Sprite2D:
 	var layer := Sprite2D.new()
 	layer.name = layer_name
 	layer.texture = texture
 	layer.centered = false
 	layer.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	layer.z_index = layer_z
-	_world_root.add_child(layer)
+	parent.add_child(layer)
 	return layer
 
 
@@ -264,6 +300,24 @@ func _layout_long_scene() -> void:
 	_world_scale = size.y / CONTINUOUS_WORLD_SOURCE_SIZE.y
 	_world_root.scale = Vector2(_world_scale, _world_scale)
 	_apply_world_scroll_ratio(_world_scroll_ratio)
+	_layout_lake_scene()
+
+
+func _layout_lake_scene() -> void:
+	if _lake_root == null:
+		return
+	_lake_scale = size.y / LAKE_SOURCE_SIZE.y
+	_lake_root.scale = Vector2(_lake_scale, _lake_scale)
+	_apply_lake_scroll_ratio(_lake_scroll_ratio)
+
+
+func _apply_lake_scroll_ratio(scroll_ratio: float) -> void:
+	_lake_scroll_ratio = clampf(scroll_ratio, 0.0, 1.0)
+	if _lake_root == null:
+		return
+	var scaled_width := LAKE_SOURCE_SIZE.x * _lake_scale
+	var max_scroll := maxf(0.0, scaled_width - size.x)
+	_lake_root.position = Vector2(-max_scroll * _lake_scroll_ratio, 0.0)
 
 
 func _process(delta: float) -> void:
@@ -288,9 +342,15 @@ func _draw() -> void:
 func set_scene(scene_name: String, instant_scroll := false) -> void:
 	var changed := scene_name != _current_scene
 	_current_scene = scene_name
-	visible = scene_name in STAGE_SCENES
+	visible = uses_art_stage(scene_name)
+	_sync_active_world(scene_name)
 	if not visible:
 		hide_control_prompt()
+		return
+	if uses_lake_stage(scene_name):
+		if changed:
+			_enter_lake_scene()
+		queue_redraw()
 		return
 	_scroll_long_scene_to(scene_name, instant_scroll)
 	if scene_name == "环境背景图1" and changed:
@@ -308,6 +368,47 @@ func set_scene(scene_name: String, instant_scroll := false) -> void:
 
 func uses_continuous_forest(scene_name: String) -> bool:
 	return scene_name in STAGE_SCENES
+
+
+func uses_lake_stage(scene_name: String) -> bool:
+	return scene_name in LAKE_SCENES
+
+
+# 任何拥有实拍美术底图的舞台；主场景据此隐藏黑底占位场景名。
+func uses_art_stage(scene_name: String) -> bool:
+	return uses_continuous_forest(scene_name) or uses_lake_stage(scene_name)
+
+
+func _sync_active_world(scene_name: String) -> void:
+	var lake_active := uses_lake_stage(scene_name)
+	if _world_root != null:
+		_world_root.visible = not lake_active
+	if _lake_root != null:
+		_lake_root.visible = lake_active
+
+
+func _current_ground_ratio() -> float:
+	return LAKE_GROUND_RATIO if uses_lake_stage(_current_scene) else ACTOR_GROUND_RATIO
+
+
+func _enter_lake_scene() -> void:
+	_cancel_all_actor_tweens()
+	_apply_lake_scroll_ratio(0.0)
+	_light_visible = false
+	_heart_glow_visible = false
+	_light_interaction_active = false
+	_light_hovered = false
+	if _light_hover_area != null:
+		_light_hover_area.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	set_darkness_level(0.0)
+	_set_actor_ratio(_xiaoling, LAKE_XIAOLING_START_RATIO)
+	_set_actor_ratio(_amai, LAKE_AMAI_START_RATIO)
+	_xiaoling.visible = true
+	_amai.visible = true
+	_xiaoling.modulate = Color.WHITE
+	_amai.modulate = Color.WHITE
+	_set_facing(_xiaoling_visual, true)
+	_set_facing(_amai_visual, true)
 
 
 func travel_to_scene(scene_name: String, transition_id: String, verify_mode: bool) -> void:
@@ -508,6 +609,12 @@ func play_action(action_id: String, verify_mode: bool) -> void:
 			_set_facing(_amai_visual, false)
 		"amai_point_right":
 			_set_facing(_amai_visual, true)
+		"lake_approach":
+			var tween := _start_actor_motion(_amai, LAKE_AMAI_SHORE_RATIO, 150.0, verify_mode)
+			await tween.finished
+			_set_facing(_amai_visual, true)
+		"amai_turn_lake":
+			_set_facing(_amai_visual, false)
 		_:
 			pass
 
@@ -569,10 +676,15 @@ func update_manual_movement(direction: float, delta: float, movement_id: String)
 	_cancel_actor_tween("小凌")
 	var min_x := size.x * 0.12
 	var max_ratio := 0.78 if movement_id == "forest_run_entry" else 0.72
+	if movement_id == "lake_trigger":
+		max_ratio = 0.62
 	var max_x := size.x * max_ratio
 	_xiaoling.velocity = Vector2(direction * MANUAL_WALK_SPEED, 0.0)
 	_xiaoling.position.x = clampf(_xiaoling.position.x + _xiaoling.velocity.x * delta, min_x, max_x)
 	_set_facing(_xiaoling_visual, direction > 0.0)
+	if movement_id == "lake_trigger":
+		_apply_lake_scroll_ratio(clampf(_lake_scroll_ratio + direction * delta * 0.055, 0.0, LAKE_SCROLL_CEILING))
+		return
 	if movement_id in ["follow_right", "forest_run_entry"]:
 		var scroll_ceiling := 0.48 if movement_id == "follow_right" else 0.82
 		var next_scroll := _world_scroll_ratio + direction * delta * 0.055
@@ -582,7 +694,12 @@ func update_manual_movement(direction: float, delta: float, movement_id: String)
 func finish_manual_movement(movement_id: String) -> void:
 	if _xiaoling == null:
 		return
-	_set_actor_ratio(_xiaoling, 0.78 if movement_id == "forest_run_entry" else 0.72)
+	var stop_ratio := 0.72
+	if movement_id == "forest_run_entry":
+		stop_ratio = 0.78
+	elif movement_id == "lake_trigger":
+		stop_ratio = 0.62
+	_set_actor_ratio(_xiaoling, stop_ratio)
 	_xiaoling.velocity = Vector2.ZERO
 	hide_control_prompt()
 
@@ -601,9 +718,18 @@ func hide_control_prompt() -> void:
 
 func restore_for_source(source: int, scene_name: String) -> void:
 	_current_scene = scene_name
-	visible = scene_name in STAGE_SCENES
+	visible = uses_art_stage(scene_name)
+	_sync_active_world(scene_name)
 	_cancel_all_actor_tweens()
 	if not visible:
+		return
+	if uses_lake_stage(scene_name):
+		_enter_lake_scene()
+		if source >= 167:
+			_set_actor_ratio(_amai, LAKE_AMAI_SHORE_RATIO)
+		if source >= 173:
+			_set_facing(_amai_visual, false)
+		queue_redraw()
 		return
 	_scroll_long_scene_to(scene_name, true)
 	_xiaoling.visible = true
@@ -714,7 +840,7 @@ func _play_actor_motion_animation(actor: CharacterBody2D, horizontal_direction: 
 func _set_actor_ratio(actor: CharacterBody2D, ratio: float) -> void:
 	if actor == null:
 		return
-	actor.position = Vector2(clampf(size.x * ratio, ACTOR_MARGIN, size.x - ACTOR_MARGIN), size.y * ACTOR_GROUND_RATIO)
+	actor.position = Vector2(clampf(size.x * ratio, ACTOR_MARGIN, size.x - ACTOR_MARGIN), size.y * _current_ground_ratio())
 	_stop_actor("小凌" if actor == _xiaoling else "阿麦")
 
 
@@ -765,6 +891,17 @@ func verify_contract() -> bool:
 	for waterfall_layer in [_waterfall_back, _waterfall_front, _waterfall_particles]:
 		if waterfall_layer == null or not is_equal_approx(waterfall_layer.position.x, WATERFALL_SOURCE_X):
 			return false
+	if _lake_root == null or _lake_back == null or _lake_front == null or _lake_particles == null:
+		return false
+	for texture in [LakeBackTexture, LakeFrontTexture, LakeParticlesTexture]:
+		if texture == null or texture.get_size() != LAKE_SOURCE_SIZE:
+			return false
+	var lake_back_final_z := _lake_root.z_index + _lake_back.z_index
+	var lake_front_final_z := _lake_root.z_index + _lake_front.z_index
+	if not lake_back_final_z < _xiaoling.z_index or not _xiaoling.z_index < lake_front_final_z:
+		return false
+	if _world_root.visible == _lake_root.visible:
+		return false
 	if _prompt_label == null or _prompt_label.text != PROMPT_LIGHT:
 		return false
 	if _light_hover_area.name != "IndependentLightHoverArea":
@@ -886,6 +1023,20 @@ func get_debug_snapshot() -> Dictionary:
 		"waterfall_slope_up_right": WATERFALL_SLOPE_START_RATIO.y > WATERFALL_SLOPE_END_RATIO.y,
 		"waterfall_slope_gentle": WATERFALL_SLOPE_START_RATIO.y - WATERFALL_SLOPE_END_RATIO.y >= 0.04 and WATERFALL_SLOPE_START_RATIO.y - WATERFALL_SLOPE_END_RATIO.y <= 0.10,
 		"waterfall_stop_before_fall": WATERFALL_AMAI_STOP_RATIO < WATERFALL_SLOPE_END_RATIO.x,
+		"lake_stage_ready": _lake_root != null and _lake_back != null and _lake_front != null and _lake_particles != null,
+		"lake_source_width": LAKE_SOURCE_SIZE.x,
+		"lake_source_height": LAKE_SOURCE_SIZE.y,
+		"lake_layers": "back_front_particles",
+		"lake_active": _lake_root.visible if _lake_root != null else false,
+		"lake_world_exclusive": (_world_root != null and _lake_root != null and _world_root.visible != _lake_root.visible),
+		"lake_actor_between_layers": (
+			_lake_root != null
+			and _xiaoling != null
+			and _lake_root.z_index + _lake_back.z_index < _xiaoling.z_index
+			and _xiaoling.z_index < _lake_root.z_index + _lake_front.z_index
+		),
+		"lake_scroll_ratio": _lake_scroll_ratio,
+		"lake_ground_ratio": LAKE_GROUND_RATIO,
 		"world_width": CONTINUOUS_WORLD_SOURCE_SIZE.x * _world_scale,
 		"entry_curtain_visible": _entry_curtain.visible if _entry_curtain != null else false,
 		"particles_visible": _forest_particles.visible if _forest_particles != null else false,
