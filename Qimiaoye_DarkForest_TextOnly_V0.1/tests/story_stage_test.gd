@@ -23,6 +23,8 @@ func _ready() -> void:
 	var initial: Dictionary = stage.get_debug_snapshot()
 	if not bool(initial.get("long_scene_enabled", false)):
 		failures.append("森林到瀑布前没有启用持续长场景")
+	if int(initial.get("world_z_index", -100)) <= -100:
+		failures.append("森林长图层级没有高于主黑色底板")
 	if float(initial.get("world_width", 0.0)) <= float(initial.get("stage_width", 0.0)):
 		failures.append("长场景宽度不足，无法持续向右卷动")
 	if not is_zero_approx(float(initial.get("world_scroll_ratio", -1.0))):

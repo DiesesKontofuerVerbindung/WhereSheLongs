@@ -629,6 +629,7 @@ func get_debug_snapshot() -> Dictionary:
 		"long_scene_source_size": LONG_SCENE_SOURCE_SIZE,
 		"world_scroll_ratio": _world_scroll_ratio,
 		"world_scroll_x": -_world_root.position.x if _world_root != null else 0.0,
+		"world_z_index": _world_root.z_index if _world_root != null else -100,
 		"world_width": LONG_SCENE_SOURCE_SIZE.x * _world_scale,
 		"entry_curtain_visible": _entry_curtain.visible if _entry_curtain != null else false,
 		"particles_visible": _forest_particles.visible if _forest_particles != null else false,

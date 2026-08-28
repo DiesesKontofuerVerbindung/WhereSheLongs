@@ -247,6 +247,7 @@ func _build_ui() -> void:
 	_root_bg.color = COLOR_BG
 	_root_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_root_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root_bg.z_index = -100
 	add_child(_root_bg)
 
 	_scene_label = Label.new()
@@ -1544,7 +1545,7 @@ func _run_action(event: Dictionary) -> void:
 		await _story_stage.play_action(action_id, _verify_mode)
 	match action_id:
 		"light_trigger":
-			_dark_overlay.modulate.a = 0.80
+			_dark_overlay.modulate.a = 0.0 if _story_stage != null and _story_stage.visible else 0.80
 			_actor_states["小凌"]["visible"] = true
 			_actor_states["小凌"]["x"] = 0.66
 			_actor_states["小凌"]["motion"] = "Idle"
@@ -1671,12 +1672,16 @@ func _sync_scene_chrome_visibility(scene_name: String) -> void:
 	)
 	_scene_label.visible = not uses_long_scene
 	_scene_subtitle.visible = not uses_long_scene
+	if uses_long_scene:
+		# 森林舞台有自己的遮暗层，主场景黑幕必须保持透明，避免两层叠成近乎全黑。
+		_dark_overlay.modulate.a = 0.0
 
 
 func _apply_reverse_darkness() -> void:
 	_movement_reverse_applied = true
-	_dark_overlay.modulate.a = 0.86
-	if _story_stage != null:
+	var uses_long_scene: bool = _story_stage != null and _story_stage.visible
+	_dark_overlay.modulate.a = 0.0 if uses_long_scene else 0.86
+	if uses_long_scene:
 		_story_stage.set_darkness_level(0.86)
 	_status("[TRIGGER] 重新陷入黑暗；森林入口不复存在。仍可按 D / → 跟上阿麦。")
 	_log_runtime("TRIGGER reverse_direction darkness=true forest_entrance=false")
@@ -2060,6 +2065,8 @@ func _validate_contract() -> PackedStringArray:
 		errors.append("F4 DOCX 行跳转开发面板不应默认显示")
 	if _story_stage == null or not _story_stage.has_method("verify_contract") or not bool(_story_stage.verify_contract()):
 		errors.append("持续剧情舞台、独立光源或人物三态动画契约不完整")
+	elif _root_bg == null or _root_bg.z_index >= int(_story_stage.get_debug_snapshot().get("world_z_index", -100)):
+		errors.append("森林长图被主黑色底板遮挡")
 	errors.append_array(_validate_module_render_contract())
 	if _module_host != null and _module_viewport != null and (_module_host.visible or _module_viewport.get_child_count() != 0):
 		errors.append("模块宿主启动时应保持隐藏且为空")
@@ -2355,7 +2362,7 @@ func _refresh_diagnostics() -> void:
 
 func _finish_verification(success: bool, issues: PackedStringArray) -> void:
 	if success:
-		var message := "FULL_FLOW_PASS events=%d scenes=%d modules=%d endpoint=%s narration_lines=%d dialogue_lines=%d psychology_lines=%d narration_queue_max=%d dialogue_queue_max=%d narration_layout_samples=%d dialogue_layout_samples=%d choice_layout_samples=%d split_ui=true narration_top_2_20=true narration_centered=true narration_direct_reveal=true dialogue_progressive_reveal=true psychology_in_dialogue=true psychology_parentheses=true dialogue_left_aligned=true dialogue_body_top=true continue_button_centered=true choices_centered=true shortcut_hint=true shake_start_source=354 shake_peak_source=365 shake_end_source=366 shake_progressive=true shake_reset=true dev_docx_jump=true docx_jump_all_sources_resolvable=true docx_source_lock=53ba079 dev_jump_logs_preserved=true font=Times_New_Roman cjk_fallback=SimSun persistent_story_stage=true continuous_forest_long_scene=true forest_source_size=9342x1440 scene_hard_cut=false forest_scroll_right=true light_hover_walk=true light_mouse_exit_stop=true light_trigger_source=51 face_to_face=true heart_glow_at_amai=true actor_actions_from_story=true actor_screen_bounded=true ForestRun_entry_movement_source=121 ForestRun_source=122 ForestRun_ready=true ForestRun_segment02_roots=4 ForestRun_jump_each=true ForestRun_slide_each=true TextInput_source=157 TextInput_ready=true TextInput_interference=true TextInput_opencv_fan=true TextInput_raw_text_logged=false LakeJump_source=193 LakeJump_ready=true LakeJump_placeholder=false StarJar_source=238 StarJar_ready=true module_subviewport_isolated=true module_logical_size=1280x720 module_native_render=true module_aspect_keep=true module_resize_sync=true" % [
+		var message := "FULL_FLOW_PASS events=%d scenes=%d modules=%d endpoint=%s narration_lines=%d dialogue_lines=%d psychology_lines=%d narration_queue_max=%d dialogue_queue_max=%d narration_layout_samples=%d dialogue_layout_samples=%d choice_layout_samples=%d split_ui=true narration_top_2_20=true narration_centered=true narration_direct_reveal=true dialogue_progressive_reveal=true psychology_in_dialogue=true psychology_parentheses=true dialogue_left_aligned=true dialogue_body_top=true continue_button_centered=true choices_centered=true shortcut_hint=true shake_start_source=354 shake_peak_source=365 shake_end_source=366 shake_progressive=true shake_reset=true dev_docx_jump=true docx_jump_all_sources_resolvable=true docx_source_lock=53ba079 dev_jump_logs_preserved=true font=Times_New_Roman cjk_fallback=SimSun persistent_story_stage=true continuous_forest_long_scene=true forest_source_size=9342x1440 scene_hard_cut=false forest_scroll_right=true forest_art_visible=true forest_single_darkness_layer=true light_hover_walk=true light_mouse_exit_stop=true light_trigger_source=51 face_to_face=true heart_glow_at_amai=true actor_actions_from_story=true actor_screen_bounded=true ForestRun_entry_movement_source=121 ForestRun_source=122 ForestRun_ready=true ForestRun_segment02_roots=4 ForestRun_jump_each=true ForestRun_slide_each=true TextInput_source=157 TextInput_ready=true TextInput_interference=true TextInput_opencv_fan=true TextInput_raw_text_logged=false LakeJump_source=193 LakeJump_ready=true LakeJump_placeholder=false StarJar_source=238 StarJar_ready=true module_subviewport_isolated=true module_logical_size=1280x720 module_native_render=true module_aspect_keep=true module_resize_sync=true" % [
 			_events.size(),
 			_visited_scenes.size(),
 			_visited_modules.size(),
