@@ -18,8 +18,8 @@ const LIGHT_TRIGGER_RATIO := 0.66
 const AMAI_FACE_RATIO := 0.78
 # 人物使用真实脚底作原点，并踩在连续森林地表上；对白 UI 独立覆盖在舞台之上。
 const ACTOR_GROUND_RATIO := 0.84
-const ACTOR_MARGIN := 78.0
-const ACTOR_VISUAL_SCALE := 0.18
+const ACTOR_MARGIN := 112.0
+const ACTOR_VISUAL_SCALE := 0.28
 # 两套角色原图均以画布中心为 Sprite2D 原点；以下数值来自首帧非透明像素脚底。
 const XIAOLING_FOOT_FROM_CENTER := 558.0
 const AMAI_FOOT_FROM_CENTER := 545.0
@@ -36,6 +36,16 @@ const SCENE_SCROLL_RATIOS := {
 	"环境背景图3": 0.65,
 	"环境背景图4": 1.0,
 }
+const CONTINUOUS_TRAVEL_SECONDS := {
+	"FIREFLY_GUIDE": 2.4,
+	"WALK_CONTINUE": 3.2,
+	"FOREST_RUN_EXIT": 2.8,
+}
+const CONTINUOUS_TRAVEL_SPEEDS := {
+	"FIREFLY_GUIDE": Vector2(190.0, 175.0),
+	"WALK_CONTINUE": Vector2(205.0, 190.0),
+	"FOREST_RUN_EXIT": Vector2(315.0, 270.0),
+}
 
 var _current_scene := "环境背景图0"
 var _phase := 0.0
@@ -49,6 +59,9 @@ var _actor_tweens: Dictionary = {}
 var _world_scale := 0.5
 var _world_scroll_ratio := 0.0
 var _world_scroll_tween: Tween
+var _last_continuous_transition := ""
+var _last_continuous_transition_duration := 0.0
+var _last_continuous_transition_ran_actors := false
 
 var _world_root: Node2D
 var _forest_back: Sprite2D
@@ -243,6 +256,53 @@ func set_scene(scene_name: String, instant_scroll := false) -> void:
 
 func uses_continuous_forest(scene_name: String) -> bool:
 	return scene_name in STAGE_SCENES
+
+
+func travel_to_scene(scene_name: String, transition_id: String, verify_mode: bool) -> void:
+	if not uses_continuous_forest(scene_name):
+		set_scene(scene_name, verify_mode)
+		return
+	var target_ratio := clampf(float(SCENE_SCROLL_RATIOS.get(scene_name, _world_scroll_ratio)), 0.0, 1.0)
+	var configured_duration := float(CONTINUOUS_TRAVEL_SECONDS.get(transition_id, 2.6))
+	var duration := 0.012 if verify_mode else configured_duration
+	var speeds: Vector2 = CONTINUOUS_TRAVEL_SPEEDS.get(transition_id, Vector2(210.0, 195.0))
+	_cancel_all_actor_tweens()
+	if _world_scroll_tween != null and _world_scroll_tween.is_running():
+		_world_scroll_tween.kill()
+	_current_scene = scene_name
+	visible = true
+	_xiaoling.visible = true
+	_amai.visible = true
+	_set_facing(_xiaoling_visual, true)
+	_set_facing(_amai_visual, true)
+	_xiaoling.velocity = Vector2(speeds.x, 0.0)
+	_amai.velocity = Vector2(speeds.y, 0.0)
+	_last_continuous_transition = transition_id
+	_last_continuous_transition_duration = configured_duration
+	_last_continuous_transition_ran_actors = true
+	_world_scroll_tween = create_tween()
+	_world_scroll_tween.set_trans(Tween.TRANS_SINE)
+	_world_scroll_tween.set_ease(Tween.EASE_IN_OUT)
+	_world_scroll_tween.tween_method(_apply_world_scroll_ratio, _world_scroll_ratio, target_ratio, duration)
+	await _world_scroll_tween.finished
+	_xiaoling.velocity = Vector2.ZERO
+	_amai.velocity = Vector2.ZERO
+	_face_actors_toward_each_other()
+	queue_redraw()
+
+
+func prepare_dialogue(speaker: String) -> void:
+	if not visible or speaker not in ["小凌", "阿麦"]:
+		return
+	_face_actors_toward_each_other()
+
+
+func _face_actors_toward_each_other() -> void:
+	if _xiaoling == null or _amai == null or not _xiaoling.visible or not _amai.visible:
+		return
+	var xiaoling_is_left := _xiaoling.position.x <= _amai.position.x
+	_set_facing(_xiaoling_visual, xiaoling_is_left)
+	_set_facing(_amai_visual, not xiaoling_is_left)
 
 
 func _scroll_long_scene_to(scene_name: String, instant: bool) -> void:
@@ -645,12 +705,14 @@ func get_debug_snapshot() -> Dictionary:
 		"xiaoling_x": _xiaoling.position.x if _xiaoling != null else 0.0,
 		"xiaoling_visible": _xiaoling.visible if _xiaoling != null else false,
 		"xiaoling_animation": str(_xiaoling_visual.animation) if _xiaoling_visual != null else "",
+		"xiaoling_facing_right": not _xiaoling_visual.flip_h if _xiaoling_visual != null else false,
 		"xiaoling_z_index": _xiaoling.z_index if _xiaoling != null else 0,
 		"xiaoling_visual_scale": _xiaoling_visual.scale.x if _xiaoling_visual != null else 0.0,
 		"xiaoling_feet_y": _actor_feet_y(_xiaoling, _xiaoling_visual, XIAOLING_FOOT_FROM_CENTER),
 		"amai_x": _amai.position.x if _amai != null else 0.0,
 		"amai_visible": _amai.visible if _amai != null else false,
 		"amai_animation": str(_amai_visual.animation) if _amai_visual != null else "",
+		"amai_facing_right": not _amai_visual.flip_h if _amai_visual != null else false,
 		"amai_z_index": _amai.z_index if _amai != null else 0,
 		"amai_visual_scale": _amai_visual.scale.x if _amai_visual != null else 0.0,
 		"amai_feet_y": _actor_feet_y(_amai, _amai_visual, AMAI_FOOT_FROM_CENTER),
@@ -661,6 +723,10 @@ func get_debug_snapshot() -> Dictionary:
 		"long_scene_source_size": LONG_SCENE_SOURCE_SIZE,
 		"world_scroll_ratio": _world_scroll_ratio,
 		"world_scroll_x": -_world_root.position.x if _world_root != null else 0.0,
+		"continuous_travel_seconds": CONTINUOUS_TRAVEL_SECONDS,
+		"last_continuous_transition": _last_continuous_transition,
+		"last_continuous_transition_duration": _last_continuous_transition_duration,
+		"last_continuous_transition_ran_actors": _last_continuous_transition_ran_actors,
 		"world_z_index": _world_root.z_index if _world_root != null else -100,
 		"forest_back_z_index": (_world_root.z_index + _forest_back.z_index) if _world_root != null and _forest_back != null else -100,
 		"forest_front_z_index": (_world_root.z_index + _forest_front.z_index) if _world_root != null and _forest_front != null else -100,

@@ -1191,6 +1191,8 @@ func _show_line(event: Dictionary) -> void:
 		_narration_ui.set_advance_waiting(false)
 	else:
 		_narration_ui.begin_fade_for_dialogue(_verify_mode)
+		if _story_stage != null and _story_stage.has_method("prepare_dialogue"):
+			_story_stage.prepare_dialogue(speaker)
 		await _dialogue_ui.present_line(display_speaker, display_text, _verify_mode)
 		_dialogue_lines_seen += 1
 		if is_psychology:
@@ -1617,6 +1619,20 @@ func _play_transition(event: Dictionary) -> void:
 	var target := str(event.get("to", ""))
 	_status("[TRANSITION: %s] %s" % [transition_id, event.get("status", "")])
 	_log_runtime("TRANSITION_BEGIN id=%s from=%s to=%s" % [transition_id, _current_scene, target])
+	if (
+		transition_id in ["FIREFLY_GUIDE", "WALK_CONTINUE", "FOREST_RUN_EXIT"]
+		and _story_stage != null
+		and _story_stage.visible
+		and _story_stage.has_method("uses_continuous_forest")
+		and bool(_story_stage.uses_continuous_forest(target))
+		and _story_stage.has_method("travel_to_scene")
+	):
+		_vfx.set_mode("motion")
+		await _story_stage.travel_to_scene(target, transition_id, _verify_mode)
+		_set_scene(target)
+		_vfx.set_mode("none")
+		_log_runtime("TRANSITION_END id=%s scene=%s continuous_run=true" % [transition_id, _current_scene])
+		return
 	var duration := 0.012 if _verify_mode else 0.72
 	match transition_id:
 		"EYE_OPEN":
@@ -2362,7 +2378,7 @@ func _refresh_diagnostics() -> void:
 
 func _finish_verification(success: bool, issues: PackedStringArray) -> void:
 	if success:
-		var message := "FULL_FLOW_PASS events=%d scenes=%d modules=%d endpoint=%s narration_lines=%d dialogue_lines=%d psychology_lines=%d narration_queue_max=%d dialogue_queue_max=%d narration_layout_samples=%d dialogue_layout_samples=%d choice_layout_samples=%d split_ui=true narration_top_2_20=true narration_centered=true narration_direct_reveal=true dialogue_progressive_reveal=true psychology_in_dialogue=true psychology_parentheses=true dialogue_left_aligned=true dialogue_body_top=true continue_button_centered=true choices_centered=true shortcut_hint=true shake_start_source=354 shake_peak_source=365 shake_end_source=366 shake_progressive=true shake_reset=true dev_docx_jump=true docx_jump_all_sources_resolvable=true docx_source_lock=53ba079 dev_jump_logs_preserved=true font=Times_New_Roman cjk_fallback=SimSun persistent_story_stage=true continuous_forest_long_scene=true forest_source_size=9342x1440 scene_hard_cut=false forest_scroll_right=true forest_art_visible=true forest_single_darkness_layer=true actor_between_back_and_front=true actor_visual_scale=0.18 actor_ground_ratio=0.84 actor_feet_grounded=true light_hover_walk=true light_mouse_exit_stop=true light_trigger_source=51 face_to_face=true heart_glow_at_amai=true actor_actions_from_story=true actor_screen_bounded=true ForestRun_entry_movement_source=121 ForestRun_source=122 ForestRun_ready=true ForestRun_segment02_roots=4 ForestRun_jump_each=true ForestRun_slide_each=true TextInput_source=157 TextInput_ready=true TextInput_interference=true TextInput_opencv_fan=true TextInput_raw_text_logged=false LakeJump_source=193 LakeJump_ready=true LakeJump_placeholder=false StarJar_source=238 StarJar_ready=true module_subviewport_isolated=true module_logical_size=1280x720 module_native_render=true module_aspect_keep=true module_resize_sync=true" % [
+		var message := "FULL_FLOW_PASS events=%d scenes=%d modules=%d endpoint=%s narration_lines=%d dialogue_lines=%d psychology_lines=%d narration_queue_max=%d dialogue_queue_max=%d narration_layout_samples=%d dialogue_layout_samples=%d choice_layout_samples=%d split_ui=true narration_top_2_20=true narration_centered=true narration_direct_reveal=true dialogue_progressive_reveal=true psychology_in_dialogue=true psychology_parentheses=true dialogue_left_aligned=true dialogue_body_top=true continue_button_centered=true choices_centered=true shortcut_hint=true shake_start_source=354 shake_peak_source=365 shake_end_source=366 shake_progressive=true shake_reset=true dev_docx_jump=true docx_jump_all_sources_resolvable=true docx_source_lock=53ba079 dev_jump_logs_preserved=true font=Times_New_Roman cjk_fallback=SimSun persistent_story_stage=true continuous_forest_long_scene=true forest_source_size=9342x1440 scene_hard_cut=false forest_scroll_right=true forest_art_visible=true forest_single_darkness_layer=true actor_between_back_and_front=true actor_visual_scale=0.28 actor_ground_ratio=0.84 actor_feet_grounded=true dialogue_face_to_face=true continuous_scene_run=true continuous_scene_run_min_seconds=2.4 light_hover_walk=true light_mouse_exit_stop=true light_trigger_source=51 face_to_face=true heart_glow_at_amai=true actor_actions_from_story=true actor_screen_bounded=true ForestRun_entry_movement_source=121 ForestRun_source=122 ForestRun_ready=true ForestRun_segment02_roots=4 ForestRun_jump_each=true ForestRun_slide_each=true TextInput_source=157 TextInput_ready=true TextInput_interference=true TextInput_opencv_fan=true TextInput_raw_text_logged=false LakeJump_source=193 LakeJump_ready=true LakeJump_placeholder=false StarJar_source=238 StarJar_ready=true module_subviewport_isolated=true module_logical_size=1280x720 module_native_render=true module_aspect_keep=true module_resize_sync=true" % [
 			_events.size(),
 			_visited_scenes.size(),
 			_visited_modules.size(),

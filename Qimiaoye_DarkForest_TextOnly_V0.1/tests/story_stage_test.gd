@@ -31,7 +31,7 @@ func _ready() -> void:
 	var amai_z := int(initial.get("amai_z_index", -100))
 	if not back_z < xiaoling_z or not xiaoling_z < front_z or amai_z != xiaoling_z:
 		failures.append("人物没有稳定夹在森林后景与前景之间")
-	if float(initial.get("xiaoling_visual_scale", 0.0)) < 0.18 or float(initial.get("amai_visual_scale", 0.0)) < 0.18:
+	if float(initial.get("xiaoling_visual_scale", 0.0)) < 0.28 or float(initial.get("amai_visual_scale", 0.0)) < 0.28:
 		failures.append("剧情人物没有按要求统一放大")
 	if float(initial.get("actor_ground_ratio", 0.0)) < 0.83:
 		failures.append("人物地面基准线仍然过高，视觉上会悬空")
@@ -75,6 +75,10 @@ func _ready() -> void:
 		failures.append("光源 trigger 后背景黑暗覆盖不是80%")
 	if int(face_to_face.get("darkness_z_index", 0)) >= 0:
 		failures.append("森林黑暗遮罩层级会盖住旁白或对白 UI")
+	stage.prepare_dialogue("阿麦")
+	face_to_face = stage.get_debug_snapshot()
+	if not bool(face_to_face.get("xiaoling_facing_right", false)) or bool(face_to_face.get("amai_facing_right", true)):
+		failures.append("对白出现时小凌与阿麦没有自动面对面")
 	await stage.play_action("heart_light", true)
 	if not bool(stage.get_debug_snapshot().get("heart_glow_visible", false)):
 		failures.append("阿麦出现后心口光源没有启用")
@@ -84,10 +88,16 @@ func _ready() -> void:
 	if float(stage.get_debug_snapshot().get("xiaoling_x", 0.0)) >= before_back:
 		failures.append("小凌没有按技术说明后退两步")
 
-	stage.set_scene("环境背景图2", true)
+	await stage.travel_to_scene("环境背景图2", "FIREFLY_GUIDE", true)
 	var scene_two: Dictionary = stage.get_debug_snapshot()
 	if float(scene_two.get("world_scroll_ratio", 0.0)) <= 0.0 or float(scene_two.get("world_scroll_x", 0.0)) <= 0.0:
 		failures.append("进入背景图2剧情锚点时长场景没有连续向右卷动")
+	if str(scene_two.get("last_continuous_transition", "")) != "FIREFLY_GUIDE":
+		failures.append("森林内部转换没有走持续跑动转场")
+	if float(scene_two.get("last_continuous_transition_duration", 0.0)) < 2.4:
+		failures.append("森林持续跑动转场仍然太快")
+	if not bool(scene_two.get("last_continuous_transition_ran_actors", false)):
+		failures.append("长图卷动时人物没有同步进入跑动状态")
 	var amai_before_walk := float(stage.get_debug_snapshot().get("amai_x", 0.0))
 	await stage.play_action("amai_walk_waypoint", true)
 	var amai_after_walk := float(stage.get_debug_snapshot().get("amai_x", 0.0))
