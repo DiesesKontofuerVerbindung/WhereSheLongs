@@ -33,6 +33,8 @@ func _ready() -> void:
 		failures.append("人物没有稳定夹在森林后景与前景之间")
 	if float(initial.get("xiaoling_visual_scale", 0.0)) < 0.18 or float(initial.get("amai_visual_scale", 0.0)) < 0.18:
 		failures.append("剧情人物没有按要求统一放大")
+	if float(initial.get("actor_ground_ratio", 0.0)) < 0.83:
+		failures.append("人物地面基准线仍然过高，视觉上会悬空")
 	var ground_y := float(initial.get("actor_ground_y", -100.0))
 	if absf(float(initial.get("xiaoling_feet_y", -200.0)) - ground_y) > 0.5:
 		failures.append("小凌脚底没有落在森林地面基准线上")

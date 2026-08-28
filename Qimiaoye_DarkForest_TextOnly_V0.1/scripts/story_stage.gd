@@ -17,7 +17,7 @@ const XIAOLING_START_RATIO := 0.16
 const LIGHT_TRIGGER_RATIO := 0.66
 const AMAI_FACE_RATIO := 0.78
 # 人物使用真实脚底作原点，并踩在连续森林地表上；对白 UI 独立覆盖在舞台之上。
-const ACTOR_GROUND_RATIO := 0.75
+const ACTOR_GROUND_RATIO := 0.84
 const ACTOR_MARGIN := 78.0
 const ACTOR_VISUAL_SCALE := 0.18
 # 两套角色原图均以画布中心为 Sprite2D 原点；以下数值来自首帧非透明像素脚底。
@@ -654,6 +654,7 @@ func get_debug_snapshot() -> Dictionary:
 		"amai_z_index": _amai.z_index if _amai != null else 0,
 		"amai_visual_scale": _amai_visual.scale.x if _amai_visual != null else 0.0,
 		"amai_feet_y": _actor_feet_y(_amai, _amai_visual, AMAI_FOOT_FROM_CENTER),
+		"actor_ground_ratio": ACTOR_GROUND_RATIO,
 		"actor_ground_y": size.y * ACTOR_GROUND_RATIO,
 		"stage_width": size.x,
 		"long_scene_enabled": _world_root != null,
