@@ -1,0 +1,85 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scenes/forest/parkour/vine_echo/vine_decision_gate.gd" id="1_gate"]
+
+[sub_resource type="RectangleShape2D" id="Rectangle_decision"]
+size = Vector2(240, 1080)
+
+[sub_resource type="RectangleShape2D" id="Rectangle_vine"]
+size = Vector2(80, 22)
+
+[sub_resource type="RectangleShape2D" id="Rectangle_action"]
+size = Vector2(32, 1080)
+
+[sub_resource type="RectangleShape2D" id="Rectangle_upper"]
+size = Vector2(220, 30)
+
+[sub_resource type="RectangleShape2D" id="Rectangle_pass"]
+size = Vector2(80, 1080)
+
+[node name="VineDecisionGate" type="Node2D"]
+script = ExtResource("1_gate")
+
+[node name="DecisionZone" type="Area2D" parent="."]
+position = Vector2(-160, -60)
+collision_layer = 0
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="DecisionZone"]
+shape = SubResource("Rectangle_decision")
+
+[node name="ActionZone" type="Area2D" parent="."]
+position = Vector2(-100, -60)
+collision_layer = 0
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ActionZone"]
+shape = SubResource("Rectangle_action")
+
+[node name="PassZone" type="Area2D" parent="."]
+position = Vector2(60, -60)
+collision_layer = 0
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="PassZone"]
+shape = SubResource("Rectangle_pass")
+
+[node name="SlideVine" type="StaticBody2D" parent="."]
+position = Vector2(0, -42)
+collision_layer = 0
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="SlideVine"]
+shape = SubResource("Rectangle_vine")
+
+[node name="Visual" type="Polygon2D" parent="SlideVine"]
+visible = false
+polygon = PackedVector2Array(-40, -11, 40, -11, 40, 11, -40, 11)
+color = Color(0.28, 0.72, 0.35, 1)
+
+[node name="UpPath" type="StaticBody2D" parent="."]
+position = Vector2(84, -150)
+collision_layer = 0
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="UpPath"]
+shape = SubResource("Rectangle_upper")
+
+[node name="Visual" type="Polygon2D" parent="UpPath"]
+visible = false
+polygon = PackedVector2Array(-110, -15, 110, -15, 110, 15, -110, 15)
+color = Color(0.55, 0.39, 0.68, 1)
+
+[node name="UpperLabel" type="Label" parent="."]
+visible = false
+position = Vector2(36, -205)
+theme_override_colors/font_color = Color(0.88, 0.74, 1, 1)
+theme_override_font_sizes/font_size = 16
+text = "UP PATH"
+
+[node name="LowerLabel" type="Label" parent="."]
+visible = false
+position = Vector2(-56, 16)
+theme_override_colors/font_color = Color(0.74, 1, 0.8, 1)
+theme_override_font_sizes/font_size = 16
+text = "DOWN PATH"

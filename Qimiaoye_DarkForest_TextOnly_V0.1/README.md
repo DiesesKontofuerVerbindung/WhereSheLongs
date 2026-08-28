@@ -1,11 +1,10 @@
-# 奇妙夜·黑暗森林·纯文本并行版
+# 奇妙夜·黑暗森林·并行玩法整合版
 
-独立 Godot 4.7 灰盒工程。依据《黑暗森林喂给ai的_标签规范化版.docx》实现，从“环境背景图0”运行至 `[ENDPOINT]`。
+独立 Godot 4.7 工程。依据《黑暗森林喂给ai的_标签规范化版.docx》实现，从“环境背景图0”运行至 `[ENDPOINT]`；剧情外壳保持纯文字，独立玩法在 DOCX 指定行进入隔离的模块视口。
 
 ## 本版边界
 
-- 不包含人物节点、人物矩形、Sprite、立绘、动画或人物图片。
-- 不包含 PNG、JPG、WebP、SVG 等图片资产。
+- 剧情外壳不创建人物、Sprite、立绘或背景图片；真实玩法模块自行管理其人物、动画与图片资产。
 - 背景、CG、剧情图仅以黑底白字显示准确资源名。
 - 人物移动、朝向、控制权和状态仍由状态机执行，并写入逐步检测日志；画面只显示演出状态，不显示人物。
 - 旁白进入独立的顶部 `NARRATION_UI`：显示区域整体上移至画面顶部约 2%–20%；新旁白整句直接淡入并轻微上移，旧文字向上漂移并消散，稳定状态最多保留两条、动画期间最多三条。
@@ -20,7 +19,11 @@
 - 从 DOCX 第 354 行“我们以前是不是见过？”开始持续晃动屏幕；强度随剧情来源行逐级增加，到第 366 行终点达到峰值并自动复位。F4 直接跳入该区段时会按目标行恢复对应强度。
 - 文字等待推进时，画面左上角显示“按 Enter / Space 继续”；快捷键提示与按钮文案分离。
 - 全局字体优先使用 `Times New Roman`；中文缺字通过 `SimSun / 宋体` 回退，保持同类衬线字体观感。
-- `ForestRun`、`WaterfallInteraction`、`TextInput`、`LakeJump`、`StarJar`、`HandInspect`、`BlinkInteraction` 只保留 hook，并立即返回 continue/success。
+- DOCX 第 122 行进入真实 `ForestRun`；监听原场景的 `parkour_completed`，完成三段跑酷并抵达瀑布引导后返回剧情第 123 行。
+- DOCX 第 193 行进入真实 `LakeJump / River Jump` v0.5.7；源码来自 commit `2220f68`，玩法通过原场景 `finished(result)` 返回剧情第 195 行。
+- DOCX 第 238 行进入真实 `StarJar / Firefly Bottle`；把五团星光拖入瓶内后，由原场景 `finished(result)` 返回剧情第 240 行。
+- 三个绑定均运行在独立 `SubViewport` 中，Forest 的摄像机与屏幕坐标不会拖动剧情 UI；F4 行回溯仍能直接抵达对应模块。
+- `WaterfallInteraction`、`TextInput`、`HandInspect`、`BlinkInteraction` 暂保留原 hook，并立即返回 continue/success。
 - 运行到黑暗森林章节终点后停止，不生成下一章。
 
 ## 操作
@@ -29,6 +32,9 @@
 - 光源：把鼠标持续停留在右侧“光源交互区”。
 - 跟随/追赶：按 `D / →`；在“走/不走”段按 `A / ←` 会触发入口消失与重新陷入黑暗。
 - 跳水：点击画面上的“跳水”按钮。
+- ForestRun：`A / D` 或方向键移动，`Space` 跳跃，`S / ↓` 下滑；完成三段路线后自动回到剧情。
+- Firefly Bottle：按住星光拖入瓶口，共完成五次后自动回到剧情。
+- LakeJump：按住鼠标左键、`Space` 或 `Enter` 蓄力，松开后起跳；落水或点击“返回”后回到剧情。
 - 诊断面板：按 `F3` 显示/隐藏。
 - DOCX 行回溯：按 `F4`，输入行号并选择“从此行开始”；再次按 `F4` 或 `Esc` 取消。当前可解析范围为第 29–366 行，空白行会落到下一条剧情事件，超过末行会被拒绝。
 
@@ -38,8 +44,10 @@
 
 `%APPDATA%\Qimiaoye_DarkForest_TextOnly_V0.1\logs\`
 
-- `runtime.log`：启动、选择、转场、模块跳过、终点与运行状态。
+- `runtime.log`：启动、选择、转场、模块载入/就绪/完成、终点与运行状态。
 - `trace_steps.log`：逐事件序号、DOCX 来源行、事件类型、场景、分支和状态快照。
 - `godot.log`：Godot 引擎日志和脚本错误。
+- `forest_amai_fixed_route.log`：ForestRun 中阿麦固定路线状态。
+- `forest_vine_echo_runtime.log`：ForestRun 藤蔓延迟模仿段逐帧状态。
 
 日志每次正常启动会重新生成，便于复现当次故障；同一运行中的 F4 行跳转会追加分隔记录，不会抹掉跳转前的上下文。F3 面板会显示当前事件及绝对日志路径。

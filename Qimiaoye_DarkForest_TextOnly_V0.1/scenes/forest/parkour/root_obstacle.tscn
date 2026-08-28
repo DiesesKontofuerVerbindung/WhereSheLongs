@@ -1,0 +1,22 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/forest/parkour/root_obstacle.gd" id="1_root"]
+
+[node name="RootObstacle" type="Node2D"]
+script = ExtResource("1_root")
+
+[node name="UpperCollision" type="StaticBody2D" parent="."]
+collision_layer = 8
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="UpperCollision"]
+
+[node name="SlideOpening" type="Marker2D" parent="."]
+position = Vector2(0, -15)
+
+[node name="DebugMarker" type="Label" parent="."]
+visible = false
+position = Vector2(-34, -142)
+theme_override_colors/font_color = Color(0.78, 0.93, 0.55, 1)
+theme_override_font_sizes/font_size = 14
+text = "Root"

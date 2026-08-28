@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/forest/parkour/characters/amai_parkour_animation.gd" id="1_animation"]
+
+[node name="AmaiParkourVisual" type="AnimatedSprite2D"]
+position = Vector2(0, -20)
+scale = Vector2(0.09, 0.09)
+script = ExtResource("1_animation")

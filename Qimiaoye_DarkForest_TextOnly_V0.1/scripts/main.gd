@@ -1,6 +1,7 @@
 extends Control
 
 signal interaction_completed
+signal embedded_module_finished(result: Dictionary)
 
 const StoryData := preload("res://scripts/story_data.gd")
 const NarrationUIScript := preload("res://scripts/narration_ui.gd")
@@ -23,6 +24,19 @@ const STORY_SHAKE_PEAK_SOURCE := 365
 const STORY_SHAKE_END_SOURCE := 366
 const STORY_SHAKE_START_STRENGTH := 1.35
 const STORY_SHAKE_END_STRENGTH := 18.0
+const MODULE_VIEW_SIZE := Vector2i(1280, 720)
+const EXPECTED_MODULE_BINDINGS := {
+	"ForestRun": {"source": 122, "type": "module", "scene": "res://scenes/forest/parkour/parkour_prototype.tscn", "signal": "parkour_completed"},
+	"LakeJump": {"source": 193, "type": "module", "scene": "res://levels/river_jump.tscn", "signal": "finished"},
+	"StarJar": {"source": 238, "type": "module", "scene": "res://levels/minigames/firefly_bottle.tscn", "signal": "finished"},
+}
+const ALLOWED_MODULE_IMAGE_ROOTS := [
+	"res://assets/scene/",
+	"res://assets/backgrounds/",
+	"res://assets/characters/",
+	"res://assets/stones/",
+	"res://scenes/forest/parkour/",
+]
 
 var _events: Array[Dictionary] = []
 var _labels: Dictionary = {}
@@ -56,8 +70,11 @@ var _story_shake_peak_target_strength := 0.0
 var _story_shake_last_source := 0
 var _story_shake_start_count := 0
 var _story_shake_stop_count := 0
+var _module_active := false
+var _active_module_id := ""
+var _module_run_counts: Dictionary = {}
 
-# 人物仅作为不可见状态数据存在；本项目不创建任何人物节点。
+# 剧情外壳只保存不可见人物状态；独立玩法在隔离的 SubViewport 内管理自己的节点与图片。
 var _actor_states := {
 	"小凌": {"x": 0.18, "motion": "Idle", "direction": "right", "visible": false},
 	"阿麦": {"x": 0.82, "motion": "Idle", "direction": "right", "visible": false},
@@ -88,6 +105,9 @@ var _dev_jump_range_label: Label
 var _dev_jump_input: LineEdit
 var _dev_jump_button: Button
 var _dev_jump_feedback: Label
+var _module_host: Control
+var _module_viewport_container: SubViewportContainer
+var _module_viewport: SubViewport
 var _primary_font: SystemFont
 var _cjk_fallback_font: SystemFont
 
@@ -229,7 +249,7 @@ func _build_ui() -> void:
 	_scene_subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_scene_subtitle.add_theme_font_size_override("font_size", 16)
 	_scene_subtitle.add_theme_color_override("font_color", COLOR_MUTED)
-	_scene_subtitle.text = "纯文字资源槽 · 无图片 · 无人物"
+	_scene_subtitle.text = "剧情外壳纯文字 · 独立玩法按 DOCX 行切入"
 	_scene_subtitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_scene_subtitle)
 
@@ -278,6 +298,7 @@ func _build_ui() -> void:
 	_build_diagnostic_panel()
 	_build_endpoint_panel()
 	_build_advance_hint()
+	_build_module_host()
 	_build_dev_jump_panel()
 
 
@@ -437,12 +458,46 @@ func _build_advance_hint() -> void:
 	add_child(_advance_hint_label)
 
 
+func _build_module_host() -> void:
+	_module_host = Control.new()
+	_module_host.name = "EmbeddedModuleHost"
+	_module_host.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_module_host.mouse_filter = Control.MOUSE_FILTER_STOP
+	_module_host.z_index = 100
+	_module_host.visible = false
+	add_child(_module_host)
+
+	var backdrop := ColorRect.new()
+	backdrop.name = "ModuleBackdrop"
+	backdrop.color = Color.BLACK
+	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_module_host.add_child(backdrop)
+
+	_module_viewport_container = SubViewportContainer.new()
+	_module_viewport_container.name = "ModuleViewportContainer"
+	_module_viewport_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_module_viewport_container.stretch = true
+	_module_viewport_container.stretch_shrink = 1
+	_module_viewport_container.mouse_filter = Control.MOUSE_FILTER_STOP
+	_module_host.add_child(_module_viewport_container)
+
+	_module_viewport = SubViewport.new()
+	_module_viewport.name = "ModuleViewport"
+	_module_viewport.size = MODULE_VIEW_SIZE
+	_module_viewport.handle_input_locally = true
+	_module_viewport.gui_disable_input = false
+	_module_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	_module_viewport_container.add_child(_module_viewport)
+
+
 func _build_dev_jump_panel() -> void:
 	_dev_jump_overlay = ColorRect.new()
 	_dev_jump_overlay.name = "DeveloperDocxJumpOverlay"
 	_dev_jump_overlay.color = Color(0.01, 0.015, 0.025, 0.88)
 	_dev_jump_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_dev_jump_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	_dev_jump_overlay.z_index = 200
 	_dev_jump_overlay.visible = false
 	add_child(_dev_jump_overlay)
 
@@ -532,6 +587,8 @@ func _build_dev_jump_panel() -> void:
 
 func _process(delta: float) -> void:
 	_update_story_shake(delta)
+	if _module_active:
+		return
 	if _dev_jump_overlay != null and _dev_jump_overlay.visible:
 		return
 	if _light_active and _light_hovered:
@@ -570,6 +627,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if not event is InputEventKey:
 		return
 	var key_event := event as InputEventKey
+	if _module_active:
+		return
 	if _dev_jump_overlay != null and _dev_jump_overlay.visible:
 		get_viewport().set_input_as_handled()
 		return
@@ -789,7 +848,7 @@ func _restore_dev_jump_scene_context(target_index: int) -> void:
 				scene_context = str(event.get("to", scene_context))
 	_current_scene = scene_context
 	_scene_label.text = scene_context
-	_scene_subtitle.text = "纯文字资源槽 · 开发跳转场景恢复 · 无图片 · 无人物"
+	_scene_subtitle.text = "剧情外壳纯文字 · 开发跳转场景恢复"
 	_dark_overlay.modulate.a = 0.0
 	_vfx.set_mode("none")
 
@@ -882,6 +941,10 @@ func _execute_event(event: Dictionary) -> void:
 			await _run_interaction(event)
 		"movement":
 			await _run_movement(event)
+		"module":
+			await _run_embedded_module(event, false)
+		"module_placeholder":
+			await _run_embedded_module(event, true)
 		"module_skip":
 			await _run_module_skip(event)
 		"audio":
@@ -1129,12 +1192,126 @@ func _run_wait(event: Dictionary) -> void:
 		await get_tree().create_timer(seconds).timeout
 
 
+func _run_embedded_module(event: Dictionary, is_placeholder: bool) -> void:
+	var module_id := str(event.get("id", ""))
+	var source := int(event.get("source", 0))
+	var scene_path := str(event.get("scene", ""))
+	var completion_signal := str(event.get("completion_signal", ""))
+	_visited_modules[module_id] = true
+	_module_run_counts[module_id] = int(_module_run_counts.get(module_id, 0)) + 1
+	_status("[%s] %s · DOCX %d" % ["MODULE_PLACEHOLDER" if is_placeholder else "MODULE", module_id, source])
+	_log_runtime("MODULE_START id=%s source=%d kind=%s scene=%s completion_signal=%s run=%d" % [
+		module_id,
+		source,
+		"placeholder" if is_placeholder else "playable",
+		scene_path,
+		completion_signal,
+		int(_module_run_counts[module_id]),
+	])
+
+	if not ResourceLoader.exists(scene_path, "PackedScene"):
+		_record_module_failure(module_id, source, "场景资源不存在：%s" % scene_path)
+		await _brief_pause()
+		return
+	var packed_resource := load(scene_path)
+	if not packed_resource is PackedScene:
+		_record_module_failure(module_id, source, "资源不是 PackedScene：%s" % scene_path)
+		await _brief_pause()
+		return
+	var module_instance := (packed_resource as PackedScene).instantiate()
+	if module_instance == null:
+		_record_module_failure(module_id, source, "场景实例化失败：%s" % scene_path)
+		await _brief_pause()
+		return
+	if not module_instance.has_signal(completion_signal):
+		_record_module_failure(module_id, source, "缺少完成信号：%s" % completion_signal)
+		module_instance.free()
+		await _brief_pause()
+		return
+
+	if module_instance.has_method("setup"):
+		module_instance.call("setup", event)
+	if completion_signal == "parkour_completed":
+		module_instance.connect(StringName(completion_signal), Callable(self, "_on_embedded_module_completed_without_result"), CONNECT_ONE_SHOT)
+	else:
+		module_instance.connect(StringName(completion_signal), Callable(self, "_on_embedded_module_completed_with_result"), CONNECT_ONE_SHOT)
+
+	_active_module_id = module_id
+	_module_active = true
+	_dialogue_ui.hide_dialogue()
+	_narration_ui.begin_fade_for_dialogue(_verify_mode)
+	_interaction_panel.visible = false
+	_endpoint_panel.visible = false
+	_module_host.visible = true
+	_module_viewport.add_child(module_instance)
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	_log_runtime("MODULE_READY id=%s source=%d root_type=%s children=%d viewport=%dx%d" % [
+		module_id,
+		source,
+		module_instance.get_class(),
+		module_instance.get_child_count(),
+		MODULE_VIEW_SIZE.x,
+		MODULE_VIEW_SIZE.y,
+	])
+	if module_id == "ForestRun" and not module_instance is Node2D:
+		_record_module_failure(module_id, source, "ForestRun 根节点必须是 Node2D")
+	if module_id == "LakeJump" and not module_instance is Node2D:
+		_record_module_failure(module_id, source, "LakeJump 根节点必须是 Node2D")
+	if module_id == "StarJar" and not module_instance is Control:
+		_record_module_failure(module_id, source, "StarJar 根节点必须是 Control")
+	if is_placeholder and (not module_instance.has_method("verify_contract") or not bool(module_instance.call("verify_contract"))):
+		_record_module_failure(module_id, source, "LakeJump 占位页结构不完整")
+
+	var result: Dictionary
+	if _verify_mode:
+		result = {"result": str(event.get("result", "verified")), "verification": "simulated_after_ready"}
+	else:
+		result = await embedded_module_finished
+	_log_runtime("MODULE_COMPLETE id=%s source=%d kind=%s result=%s" % [
+		module_id,
+		source,
+		"placeholder" if is_placeholder else "playable",
+		JSON.stringify(result),
+	])
+
+	module_instance.queue_free()
+	await get_tree().process_frame
+	_module_host.visible = false
+	_module_active = false
+	_active_module_id = ""
+	_status("[MODULE_RETURN] %s → 剧情继续" % module_id)
+
+
+func _on_embedded_module_completed_without_result() -> void:
+	if not _module_active:
+		return
+	embedded_module_finished.emit({"result": "success", "module": _active_module_id})
+
+
+func _on_embedded_module_completed_with_result(value: Variant) -> void:
+	if not _module_active:
+		return
+	var result: Dictionary = value if value is Dictionary else {"result": str(value)}
+	result["module"] = _active_module_id
+	embedded_module_finished.emit(result)
+
+
+func _record_module_failure(module_id: String, source: int, issue: String) -> void:
+	var message := "模块 %s（DOCX %d）%s" % [module_id, source, issue]
+	_preflight_errors.append(message)
+	_log_runtime("MODULE_ERROR id=%s source=%d issue=%s" % [module_id, source, issue])
+	push_error(message)
+
+
 func _run_module_skip(event: Dictionary) -> void:
 	var module_id := str(event.get("id", ""))
 	var result := str(event.get("result", "continue"))
 	_visited_modules[module_id] = true
+	_module_run_counts[module_id] = int(_module_run_counts.get(module_id, 0)) + 1
 	_status("[MODULE_SKIP] %s → %s（不打开模块页面）" % [module_id, result])
-	_log_runtime("MODULE_SKIP id=%s result=%s callback=immediate" % [module_id, result])
+	_log_runtime("MODULE_SKIP id=%s source=%s result=%s callback=immediate run=%d" % [module_id, event.get("source", 0), result, int(_module_run_counts[module_id])])
 	await _brief_pause()
 
 
@@ -1239,7 +1416,7 @@ func _set_scene(scene_name: String) -> void:
 	_visited_scenes[scene_name] = true
 	_scene_label.text = scene_name
 	_scene_label.modulate.a = 1.0
-	_scene_subtitle.text = "纯文字资源槽 · 无图片 · 无人物"
+	_scene_subtitle.text = "剧情外壳纯文字 · 独立玩法按 DOCX 行切入"
 	_log_runtime("SCENE scene=%s" % scene_name)
 	_refresh_diagnostics()
 
@@ -1462,6 +1639,7 @@ func _validate_contract() -> PackedStringArray:
 	var errors := PackedStringArray()
 	var seen_scenes: Dictionary = {}
 	var seen_modules: Dictionary = {}
+	var module_bindings: Dictionary = {}
 	var endpoint_count := 0
 	var line_count := 0
 	var narration_count := 0
@@ -1481,8 +1659,12 @@ func _validate_contract() -> PackedStringArray:
 			seen_scenes[str(event.get("name", ""))] = true
 		elif kind == "transition":
 			seen_scenes[str(event.get("to", ""))] = true
-		elif kind == "module_skip":
-			seen_modules[str(event.get("id", ""))] = true
+		elif kind in ["module", "module_placeholder", "module_skip"]:
+			var module_id := str(event.get("id", ""))
+			seen_modules[module_id] = true
+			var bindings: Array = module_bindings.get(module_id, [])
+			bindings.append(event)
+			module_bindings[module_id] = bindings
 		elif kind == "endpoint":
 			endpoint_count += 1
 		elif kind == "line":
@@ -1512,7 +1694,25 @@ func _validate_contract() -> PackedStringArray:
 			errors.append("缺少资源场景：%s" % scene_name)
 	for module_id in StoryData.required_module_hooks():
 		if not seen_modules.has(module_id):
-			errors.append("缺少 MODULE_SKIP hook：%s" % module_id)
+			errors.append("缺少模块 hook：%s" % module_id)
+	for module_id in EXPECTED_MODULE_BINDINGS:
+		var expected: Dictionary = EXPECTED_MODULE_BINDINGS[module_id]
+		var bindings: Array = module_bindings.get(module_id, [])
+		if bindings.size() != 1:
+			errors.append("模块 %s 应且仅应绑定一次，实际为%d" % [module_id, bindings.size()])
+			continue
+		var binding: Dictionary = bindings[0]
+		if int(binding.get("source", 0)) != int(expected.get("source", 0)):
+			errors.append("模块 %s DOCX 插入行错误：%s/%s" % [module_id, binding.get("source", 0), expected.get("source", 0)])
+		if str(binding.get("type", "")) != str(expected.get("type", "")):
+			errors.append("模块 %s 事件类型错误：%s/%s" % [module_id, binding.get("type", ""), expected.get("type", "")])
+		if str(binding.get("scene", "")) != str(expected.get("scene", "")):
+			errors.append("模块 %s 场景绑定错误：%s" % [module_id, binding.get("scene", "")])
+		if str(binding.get("completion_signal", "")) != str(expected.get("signal", "")):
+			errors.append("模块 %s 完成信号绑定错误：%s" % [module_id, binding.get("completion_signal", "")])
+		var scene_path := str(binding.get("scene", ""))
+		if not ResourceLoader.exists(scene_path, "PackedScene"):
+			errors.append("模块 %s 场景资源不存在：%s" % [module_id, scene_path])
 	if endpoint_count != 1:
 		errors.append("ENDPOINT 数量应为1，实际为%d" % endpoint_count)
 	if line_count < 140:
@@ -1567,6 +1767,10 @@ func _validate_contract() -> PackedStringArray:
 		errors.append("F4 DOCX 行跳转开发面板不完整")
 	elif _dev_jump_overlay.visible:
 		errors.append("F4 DOCX 行跳转开发面板不应默认显示")
+	if _module_host == null or _module_viewport_container == null or _module_viewport == null:
+		errors.append("独立模块宿主未完整建立")
+	elif _module_host.visible or _module_viewport.get_child_count() != 0:
+		errors.append("模块宿主启动时应保持隐藏且为空")
 	var source_bounds := _docx_source_bounds()
 	if source_bounds != Vector2i(29, 366):
 		errors.append("DOCX 来源行范围异常：%s" % source_bounds)
@@ -1602,9 +1806,9 @@ func _validate_contract() -> PackedStringArray:
 	elif not _cjk_fallback_font.has_char("中".unicode_at(0)):
 		errors.append("中文宋体回退无法渲染中文")
 	for image_path in _find_forbidden_images("res://"):
-		errors.append("发现禁止的图片资产：%s" % image_path)
+		errors.append("剧情外壳发现未授权图片资产：%s" % image_path)
 	for node_name in _find_forbidden_visual_nodes(self):
-		errors.append("发现禁止的人物/图片节点：%s" % node_name)
+		errors.append("剧情外壳发现未授权人物/图片节点：%s" % node_name)
 	return errors
 
 
@@ -1618,9 +1822,15 @@ func _validate_runtime_completion() -> PackedStringArray:
 	for module_id in StoryData.required_module_hooks():
 		if not _visited_modules.has(module_id):
 			errors.append("全流程未经过模块 hook：%s" % module_id)
-	for required_source in [54, 122, 193, 308, 360, 366]:
+		elif int(_module_run_counts.get(module_id, 0)) != 1:
+			errors.append("全流程模块 %s 执行次数异常：%d/1" % [module_id, int(_module_run_counts.get(module_id, 0))])
+	for required_source in [54, 122, 193, 238, 308, 360, 366]:
 		if not _visited_sources.has(required_source):
 			errors.append("全流程未执行 DOCX 行：%d" % required_source)
+	if _module_active or (_module_host != null and _module_host.visible):
+		errors.append("全流程结束时模块宿主仍处于活动状态")
+	if _module_viewport != null and _module_viewport.get_child_count() != 0:
+		errors.append("全流程结束时模块实例未释放：%d" % _module_viewport.get_child_count())
 	if _narration_lines_seen < 61:
 		errors.append("全流程 NARRATION_UI 覆盖不足：%d" % _narration_lines_seen)
 	if _dialogue_lines_seen < 60:
@@ -1655,9 +1865,9 @@ func _validate_runtime_completion() -> PackedStringArray:
 		errors.append("运行结束 DIALOGUE_UI 继续按钮布局失效")
 	errors.append_array(_validate_story_shake_completion())
 	for image_path in _find_forbidden_images("res://"):
-		errors.append("运行结束发现禁止的图片资产：%s" % image_path)
+		errors.append("运行结束剧情外壳发现未授权图片资产：%s" % image_path)
 	for node_name in _find_forbidden_visual_nodes(self):
-		errors.append("运行结束发现禁止的人物/图片节点：%s" % node_name)
+		errors.append("运行结束剧情外壳发现未授权人物/图片节点：%s" % node_name)
 	return errors
 
 
@@ -1675,9 +1885,9 @@ func _validate_dev_jump_completion() -> PackedStringArray:
 		errors.append("开发跳转后 DIALOGUE_UI 存在选项组偏心：%d" % _dialogue_ui.get_choice_layout_violation_count())
 	errors.append_array(_validate_story_shake_completion())
 	for image_path in _find_forbidden_images("res://"):
-		errors.append("开发跳转结束发现禁止的图片资产：%s" % image_path)
+		errors.append("开发跳转结束剧情外壳发现未授权图片资产：%s" % image_path)
 	for node_name in _find_forbidden_visual_nodes(self):
-		errors.append("开发跳转结束发现禁止的人物/图片节点：%s" % node_name)
+		errors.append("开发跳转结束剧情外壳发现未授权人物/图片节点：%s" % node_name)
 	return errors
 
 
@@ -1700,6 +1910,8 @@ func _validate_story_shake_completion() -> PackedStringArray:
 
 func _find_forbidden_images(path: String) -> PackedStringArray:
 	var found := PackedStringArray()
+	if _is_allowed_module_image_path(path):
+		return found
 	var dir := DirAccess.open(path)
 	if dir == null:
 		return found
@@ -1719,9 +1931,20 @@ func _find_forbidden_images(path: String) -> PackedStringArray:
 	return found
 
 
+func _is_allowed_module_image_path(path: String) -> bool:
+	var normalized := path.replace("\\", "/")
+	for allowed_root in ALLOWED_MODULE_IMAGE_ROOTS:
+		var root := str(allowed_root)
+		if normalized == root.trim_suffix("/") or normalized.begins_with(root):
+			return true
+	return false
+
+
 func _find_forbidden_visual_nodes(node: Node) -> PackedStringArray:
 	var found := PackedStringArray()
 	for child in node.get_children():
+		if child == _module_host:
+			continue
 		if child is Sprite2D or child is AnimatedSprite2D or child is TextureRect or child is CharacterBody2D:
 			found.append("%s (%s)" % [child.get_path(), child.get_class()])
 		found.append_array(_find_forbidden_visual_nodes(child))
@@ -1807,7 +2030,7 @@ func _refresh_diagnostics() -> void:
 	var dev_jump_status := "当前会话未使用跳转"
 	if _dev_jump_active:
 		dev_jump_status = "请求第 %d 行 → 实际第 %d 行" % [_dev_jump_requested_source, _dev_jump_actual_source]
-	_diagnostic_label.text = "F3 诊断面板 · F4 DOCX 行跳转\n\n当前步骤：%d / %d\nDOCX 来源行：%s\n事件：%s / %s\n文本通道：%s\n场景：%s\n开发跳转：%s\n旁白队列：%d（峰值 %d）\n对白队列峰值：%d\n持续晃动：%s（目标强度 %.2f）\n\n人物仅为不可见状态数据：\n%s\n\n运行日志：\n%s\n\n逐步检测日志：\n%s\n\n引擎日志：\n%s" % [
+	_diagnostic_label.text = "F3 诊断面板 · F4 DOCX 行跳转\n\n当前步骤：%d / %d\nDOCX 来源行：%s\n事件：%s / %s\n文本通道：%s\n场景：%s\n开发跳转：%s\n当前独立玩法：%s\n玩法执行计数：%s\n旁白队列：%d（峰值 %d）\n对白队列峰值：%d\n持续晃动：%s（目标强度 %.2f）\n\n剧情外壳人物状态：\n%s\n\n运行日志：\n%s\n\n逐步检测日志：\n%s\n\n引擎日志：\n%s" % [
 		_current_event_index + 1,
 		_events.size(),
 		_current_event.get("source", 0),
@@ -1816,6 +2039,8 @@ func _refresh_diagnostics() -> void:
 		channel,
 		_current_scene,
 		dev_jump_status,
+		_active_module_id if _module_active else "-",
+		JSON.stringify(_module_run_counts),
 		_narration_ui.get_visible_entry_count() if _narration_ui != null else 0,
 		_narration_ui.get_max_observed_count() if _narration_ui != null else 0,
 		_dialogue_ui.get_max_queue_depth() if _dialogue_ui != null else 0,
@@ -1830,7 +2055,7 @@ func _refresh_diagnostics() -> void:
 
 func _finish_verification(success: bool, issues: PackedStringArray) -> void:
 	if success:
-		var message := "FULL_FLOW_PASS events=%d scenes=%d modules=%d endpoint=%s narration_lines=%d dialogue_lines=%d psychology_lines=%d narration_queue_max=%d dialogue_queue_max=%d narration_layout_samples=%d dialogue_layout_samples=%d choice_layout_samples=%d split_ui=true narration_top_2_20=true narration_centered=true narration_direct_reveal=true dialogue_progressive_reveal=true psychology_in_dialogue=true psychology_parentheses=true dialogue_left_aligned=true dialogue_body_top=true continue_button_centered=true choices_centered=true shortcut_hint=true shake_start_source=354 shake_peak_source=365 shake_end_source=366 shake_progressive=true shake_reset=true dev_docx_jump=true docx_jump_all_sources_resolvable=true dev_jump_logs_preserved=true font=Times_New_Roman cjk_fallback=SimSun no_people_nodes=true no_image_assets=true" % [
+		var message := "FULL_FLOW_PASS events=%d scenes=%d modules=%d endpoint=%s narration_lines=%d dialogue_lines=%d psychology_lines=%d narration_queue_max=%d dialogue_queue_max=%d narration_layout_samples=%d dialogue_layout_samples=%d choice_layout_samples=%d split_ui=true narration_top_2_20=true narration_centered=true narration_direct_reveal=true dialogue_progressive_reveal=true psychology_in_dialogue=true psychology_parentheses=true dialogue_left_aligned=true dialogue_body_top=true continue_button_centered=true choices_centered=true shortcut_hint=true shake_start_source=354 shake_peak_source=365 shake_end_source=366 shake_progressive=true shake_reset=true dev_docx_jump=true docx_jump_all_sources_resolvable=true dev_jump_logs_preserved=true font=Times_New_Roman cjk_fallback=SimSun narrative_shell_text_only=true ForestRun_source=122 ForestRun_ready=true LakeJump_source=193 LakeJump_ready=true LakeJump_placeholder=false StarJar_source=238 StarJar_ready=true module_subviewport_isolated=true" % [
 			_events.size(),
 			_visited_scenes.size(),
 			_visited_modules.size(),
