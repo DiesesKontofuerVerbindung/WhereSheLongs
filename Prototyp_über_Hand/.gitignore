@@ -4,3 +4,7 @@ __pycache__/
 hand_landmarker.task
 assets/_*.png
 results/run_20260829_*/
+
+camera_status.txt
+hand_checkbox_run.log
+
