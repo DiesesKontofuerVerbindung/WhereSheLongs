@@ -4,10 +4,12 @@
 
 ## 待办
 
-- [ ] **6｜手部查看 `HandInspect`**
-  - Hook：抓住女孩的手 → 查看戒指、皱纹、疤痕三个细节点 → “我们以前是不是见过？”
+- [x] **6｜手部查看 `HandInspect`** — 模块已交付，待集成
+  - Hook：抓住女孩的手 → 查看戒指、掌纹、伤疤三个细节点 → “我们以前是不是见过？”
   - 主题：通过身体细节触发身份记忆。
-- [ ] **7｜眨眼互动 `BlinkInteraction`**
+  - 模块本体与测试已合入 grounded（`5ec354d`）；**DOCX 353 行仍是 `module_skip`，玩家暂玩不到**。
+  - 待办与接线方式见 `docs/handoffs/06_HAND_INSPECT_INTEGRATION_STATUS.md`。
+- [x] **7｜眨眼互动 `BlinkInteraction`** — 已合入 grounded（`b915fb5` / `183b28c`）
   - Hook：世界震动、双手松开 → 眨眼互动 → 小凌急问“什么时候？在哪儿见过？”
   - 主题：梦境崩塌与失去连接。
 
@@ -49,8 +51,10 @@ git branch --show-current
 
 - 336 个剧情事件可完整运行到第 366 行章节终点。
 - F4 开发者模式可以按 DOCX source 行定位；定位时必须同时核对 `scripts/story_data.gd` 与 `scripts/story_source_lock.gd`。
-- 已实装：ForestRun（122）、TextInput（157）、LakeJump（193）、StarJar（238）。
-- 待实装：HandInspect（353）、BlinkInteraction（360）；当前均为 `module_skip`。
+- 已实装：ForestRun（122）、TextInput（157）、LakeJump（193）、StarJar（238）、
+  BlinkInteraction（360，已接线）。
+- HandInspect（353）：模块与测试已交付并合入 grounded，但**尚未接线**，当前仍为 `module_skip`。
+  接线缺口与步骤见 `docs/handoffs/06_HAND_INSPECT_INTEGRATION_STATUS.md`。
 - HandInspect 完成后回到第 354 行，由主对白显示“我们以前是不是见过？”。
 - BlinkInteraction 完成后回到第 362 行，由主对白显示“什么时候？在哪儿见过？”。
 - 模块宿主使用 `1280×720` 逻辑坐标和随输出分辨率变化的高清渲染纹理；不得修改全局 stretch 或硬编码桌面分辨率。
