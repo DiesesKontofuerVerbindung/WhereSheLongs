@@ -14,6 +14,8 @@ const WeddingDataScript := preload("res://scripts/wedding_data.gd")
 const MysticNightDataScript := preload("res://scripts/mystic_night_data.gd")
 const Chapter3DataScript := preload("res://scripts/chapter3_data.gd")
 const InnerObjectsStageScript := preload("res://scripts/inner_objects_stage.gd")
+const ChapterTransitionScript := preload("res://scripts/chapter_transition.gd")
+const UiTypographyScript := preload("res://scripts/ui_typography.gd")
 const RUNTIME_LOG_PATH := "user://logs/runtime.log"
 const TRACE_LOG_PATH := "user://logs/trace_steps.log"
 const ENGINE_LOG_PATH := "user://logs/godot.log"
@@ -141,6 +143,7 @@ var _module_pointer_inside := false
 var _module_pointer_captured := false
 var _primary_font: SystemFont
 var _cjk_fallback_font: SystemFont
+var _typography: UiTypographyScript
 
 var _awaiting_action_button := false
 var _light_active := false
@@ -243,18 +246,11 @@ func _ready() -> void:
 
 
 func _configure_typography() -> void:
-	_cjk_fallback_font = SystemFont.new()
-	_cjk_fallback_font.font_names = PackedStringArray(["SimSun", "NSimSun", "宋体", "新宋体"])
-	_cjk_fallback_font.allow_system_fallback = false
+	_typography = UiTypographyScript.new()
+	_cjk_fallback_font = _typography.cjk_fallback
+	_primary_font = _typography.body
 
-	_primary_font = SystemFont.new()
-	_primary_font.font_names = PackedStringArray([FONT_PRIMARY_NAME])
-	_primary_font.allow_system_fallback = false
-	var fallback_chain: Array[Font] = [_cjk_fallback_font]
-	_primary_font.fallbacks = fallback_chain
-
-	var app_theme := Theme.new()
-	app_theme.default_font = _primary_font
+	var app_theme := _typography.theme
 	app_theme.default_font_size = 18
 	theme = app_theme
 
@@ -2014,7 +2010,7 @@ func _complete_story() -> void:
 ## 森林正片结束时延时切到最终章 章节三 · 典礼上的选择。
 func _advance_to_chapter3() -> void:
 	await get_tree().create_timer(2.0).timeout
-	get_tree().change_scene_to_file(CHAPTER3_SCENE)
+	ChapterTransitionScript.begin(get_tree(), CHAPTER3_SCENE)
 
 
 func _validate_module_render_contract() -> PackedStringArray:
