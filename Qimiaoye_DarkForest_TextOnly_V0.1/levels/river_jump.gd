@@ -39,7 +39,6 @@ var _hard_mode := false
 @onready var _hint: Label = $HUD/Hint
 @onready var _best: Label = $HUD/Best
 @onready var _charge_bar: ProgressBar = $HUD/ChargeBar
-@onready var _back: Button = $HUD/Back
 
 var _state: State = State.IDLE
 var _held: bool = false
@@ -80,7 +79,6 @@ func setup(_scene_def: Dictionary) -> void:
 func _ready() -> void:
 	_rng.randomize()
 	_apply_panel_skin()
-	_back.pressed.connect(_on_back)
 	_stones_root.z_index = Z_STONE
 	_stones_root.z_as_relative = false
 	_reflections.z_index = Z_REFLECTION
@@ -122,10 +120,6 @@ func _apply_panel_skin() -> void:
 	_hud.move_child(module_panel, 0)
 
 	UiPanelSkinScript.apply_fixed_rect(_charge_bar, UiPanelSkinScript.INPUT_RECT)
-	UiPanelSkinScript.apply_fixed_rect(_back, UiPanelSkinScript.BUTTON_RECT)
-	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
-		_back.add_theme_stylebox_override(state, UiPanelSkinScript.button_style())
-	_back.add_theme_font_size_override("font_size", 16)
 	_hint.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_hint.position = Vector2(334.0, 201.0)
 	_hint.size = Vector2(616.0, 32.0)
@@ -318,10 +312,6 @@ func _end_run(kind: String) -> void:
 	elif kind == "fail":
 		payload["next"] = "gameover"
 	finished.emit(payload)
-
-
-func _on_back() -> void:
-	_end_run("abort")
 
 
 func _stone_at(pos: Vector2) -> int:

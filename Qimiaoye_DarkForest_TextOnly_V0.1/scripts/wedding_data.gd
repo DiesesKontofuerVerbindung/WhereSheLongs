@@ -111,17 +111,6 @@ static func _wedding_hall_events() -> Array[Dictionary]:
 		{"type": "line", "source": 43, "speaker": "思雨", "text": "明天我会准时到的。"},
 		{"type": "line", "source": 44, "speaker": "旁白", "text": "思雨走过来，轻轻拍了一下她的肩膀。"},
 		{"type": "line", "source": 45, "speaker": "思雨", "text": "别想太多，一会儿我先送你回家。"},
-
-		# 群组 checklist 插件②：上车前再过一遍清单（46–47 之间）。
-		{
-			"type": "module",
-			"source": 46,
-			"id": "WeddingChecklist2",
-			"scene": "res://scenes/wedding/modules/wedding_checklist.tscn",
-			"checklist_variant": "2",
-			"completion_signal": "finished",
-			"result": "success",
-		},
 	]
 
 
