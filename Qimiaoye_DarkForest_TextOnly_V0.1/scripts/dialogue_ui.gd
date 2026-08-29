@@ -153,7 +153,7 @@ func is_panel_centered() -> bool:
 func is_text_left_aligned() -> bool:
 	if _speaker_label == null or _body_label == null or _continue_button == null:
 		return false
-	if _speaker_label.horizontal_alignment != HORIZONTAL_ALIGNMENT_LEFT:
+	if _speaker_label.horizontal_alignment != HORIZONTAL_ALIGNMENT_CENTER:
 		return false
 	return _body_label.horizontal_alignment == HORIZONTAL_ALIGNMENT_LEFT
 
@@ -221,17 +221,17 @@ func _build_ui() -> void:
 	margin.add_child(col)
 
 	var speaker_margin := MarginContainer.new()
-	speaker_margin.add_theme_constant_override("margin_left", 64 + DIALOGUE_TEXT_SHIFT)
+	speaker_margin.add_theme_constant_override("margin_left", 64)
 	col.add_child(speaker_margin)
 
 	_speaker_panel = PanelContainer.new()
-	_speaker_panel.custom_minimum_size = Vector2(178.0, 44.0)
+	_speaker_panel.custom_minimum_size = Vector2(191.0, 44.0)
 	_speaker_panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	_speaker_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	speaker_margin.add_child(_speaker_panel)
 
 	_speaker_label = Label.new()
-	_speaker_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_speaker_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_speaker_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_speaker_label.add_theme_font_size_override("font_size", 22)
 	_speaker_label.add_theme_color_override("font_color", COLOR_ACCENT)
