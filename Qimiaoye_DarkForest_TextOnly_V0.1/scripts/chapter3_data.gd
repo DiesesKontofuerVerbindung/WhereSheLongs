@@ -37,6 +37,7 @@ static func build_events() -> Array[Dictionary]:
 static func _main_events() -> Array[Dictionary]:
 	return [
 		{"type": "video", "source": 923, "video": "res://assets/videos/opening_video.ogv", "poster": "res://assets/backgrounds/场景转换后的妈妈.png", "name": "卧室视频", "label": "卧室", "subtitle": "开场视频 · 定格尾帧"},
+		{"type": "audio", "source": 916, "action": "start", "stream": "chapter3_bgm_reality_return", "status": "现实回归同一房间不同的人 BGM 起"},
 		{"type": "scene", "source": 923, "name": "场景转换后的妈妈", "label": "场景转换后的妈妈", "subtitle": "场景转换后的妈妈"},
 		{"type": "line", "source": 916, "speaker": "旁白", "text": "妈妈的声音从很远的地方传来。"},
 		{"type": "line", "source": 917, "speaker": "妈妈", "text": "小凌。"},
@@ -54,6 +55,8 @@ static func _main_events() -> Array[Dictionary]:
 		{"type": "line", "source": 931, "speaker": "小凌", "text": "……"},
 
 		{"type": "scene", "source": 933, "name": "正式婚礼现场", "label": "正式婚礼现场", "subtitle": "image#1 · 正式婚礼现场"},
+		{"type": "audio", "source": 932, "action": "stop", "stream": "chapter3_bgm_reality_return", "status": "现实回归 BGM 淡出"},
+		{"type": "audio", "source": 932, "action": "start", "stream": "chapter3_bgm_door_wedding", "status": "隔门婚礼主题远去 BGM 起"},
 		{"type": "line", "source": 934, "speaker": "旁白", "text": "酒店会场人来人往。"},
 		{"type": "line", "source": 936, "speaker": "旁白", "text": "鲜花。气球。礼服。香槟。来宾。"},
 		{"type": "line", "source": 937, "speaker": "旁白", "text": "所有人都在笑。所有人都在说“恭喜”。"},
@@ -203,6 +206,8 @@ static func _main_events() -> Array[Dictionary]:
 static func _ending_a_events() -> Array[Dictionary]:
 	return [
 		{"type": "label", "id": "ending_a"},
+		{"type": "audio", "source": 1076, "action": "stop", "stream": "chapter3_bgm_door_wedding", "status": "隔门婚礼主题远去 BGM 淡出"},
+		{"type": "audio", "source": 1076, "action": "start", "stream": "ending_bgm_a", "status": "结局A 两主题主动融合 BGM 起"},
 		{"type": "scene", "source": 1076, "name": "小凌思羽窗边谈话-1", "label": "结局A", "subtitle": "image#4 · 小凌思羽窗边谈话-1"},
 		{"type": "effect", "source": 1077, "id": "screen_bright", "level": 0.0, "duration": 0.6, "status": ""},
 		{"type": "line", "source": 1077, "speaker": "旁白", "text": "小凌看着思雨。", "status": "小凌看着思雨。"},
@@ -243,6 +248,8 @@ static func _ending_a_events() -> Array[Dictionary]:
 static func _ending_b_events() -> Array[Dictionary]:
 	return [
 		{"type": "label", "id": "ending_b"},
+		{"type": "audio", "source": 1110, "action": "stop", "stream": "chapter3_bgm_door_wedding", "status": "隔门婚礼主题远去 BGM 淡出"},
+		{"type": "audio", "source": 1110, "action": "start", "stream": "ending_bgm_b", "status": "结局B 湖边共感被理解后的力量 BGM 起"},
 		{"type": "scene", "source": 1110, "name": SCENE_WINDOW_TALK, "label": "结局B-小凌思羽窗边谈话", "subtitle": "结局B-小凌思羽窗边谈话"},
 		{"type": "effect", "source": 1112, "source_dup": 1112, "id": "screen_bright", "level": 0.0, "duration": 0.6, "status": ""},
 		{"type": "line", "source": 1112, "speaker": "旁白", "text": "小凌摇了摇头。", "status": "小凌摇了摇头。"},
@@ -272,6 +279,8 @@ static func _ending_b_events() -> Array[Dictionary]:
 static func _ending_c_events() -> Array[Dictionary]:
 	return [
 		{"type": "label", "id": "ending_c"},
+		{"type": "audio", "source": 1134, "action": "stop", "stream": "chapter3_bgm_door_wedding", "status": "隔门婚礼主题远去 BGM 淡出"},
+		{"type": "audio", "source": 1134, "action": "start", "stream": "ending_bgm_c", "status": "结局C 允许不知道悬置 BGM 起"},
 		{"type": "scene", "source": 1134, "name": SCENE_WINDOW_TALK_2, "label": "结局C-小凌思羽窗边谈话-2", "subtitle": "结局C-小凌思羽窗边谈话-2"},
 		{"type": "effect", "source": 1135, "id": "screen_bright", "level": 0.0, "duration": 0.6, "status": ""},
 		{"type": "line", "source": 1135, "speaker": "旁白", "text": "小凌看着思雨。", "status": "小凌看着思雨。"},

@@ -6,6 +6,7 @@ static func get_events() -> Array[Dictionary]:
 	return [
 		# 环境背景图0 -> 环境背景图1
 		{"type": "scene", "source": 29, "name": "环境背景图0"},
+		{"type": "audio", "source": 29, "action": "start", "stream": "forest_bgm_dark_forest", "status": "黑暗森林主题 BGM 起"},
 		{"type": "transition", "source": 49, "id": "EYE_OPEN", "to": "环境背景图1", "status": "睁眼显现：可见区域由中心缓慢扩展。"},
 		{"type": "interaction", "source": 51, "id": "light_hover", "prompt": "把鼠标持续停留在右侧光源区域"},
 		{"type": "action", "source": 52, "id": "light_trigger", "status": "光源消失；锁定操作；黑色遮罩覆盖约80%。"},
@@ -87,6 +88,8 @@ static func get_events() -> Array[Dictionary]:
 		{"type": "movement", "source": 121, "id": "forest_run_entry", "prompt": "按 D / → 追赶阿麦并进入 ForestRun 接口", "allow_reverse": false},
 		{"type": "module", "source": 122, "id": "ForestRun", "scene": "res://scenes/forest/parkour/parkour_prototype.tscn", "completion_signal": "parkour_completed", "result": "success"},
 		{"type": "transition", "source": 123, "id": "FOREST_RUN_EXIT", "to": "环境背景图4", "status": "保持向右奔跑切入背景4；阿麦先减速，小凌追上后两人转为 Idle。"},
+		{"type": "audio", "source": 123, "action": "stop", "stream": "forest_bgm_dark_forest", "status": "黑暗森林主题 BGM 淡出"},
+		{"type": "audio", "source": 123, "action": "start", "stream": "forest_bgm_parkour", "status": "森林跑酷惊险奇幻 BGM 起"},
 
 		# 环境背景图4与瀑布
 		{"type": "line", "source": 125, "speaker": "旁白", "text": "小凌跑了很久终于追上了阿麦，他们来到了瀑布顶端。"},
@@ -170,12 +173,18 @@ static func get_events() -> Array[Dictionary]:
 		{"type": "line", "source": 192, "speaker": "旁白", "text": "小凌看着他，踏入了湖里。"},
 		{"type": "module", "source": 193, "id": "LakeJump", "scene": "res://levels/river_jump.tscn", "completion_signal": "finished", "result": "success"},
 		{"type": "label", "id": "drowning"},
+		{"type": "audio", "source": 193, "action": "stop", "stream": "forest_bgm_parkour", "status": "森林跑酷 BGM 淡出"},
+		{"type": "audio", "source": 193, "action": "start", "stream": "forest_bgm_8_30", "status": "8月30日 落水瞬间 BGM 起"},
 		{"type": "line", "source": 195, "speaker": "旁白", "text": "小凌在水中不断下沉，闭上了眼"},
+		{"type": "audio", "source": 195, "action": "stop_immediate", "stream": "forest_bgm_8_30", "status": "8月30日 掐断"},
+		{"type": "audio", "source": 195, "action": "start", "stream": "forest_bgm_mystery_lake", "status": "神秘湖美丽危险 BGM 起"},
 		{"type": "transition", "source": 196, "id": "DROWNING_CG", "to": "溺水图cg", "status": "切换至溺水图CG纯文字资源卡。"},
 		{"type": "transition", "source": 199, "id": "DROWNING_EXIT", "to": "环境背景图7", "status": "溺水图CG结束，切换至环境背景图7。"},
 
 		# 环境背景图7与神秘女孩
 		{"type": "line", "source": 201, "speaker": "旁白", "text": "小凌猛地睁开眼。眼前是一片模糊的天空。"},
+		{"type": "audio", "source": 201, "action": "stop", "stream": "forest_bgm_mystery_lake", "status": "神秘湖美丽危险 BGM 淡出"},
+		{"type": "audio", "source": 201, "action": "start", "stream": "forest_bgm_heartbeat", "status": "心跳同步音乐自然长出 BGM 起（循环）"},
 		{"type": "line", "source": 202, "speaker": "旁白", "text": "耳边传来水声。"},
 		{"type": "line", "source": 203, "speaker": "旁白", "text": "她想动，却发现浑身都湿透了。"},
 		{"type": "line", "source": 204, "speaker": "旁白", "text": "一个女孩正蹲在她身边，神情焦急。"},

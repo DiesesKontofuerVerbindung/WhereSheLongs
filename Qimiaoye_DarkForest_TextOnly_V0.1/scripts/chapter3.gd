@@ -20,6 +20,16 @@ const MYSTIC_NIGHT_SCENE := "res://scenes/mystic_night/mystic_night.tscn"
 const FONT_PRIMARY_NAME := "Uranus Pixel"
 const FONT_CJK_FALLBACK_NAME := "SimSun"
 
+## 章节三 · 典礼上的选择 BGM（对应《音效需求》）。
+## 现实回归同一房间不同的人 916–931 / 隔门婚礼主题远去 932–1074 /
+## 结局A两主题主动融合 1077–1107 / 结局B湖边共感 1112–1131 / 结局C允许不知道悬置 1135–1168。
+const AUDIO_CH3_BGM_REALITY_RETURN := "res://assets/audio/chapter3_bgm_reality_return.ogg"
+const AUDIO_CH3_BGM_DOOR_WEDDING := "res://assets/audio/chapter3_bgm_door_wedding.ogg"
+const AUDIO_ENDING_BGM_A := "res://assets/audio/ending_bgm_a.ogg"
+const AUDIO_ENDING_BGM_B := "res://assets/audio/ending_bgm_b.ogg"
+const AUDIO_ENDING_BGM_C := "res://assets/audio/ending_bgm_c.ogg"
+const AUDIO_FADE_SECONDS := 1.2
+
 signal chapter_finished
 
 var _events: Array[Dictionary] = []
@@ -52,6 +62,8 @@ var _advance_hint: Label
 var _typography: UiTypographyScript
 var _primary_font: Font
 var _cjk_fallback_font: SystemFont
+var _bgm_player: AudioStreamPlayer
+var _bgm_volume := 0.0
 
 
 func _ready() -> void:
@@ -135,6 +147,13 @@ func _build_ui() -> void:
     _advance_hint.text = "按 Enter / Space 继续"
     _advance_hint.visible = false
     add_child(_advance_hint)
+
+    _bgm_player = AudioStreamPlayer.new()
+    _bgm_player.name = "Chapter3BGMAudio"
+    _bgm_player.bus = &"Master"
+    _bgm_player.process_mode = Node.PROCESS_MODE_ALWAYS
+    _bgm_player.volume_db = -80.0
+    add_child(_bgm_player)
 
     _dev_jump_overlay = DevJumpPanelScript.new()
     add_child(_dev_jump_overlay)
@@ -311,6 +330,8 @@ func _run_events() -> void:
         _event_index += 1
         await _run_event(event)
     _endpoint_reached = true
+    # 章节结束收尾音频，避免残留。
+    _audio_stop_immediate()
     chapter_finished.emit()
     if _verify_mode:
         _report_verification()
@@ -352,6 +373,8 @@ func _run_event(event: Dictionary) -> void:
             pass
         "ending":
             await _apply_ending(event)
+        "audio":
+            await _apply_audio_event(event)
         _:
             push_warning("章节三未知事件类型：%s" % str(event.get("type", "")))
 
@@ -562,6 +585,99 @@ func _apply_ending(event: Dictionary) -> void:
     await _narration_ui.advance_requested
     _set_advance_hint(false)
     _narration_ui.set_advance_waiting(false)
+
+
+## 处理 audio 事件。字段：
+##   action: "start" 播放（循环，淡入）；"stop" 停止（淡出）；"stop_immediate" 立即停。
+##   stream: 语义名映射（chapter3_bgm_* / ending_bgm_* 等），或直接 res:// 路径。
+##   fade: 覆盖淡入淡出时长（秒）。
+func _apply_audio_event(event: Dictionary) -> void:
+    var action := str(event.get("action", ""))
+    var stream_key := str(event.get("stream", ""))
+    var fade := float(event.get("fade", AUDIO_FADE_SECONDS))
+    if action == "stop" or action == "stop_immediate":
+        if action == "stop":
+            await _audio_stop(fade)
+        else:
+            _audio_stop_immediate()
+        return
+    var path := _resolve_audio_path(stream_key)
+    if path.is_empty():
+        push_warning("章节三 audio 事件缺 stream：%s" % str(event))
+        return
+    match action:
+        "start":
+            await _audio_start(path, fade)
+        _:
+            push_warning("章节三未知 audio action：%s" % action)
+
+
+## 把语义名映射到真实资源路径。换音频时只改这里，事件表不用动。
+func _resolve_audio_path(key: String) -> String:
+    match key:
+        "chapter3_bgm_reality_return":
+            return AUDIO_CH3_BGM_REALITY_RETURN
+        "chapter3_bgm_door_wedding":
+            return AUDIO_CH3_BGM_DOOR_WEDDING
+        "ending_bgm_a":
+            return AUDIO_ENDING_BGM_A
+        "ending_bgm_b":
+            return AUDIO_ENDING_BGM_B
+        "ending_bgm_c":
+            return AUDIO_ENDING_BGM_C
+    return key
+
+
+func _audio_start(path: String, fade: float) -> void:
+    var player := _bgm_player
+    if _verify_mode or player == null:
+        return
+    var stream: AudioStream = load(path)
+    if stream == null:
+        push_warning("章节三 BGM 加载失败：%s" % path)
+        return
+    if player.stream == stream and player.playing:
+        return
+    player.stream = stream
+    if not player.playing:
+        player.play()
+    _bgm_volume = 1.0
+    await _fade_player_volume(1.0, fade)
+
+
+func _audio_stop(fade: float) -> void:
+    var player := _bgm_player
+    if _verify_mode or player == null:
+        return
+    _bgm_volume = 0.0
+    await _fade_player_volume(0.0, fade)
+    if player.playing:
+        player.stop()
+    player.stream = null
+
+
+func _audio_stop_immediate() -> void:
+    var player := _bgm_player
+    if player == null:
+        return
+    player.stop()
+    player.stream = null
+
+
+func _fade_player_volume(target_vol: float, fade: float) -> void:
+    var player := _bgm_player
+    if player == null:
+        return
+    var end_db := _db_for_volume(target_vol)
+    var tween := create_tween()
+    tween.tween_property(player, "volume_db", end_db, fade if _verify_mode == false else 0.0)
+    await tween.finished
+
+
+func _db_for_volume(vol: float) -> float:
+    if vol <= 0.0:
+        return -80.0
+    return linear_to_db(vol)
 
 
 func _brief_pause() -> void:

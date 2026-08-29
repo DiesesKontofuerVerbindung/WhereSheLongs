@@ -45,6 +45,14 @@ const HAND_COLLAPSE_VIDEO := "res://assets/forest_hand_sequence/collapse.ogv"
 const HandInspectTexture := preload("res://assets/forest_hand_sequence/hand_inspect.jpg")
 const HandBlurredTexture := preload("res://assets/forest_hand_sequence/hand_blurred.jpg")
 const HandCollapseStream := preload("res://assets/forest_hand_sequence/collapse.ogv")
+## 森林正片 BGM（对应《音效需求》：黑暗森林主题 29–122 / 森林跑酷 123–193 /
+## 8月30日 193–194 / 神秘湖美丽危险 194–195 / 心跳同步 195–366 循环）。
+const AUDIO_FOREST_BGM_DARK_FOREST := "res://assets/audio/forest_bgm_dark_forest.ogg"
+const AUDIO_FOREST_BGM_PARKOUR := "res://assets/audio/forest_bgm_parkour.ogg"
+const AUDIO_FOREST_BGM_8_30 := "res://assets/audio/forest_bgm_8_30.ogg"
+const AUDIO_FOREST_BGM_MYSTERY_LAKE := "res://assets/audio/forest_bgm_mystery_lake.ogg"
+const AUDIO_FOREST_BGM_HEARTBEAT := "res://assets/audio/forest_bgm_heartbeat.ogg"
+const AUDIO_FADE_SECONDS := 1.2
 const MODULE_VIEW_SIZE := Vector2i(1280, 720)
 const MODULE_RENDER_TEST_CASES := [
 	[Vector2i(1280, 720), Vector2i(1280, 720)],
@@ -158,6 +166,8 @@ var _module_output_size := Vector2i.ZERO
 var _module_render_size := MODULE_VIEW_SIZE
 var _module_pointer_inside := false
 var _module_pointer_captured := false
+var _bgm_player: AudioStreamPlayer
+var _bgm_volume := 0.0
 var _typography: UiTypographyScript
 var _primary_font: Font
 var _cjk_fallback_font: SystemFont
@@ -315,6 +325,13 @@ func _build_ui() -> void:
 	_dark_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_dark_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_dark_overlay)
+
+	_bgm_player = AudioStreamPlayer.new()
+	_bgm_player.name = "ForestBGMAudio"
+	_bgm_player.bus = &"Master"
+	_bgm_player.process_mode = Node.PROCESS_MODE_ALWAYS
+	_bgm_player.volume_db = -80.0
+	add_child(_bgm_player)
 
 	_build_story_stage()
 	# CG 是场景底图，必须在所有文字 UI 之前入树：它现在是常驻循环，
@@ -1250,8 +1267,7 @@ func _execute_event(event: Dictionary) -> void:
 		"module_skip":
 			await _run_module_skip(event)
 		"audio":
-			_status("[AUDIO] %s" % str(event.get("cue", "")))
-			_log_runtime("AUDIO cue=%s" % str(event.get("cue", "")))
+			await _apply_audio_event(event)
 			await _brief_pause()
 		"goto":
 			_jump_to_label(str(event.get("target", "")))
@@ -1283,6 +1299,107 @@ func _run_blink_endpoint(event: Dictionary) -> void:
 	_blink_endpoint_used = true
 	_status("[ENDPOINT] %s" % str(event.get("text", "")))
 	_log_runtime("ENDPOINT id=%s (via blink gate)" % str(event.get("id", "")))
+
+
+## 处理 audio 事件。字段：
+##   action: "start" 播放（循环，淡入）；"stop" 停止（淡出）；"stop_immediate" 立即停。
+##   stream: 语义名映射（forest_bgm_* 等），或直接 res:// 路径。
+##   fade: 覆盖淡入淡出时长（秒）。
+func _apply_audio_event(event: Dictionary) -> void:
+	var action := str(event.get("action", ""))
+	var stream_key := str(event.get("stream", ""))
+	var fade := float(event.get("fade", AUDIO_FADE_SECONDS))
+	# 兼容旧式 cue 事件（只有 cue，无 action/stream）：保持原样打日志即可，不起播也不告警。
+	if action.is_empty():
+		var cue := str(event.get("cue", ""))
+		if not cue.is_empty():
+			_status("[AUDIO] %s" % cue)
+			_log_runtime("AUDIO cue=%s" % cue)
+		return
+	if action == "stop" or action == "stop_immediate":
+		if action == "stop":
+			await _audio_stop(fade)
+		else:
+			_audio_stop_immediate()
+		return
+	var path := _resolve_audio_path(stream_key)
+	if path.is_empty():
+		push_warning("森林正片 audio 事件缺 stream：%s" % str(event))
+		return
+	match action:
+		"start":
+			await _audio_start(path, fade)
+		_:
+			push_warning("森林正片未知 audio action：%s" % action)
+
+
+## 把语义名映射到真实资源路径。换音频时只改这里，事件表不用动。
+func _resolve_audio_path(key: String) -> String:
+	match key:
+		"forest_bgm_dark_forest":
+			return AUDIO_FOREST_BGM_DARK_FOREST
+		"forest_bgm_parkour":
+			return AUDIO_FOREST_BGM_PARKOUR
+		"forest_bgm_8_30":
+			return AUDIO_FOREST_BGM_8_30
+		"forest_bgm_mystery_lake":
+			return AUDIO_FOREST_BGM_MYSTERY_LAKE
+		"forest_bgm_heartbeat":
+			return AUDIO_FOREST_BGM_HEARTBEAT
+	return key
+
+
+func _audio_start(path: String, fade: float) -> void:
+	var player := _bgm_player
+	if _verify_mode or player == null:
+		return
+	var stream: AudioStream = load(path)
+	if stream == null:
+		push_warning("森林正片 BGM 加载失败：%s" % path)
+		return
+	if player.stream == stream and player.playing:
+		return
+	player.stream = stream
+	if not player.playing:
+		player.play()
+	_bgm_volume = 1.0
+	await _fade_player_volume(1.0, fade)
+
+
+func _audio_stop(fade: float) -> void:
+	var player := _bgm_player
+	if _verify_mode or player == null:
+		return
+	_bgm_volume = 0.0
+	await _fade_player_volume(0.0, fade)
+	if player.playing:
+		player.stop()
+	player.stream = null
+
+
+func _audio_stop_immediate() -> void:
+	var player := _bgm_player
+	if player == null:
+		return
+	player.stop()
+	player.stream = null
+
+
+func _fade_player_volume(target_vol: float, fade: float) -> void:
+	var player := _bgm_player
+	if player == null:
+		return
+	var start_db := player.volume_db
+	var end_db := _db_for_volume(target_vol)
+	var tween := create_tween()
+	tween.tween_property(player, "volume_db", end_db, fade if _verify_mode == false else 0.0)
+	await tween.finished
+
+
+func _db_for_volume(vol: float) -> float:
+	if vol <= 0.0:
+		return -80.0
+	return linear_to_db(vol)
 
 
 func _show_line(event: Dictionary) -> void:
@@ -2165,6 +2282,7 @@ func _show_fatal(text: String) -> void:
 
 func _complete_story() -> void:
 	_stop_story_shake("endpoint")
+	_audio_stop_immediate()
 	_dialogue_ui.hide_dialogue()
 	_narration_ui.begin_fade_for_dialogue(_verify_mode)
 	_interaction_panel.visible = false
