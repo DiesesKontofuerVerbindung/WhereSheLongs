@@ -28,9 +28,10 @@ const SCENES := {
 	},
 	"wonderful_night_intro": {
 		"id": "wonderful_night_intro",
-		"type": "dialogue",
+		"type": "level",
 		"title": "奇妙夜 - 世界",
-		"dialogue_id": "wonderful_night_intro",
+		"level_id": "world_collapse",
+		"packed_scene": "res://levels/sequences/world_collapse.tscn",
 		"on_complete": "part1_forest_dark",
 		"effects": {"vars": {"current_part": "part_1"}},
 	},
