@@ -14,6 +14,7 @@ config/custom_user_dir_name="Qimiaoye_DarkForest_TextOnly_V0.1"
 [autoload]
 
 GameState="*res://autoload/game_state.gd"
+Chapter3State="*res://autoload/chapter3_state.gd"
 
 [display]
 

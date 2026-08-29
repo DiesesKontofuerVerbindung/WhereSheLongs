@@ -12,6 +12,7 @@ const CutscenePlayerScript := preload("res://scripts/cutscene_player.gd")
 const DevJumpPanelScript := preload("res://scripts/dev_jump_panel.gd")
 const WeddingDataScript := preload("res://scripts/wedding_data.gd")
 const MysticNightDataScript := preload("res://scripts/mystic_night_data.gd")
+const Chapter3DataScript := preload("res://scripts/chapter3_data.gd")
 const InnerObjectsStageScript := preload("res://scripts/inner_objects_stage.gd")
 const RUNTIME_LOG_PATH := "user://logs/runtime.log"
 const TRACE_LOG_PATH := "user://logs/trace_steps.log"
@@ -20,6 +21,7 @@ const DEV_JUMP_META_KEY := "qimiaoye_dark_forest_dev_docx_jump"
 const DEV_JUMP_CHAPTER_ID := "forest"
 const WEDDING_PROLOGUE_SCENE := "res://scenes/wedding/wedding_prologue.tscn"
 const MYSTIC_NIGHT_SCENE := "res://scenes/mystic_night/mystic_night.tscn"
+const CHAPTER3_SCENE := "res://scenes/chapter3/chapter3.tscn"
 
 const COLOR_BG := Color("050608")
 const COLOR_PANEL := Color("10141de8")
@@ -555,7 +557,7 @@ func _build_endpoint_panel() -> void:
 	add_child(_endpoint_panel)
 
 	var label := Label.new()
-	label.text = "[ENDPOINT]\n黑暗森林章节在此结束\n\n本并行版停止，不进入下一章。"
+	label.text = "[ENDPOINT]\n黑暗森林章节在此结束\n\n即将进入 章节三 · 典礼上的选择…"
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.add_theme_font_size_override("font_size", 28)
@@ -800,6 +802,13 @@ func _dev_jump_chapters() -> Array[Dictionary]:
 			"events": _events,
 			"hint": "森林正片的 DOCX 行。若该行没有剧情事件，将从下一条有事件的行开始。
 跳转会重载场景，并保留运行日志与逐步检测日志。",
+		},
+		{
+			"id": "chapter3",
+			"title": "典礼上的选择回溯",
+			"scene": CHAPTER3_SCENE,
+			"events": Chapter3DataScript.build_events(),
+			"hint": "章节三（典礼上的选择）的 DOCX 行。选这一页会切到章节三场景并从该行开始。",
 		},
 	]
 	return chapters
@@ -1976,9 +1985,19 @@ func _complete_story() -> void:
 				])
 			else:
 				_log_runtime("COMPLETE status=ok")
+			# 森林正片正常走完（非验证、非开发跳转、无运行错误）后，延时切到最终章 章节三。
+			if not _verify_mode and not _dev_jump_active and runtime_errors.is_empty():
+				_endpoint_panel.visible = true
+				call_deferred("_advance_to_chapter3")
 		else:
 			for issue in runtime_errors:
 				_log_runtime("COMPLETE_ERROR %s" % issue)
+
+
+## 森林正片结束时延时切到最终章 章节三 · 典礼上的选择。
+func _advance_to_chapter3() -> void:
+	await get_tree().create_timer(2.0).timeout
+	get_tree().change_scene_to_file(CHAPTER3_SCENE)
 
 
 func _validate_module_render_contract() -> PackedStringArray:
@@ -2133,10 +2152,10 @@ func _validate_contract() -> PackedStringArray:
 	elif _advance_hint_label.anchor_left != 0.0 or _advance_hint_label.anchor_top != 0.0:
 		errors.append("键盘推进提示未固定在画面左上角")
 	if _dev_jump_overlay == null or not _dev_jump_overlay.verify_contract():
-		errors.append("F4 DOCX 行跳转开发面板不完整（婚礼前夜 / 奇妙夜 / 森林三页缺失或行号范围为空）")
+		errors.append("F4 DOCX 行跳转开发面板不完整（婚礼前夜 / 奇妙夜 / 森林 / 章节三 四页缺失或行号范围为空）")
 	elif _dev_jump_overlay.visible:
 		errors.append("F4 DOCX 行跳转开发面板不应默认显示")
-	elif _dev_jump_overlay.get_chapter_ids() != PackedStringArray(["wedding", "mystic_night", DEV_JUMP_CHAPTER_ID]):
+	elif _dev_jump_overlay.get_chapter_ids() != PackedStringArray(["wedding", "mystic_night", DEV_JUMP_CHAPTER_ID, "chapter3"]):
 		errors.append("回溯面板章节页缺失或顺序异常：%s" % str(_dev_jump_overlay.get_chapter_ids()))
 	if _story_stage == null or not _story_stage.has_method("verify_contract") or not bool(_story_stage.verify_contract()):
 		errors.append("持续剧情舞台、独立光源或人物三态动画契约不完整")

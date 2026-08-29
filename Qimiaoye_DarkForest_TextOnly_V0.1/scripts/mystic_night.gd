@@ -8,6 +8,7 @@ extends Control
 const NarrationUIScript := preload("res://scripts/narration_ui.gd")
 const DialogueUIScript := preload("res://scripts/dialogue_ui.gd")
 const MysticNightDataScript := preload("res://scripts/mystic_night_data.gd")
+const Chapter3DataScript := preload("res://scripts/chapter3_data.gd")
 const WeddingDataScript := preload("res://scripts/wedding_data.gd")
 const StoryDataScript := preload("res://scripts/story_data.gd")
 const DevJumpPanelScript := preload("res://scripts/dev_jump_panel.gd")
@@ -15,6 +16,7 @@ const DevJumpPanelScript := preload("res://scripts/dev_jump_panel.gd")
 const FOREST_MAIN_SCENE := "res://main.tscn"
 const WEDDING_PROLOGUE_SCENE := "res://scenes/wedding/wedding_prologue.tscn"
 const MYSTIC_NIGHT_SCENE := "res://scenes/mystic_night/mystic_night.tscn"
+const CHAPTER3_SCENE := "res://scenes/chapter3/chapter3.tscn"
 const DEV_JUMP_CHAPTER_ID := "mystic_night"
 const FONT_PRIMARY_NAME := "Times New Roman"
 
@@ -322,6 +324,13 @@ func _setup_dev_jump_chapters() -> void:
 			"scene": FOREST_MAIN_SCENE,
 			"events": StoryDataScript.get_events(),
 			"hint": "森林正片的 DOCX 行。选这一页会切到森林场景并从该行开始。",
+		},
+		{
+			"id": "chapter3",
+			"title": "典礼上的选择回溯",
+			"scene": CHAPTER3_SCENE,
+			"events": Chapter3DataScript.build_events(),
+			"hint": "章节三（典礼上的选择）的 DOCX 行。选这一页会切到章节三场景并从该行开始。",
 		},
 	]
 	_dev_jump_overlay.setup(chapters, DEV_JUMP_CHAPTER_ID)
@@ -780,8 +789,8 @@ func _report_verification() -> void:
 		if _dialogue_ui.get_presented_line_count() != 36:
 			_failures.append("人物对白显示数量异常：%d" % _dialogue_ui.get_presented_line_count())
 	if _dev_jump_overlay == null or not _dev_jump_overlay.verify_contract():
-		_failures.append("F4 回溯面板不完整（婚礼前夜 / 奇妙夜 / 森林三页缺失或行号范围为空）")
-	elif _dev_jump_overlay.get_chapter_ids() != PackedStringArray(["wedding", DEV_JUMP_CHAPTER_ID, "forest"]):
+		_failures.append("F4 回溯面板不完整（婚礼前夜 / 奇妙夜 / 森林 / 章节三 四页缺失或行号范围为空）")
+	elif _dev_jump_overlay.get_chapter_ids() != PackedStringArray(["wedding", DEV_JUMP_CHAPTER_ID, "forest", "chapter3"]):
 		_failures.append("回溯面板章节页缺失或顺序异常：%s" % str(_dev_jump_overlay.get_chapter_ids()))
 	elif _dev_jump_overlay.is_open():
 		_failures.append("F4 回溯面板不应默认显示")
@@ -800,7 +809,7 @@ func _report_verification() -> void:
 			print("MYSTIC_NIGHT_FAIL %s" % failure)
 		get_tree().quit(1)
 		return
-	print("MYSTIC_NIGHT_PASS events=%d sources=%d cgs=%d camera_shots=%d interactions=%d endpoint=%s narration_lines=55 dialogue_lines=36 first_person=true audio=false art=true dev_jump_chapters=wedding_mystic_night_forest source_bounds=%s" % [
+	print("MYSTIC_NIGHT_PASS events=%d sources=%d cgs=%d camera_shots=%d interactions=%d endpoint=%s narration_lines=55 dialogue_lines=36 first_person=true audio=false art=true dev_jump_chapters=wedding_mystic_night_forest_chapter3 source_bounds=%s" % [
 		_events.size(),
 		_visited_sources.size(),
 		_visited_cgs.size(),
