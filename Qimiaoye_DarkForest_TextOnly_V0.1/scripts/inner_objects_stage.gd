@@ -429,7 +429,8 @@ func verify_contract() -> bool:
 		"res://levels/minigames/fan_runtime/interference_field.py",
 		"res://levels/minigames/hand_landmarker.task",
 	]:
-		if not FileAccess.file_exists(runtime_path):
+		var exists := ResourceLoader.exists(runtime_path) if runtime_path.ends_with(".gd") else FileAccess.file_exists(runtime_path)
+		if not exists:
 			return false
 	return true
 
