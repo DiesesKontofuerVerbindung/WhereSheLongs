@@ -26,6 +26,8 @@ const RUNTIME_RESOURCE_PATHS := [
 ]
 const ENTITY_COUNT := 72
 
+## 玩法3 用满 72 个实体；主观内心那一幕只有六件物件，起桥前改这个值即可。
+var entity_count := ENTITY_COUNT
 var _udp := PacketPeerUDP.new()
 var _command_udp := PacketPeerUDP.new()
 var _bridge_pid := -1
@@ -57,7 +59,7 @@ func start_bridge() -> void:
 		"--command-port",
 		str(COMMAND_PORT),
 		"--entities",
-		str(ENTITY_COUNT),
+		str(entity_count),
 	])
 	for python_path in _python_candidates():
 		_bridge_pid = OS.create_process(python_path, arguments, false)

@@ -18,17 +18,21 @@ const FILL_BLUR_RADIUS := 0.018
 const FILL_DIM := 0.42
 
 ## 帧数与帧率跟源视频一一对应，一帧不漏：
-## 瀑布下 24fps/4.75s，其余三段 30fps/5.04s。
+## 瀑布下与溺水 2026-08-29 换了新片源（Szene/场景/森林视频 里的"（新）"两条）：
+##   瀑布下 1120x840 4:3 24fps/4.75s/114帧 -> 1280x720 16:9 30fps/5.04s/151帧
+##   溺水   1112x834 4:3 30fps/5.04s/151帧 -> 960x720  4:3  20fps/3.90s/78帧
+## 瀑布下换成 16:9 之后与画框同比，_frame_fill 那层模糊补边基本不再出现。
+## 其余两段仍是 30fps/5.04s。
 ## 上一版为了压体积做过"源帧率减半 + PNG-8 量化 256 色"，画质就是那么丢的。
-## 现在是 WebP q95 真彩色有损，567 帧共 82 MB，普通 git 装得下，不必上 LFS。
+## 现在是 WebP q95 真彩色有损，531 帧共 82 MB，普通 git 装得下，不必上 LFS。
 ## loop=false 的段播完停在最后一帧，等场景切走再淡出。
 ## 溺水是"小凌在水中不断下沉"，单向动作，首尾接不上，硬循环会看见明显的跳；
 ## 而且下沉倒放会变成上浮，乒乓也不能用。停在沉到底的那一帧才对，
 ## 节奏交给玩家读完那几行再按继续。
 const CUTSCENES := {
-	"waterfall_below": {"frames": 114, "fps": 24.0, "loop": true},
+	"waterfall_below": {"frames": 151, "fps": 30.0, "loop": true},
 	"lake_talk": {"frames": 151, "fps": 30.0, "loop": true},
-	"drowning": {"frames": 151, "fps": 30.0, "loop": false},
+	"drowning": {"frames": 78, "fps": 20.0, "loop": false},
 	"touch_chest": {"frames": 151, "fps": 30.0, "loop": true},
 }
 
@@ -42,6 +46,8 @@ var _holding_last_frame := false
 var _played_frames := 0
 var _last_missing_frames := PackedStringArray()
 var _frame_cache := {}
+var _frame_blur_radius := 0.0
+var _frame_blur_tween: Tween
 
 
 func _ready() -> void:
@@ -111,6 +117,41 @@ void fragment() {
 	material.shader = shader
 	material.set_shader_parameter("blur_radius", FILL_BLUR_RADIUS)
 	return material
+
+
+## 把主画面本身推成虚化。DOCX 309 主观内心那一幕要让湖边谈心的循环继续播、
+## 但整幅退到焦外，物件浮在前面。radius=0 就是恢复清晰。
+## 复用 _make_fill_blur_material 的同一份 shader 代码，但持有独立实例，
+## 不能和背景填充层共用，否则改一个另一个跟着变。
+func set_frame_blur(radius: float, duration := 0.0) -> void:
+	if _frame_view == null:
+		return
+	var material := _frame_view.material as ShaderMaterial
+	if material == null:
+		material = _make_fill_blur_material()
+		material.set_shader_parameter("blur_radius", 0.0)
+		_frame_view.material = material
+	if _frame_blur_tween != null and _frame_blur_tween.is_running():
+		_frame_blur_tween.kill()
+	var target := maxf(radius, 0.0)
+	if duration <= 0.0:
+		material.set_shader_parameter("blur_radius", target)
+		_frame_blur_radius = target
+		return
+	var start := _frame_blur_radius
+	_frame_blur_tween = create_tween()
+	_frame_blur_tween.tween_method(
+		func(value: float) -> void:
+			material.set_shader_parameter("blur_radius", value)
+			_frame_blur_radius = value,
+		start,
+		target,
+		duration
+	)
+
+
+func get_frame_blur_radius() -> float:
+	return _frame_blur_radius
 
 
 func has_cutscene(cutscene_id: String) -> bool:
