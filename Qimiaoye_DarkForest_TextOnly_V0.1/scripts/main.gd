@@ -9,10 +9,16 @@ const NarrationUIScript := preload("res://scripts/narration_ui.gd")
 const DialogueUIScript := preload("res://scripts/dialogue_ui.gd")
 const StoryStageScript := preload("res://scripts/story_stage.gd")
 const CutscenePlayerScript := preload("res://scripts/cutscene_player.gd")
+const DevJumpPanelScript := preload("res://scripts/dev_jump_panel.gd")
+const WeddingDataScript := preload("res://scripts/wedding_data.gd")
+const MysticNightDataScript := preload("res://scripts/mystic_night_data.gd")
 const RUNTIME_LOG_PATH := "user://logs/runtime.log"
 const TRACE_LOG_PATH := "user://logs/trace_steps.log"
 const ENGINE_LOG_PATH := "user://logs/godot.log"
 const DEV_JUMP_META_KEY := "qimiaoye_dark_forest_dev_docx_jump"
+const DEV_JUMP_CHAPTER_ID := "forest"
+const WEDDING_PROLOGUE_SCENE := "res://scenes/wedding/wedding_prologue.tscn"
+const MYSTIC_NIGHT_SCENE := "res://scenes/mystic_night/mystic_night.tscn"
 
 const COLOR_BG := Color("050608")
 const COLOR_PANEL := Color("10141de8")
@@ -115,12 +121,7 @@ var _diagnostic_panel: PanelContainer
 var _diagnostic_label: Label
 var _endpoint_panel: PanelContainer
 var _advance_hint_label: Label
-var _dev_jump_overlay: ColorRect
-var _dev_jump_panel: PanelContainer
-var _dev_jump_range_label: Label
-var _dev_jump_input: LineEdit
-var _dev_jump_button: Button
-var _dev_jump_feedback: Label
+var _dev_jump_overlay
 var _module_host: Control
 var _module_texture_rect: TextureRect
 var _module_viewport: SubViewport
@@ -209,6 +210,7 @@ func _ready() -> void:
 	])
 	_events = StoryData.get_events()
 	_build_label_index()
+	_setup_dev_jump_chapters()
 	_refresh_dev_jump_preview()
 	_preflight_errors = _validate_contract()
 	var dev_jump_error := _apply_pending_dev_jump()
@@ -720,97 +722,48 @@ func _forward_input_to_module(event: InputEvent) -> bool:
 
 
 func _build_dev_jump_panel() -> void:
-	_dev_jump_overlay = ColorRect.new()
-	_dev_jump_overlay.name = "DeveloperDocxJumpOverlay"
-	_dev_jump_overlay.color = Color(0.01, 0.015, 0.025, 0.88)
-	_dev_jump_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_dev_jump_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-	_dev_jump_overlay.z_index = 200
-	_dev_jump_overlay.visible = false
+	# 面板本身不认识剧情：森林与婚礼各自把事件表注册进去，行号解析、tab 切换和
+	# 跨场景 payload 都收在 dev_jump_panel.gd 里，两个章节共用同一份实现。
+	# 这里只把节点挂上：森林 tab 需要 _events，而事件表要等 _ready later 才装配好，
+	# 章节注册因此推迟到 _setup_dev_jump_chapters()。
+	_dev_jump_overlay = DevJumpPanelScript.new()
 	add_child(_dev_jump_overlay)
+	_dev_jump_overlay.jump_requested.connect(_on_dev_jump_requested)
 
-	_dev_jump_panel = PanelContainer.new()
-	_dev_jump_panel.name = "DeveloperDocxJumpPanel"
-	_dev_jump_panel.set_anchors_preset(Control.PRESET_CENTER)
-	_dev_jump_panel.offset_left = -310
-	_dev_jump_panel.offset_right = 310
-	_dev_jump_panel.offset_top = -170
-	_dev_jump_panel.offset_bottom = 170
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color("0b0f17fa")
-	panel_style.border_color = Color("f4c36ad0")
-	panel_style.set_border_width_all(2)
-	panel_style.set_corner_radius_all(12)
-	_dev_jump_panel.add_theme_stylebox_override("panel", panel_style)
-	_dev_jump_overlay.add_child(_dev_jump_panel)
 
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 26)
-	margin.add_theme_constant_override("margin_right", 26)
-	margin.add_theme_constant_override("margin_top", 22)
-	margin.add_theme_constant_override("margin_bottom", 22)
-	_dev_jump_panel.add_child(margin)
+func _setup_dev_jump_chapters() -> void:
+	if _dev_jump_overlay != null:
+		_dev_jump_overlay.setup(_dev_jump_chapters(), DEV_JUMP_CHAPTER_ID)
 
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 14)
-	margin.add_child(col)
 
-	var title := Label.new()
-	title.text = "开发者功能 · DOCX 行回溯"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 25)
-	title.add_theme_color_override("font_color", COLOR_WARNING)
-	col.add_child(title)
+func _dev_jump_chapters() -> Array[Dictionary]:
+	var wedding_events: Array = WeddingDataScript.build_events()
+	var chapters: Array[Dictionary] = [
+		{
+			"id": "wedding",
+			"title": "婚礼前夜回溯",
+			"scene": WEDDING_PROLOGUE_SCENE,
+			"events": wedding_events,
+			"hint": "婚礼前段的 DOCX 行。选这一页会切到婚礼场景并从该行开始。",
+		},
+		{
+			"id": "mystic_night",
+			"title": "奇妙夜回溯",
+			"scene": MYSTIC_NIGHT_SCENE,
+			"events": MysticNightDataScript.build_events(),
+			"hint": "奇妙夜的 DOCX 行。选这一页会切到奇妙夜场景并从该行开始。",
+		},
+		{
+			"id": DEV_JUMP_CHAPTER_ID,
+			"title": "森林回溯",
+			"scene": "res://main.tscn",
+			"events": _events,
+			"hint": "森林正片的 DOCX 行。若该行没有剧情事件，将从下一条有事件的行开始。
+跳转会重载场景，并保留运行日志与逐步检测日志。",
+		},
+	]
+	return chapters
 
-	var help := Label.new()
-	help.text = "输入 DOCX 来源行。若该行没有剧情事件，将从下一条有事件的行开始。\n跳转会重载灰盒场景，并保留运行日志与逐步检测日志。"
-	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	help.add_theme_font_size_override("font_size", 16)
-	help.add_theme_color_override("font_color", COLOR_TEXT)
-	col.add_child(help)
-
-	_dev_jump_range_label = Label.new()
-	_dev_jump_range_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_dev_jump_range_label.add_theme_font_size_override("font_size", 14)
-	_dev_jump_range_label.add_theme_color_override("font_color", COLOR_MUTED)
-	col.add_child(_dev_jump_range_label)
-
-	var input_row := HBoxContainer.new()
-	input_row.add_theme_constant_override("separation", 12)
-	col.add_child(input_row)
-
-	_dev_jump_input = LineEdit.new()
-	_dev_jump_input.name = "DeveloperDocxLineInput"
-	_dev_jump_input.placeholder_text = "例如：181"
-	_dev_jump_input.custom_minimum_size = Vector2(300, 48)
-	_dev_jump_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_dev_jump_input.add_theme_font_size_override("font_size", 20)
-	_dev_jump_input.text_changed.connect(_on_dev_jump_text_changed)
-	_dev_jump_input.text_submitted.connect(_on_dev_jump_text_submitted)
-	input_row.add_child(_dev_jump_input)
-
-	_dev_jump_button = Button.new()
-	_dev_jump_button.name = "DeveloperDocxJumpButton"
-	_dev_jump_button.text = "从此行开始"
-	_dev_jump_button.custom_minimum_size = Vector2(170, 48)
-	_dev_jump_button.pressed.connect(_submit_dev_jump)
-	input_row.add_child(_dev_jump_button)
-
-	_dev_jump_feedback = Label.new()
-	_dev_jump_feedback.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_dev_jump_feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_dev_jump_feedback.add_theme_font_size_override("font_size", 15)
-	_dev_jump_feedback.add_theme_color_override("font_color", COLOR_ACCENT)
-	_dev_jump_feedback.custom_minimum_size.y = 42
-	col.add_child(_dev_jump_feedback)
-
-	var close_button := Button.new()
-	close_button.text = "取消 · Esc / F4"
-	close_button.custom_minimum_size = Vector2(210, 40)
-	close_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	close_button.pressed.connect(_close_dev_jump_panel)
-	col.add_child(close_button)
 
 
 func _process(delta: float) -> void:
@@ -892,123 +845,59 @@ func _unhandled_key_input(event: InputEvent) -> void:
 func _toggle_dev_jump_panel() -> void:
 	if _dev_jump_overlay == null:
 		return
-	if _dev_jump_overlay.visible:
+	if _dev_jump_overlay.is_open():
 		_close_dev_jump_panel()
 	else:
 		_open_dev_jump_panel()
 
 
 func _open_dev_jump_panel() -> void:
-	if _dev_jump_overlay == null or _dev_jump_input == null:
+	if _dev_jump_overlay == null:
 		return
-	_dev_jump_overlay.visible = true
 	_right_held = false
 	_left_held = false
-	var bounds := _docx_source_bounds()
-	var current_source := int(_current_event.get("source", 0))
-	var suggested_source := current_source if current_source > 0 else bounds.x
-	_dev_jump_input.text = str(suggested_source)
-	_dev_jump_input.select_all()
-	_dev_jump_input.grab_focus()
-	_refresh_dev_jump_preview()
+	_dev_jump_overlay.open_panel(int(_current_event.get("source", 0)))
 
 
 func _close_dev_jump_panel() -> void:
-	if _dev_jump_overlay == null:
-		return
-	_dev_jump_overlay.visible = false
-	if _dev_jump_input != null:
-		_dev_jump_input.release_focus()
-
-
-func _on_dev_jump_text_changed(_new_text: String) -> void:
-	_refresh_dev_jump_preview()
-
-
-func _on_dev_jump_text_submitted(_submitted_text: String) -> void:
-	_submit_dev_jump()
+	if _dev_jump_overlay != null:
+		_dev_jump_overlay.close_panel()
 
 
 func _refresh_dev_jump_preview() -> void:
-	if _dev_jump_input == null or _dev_jump_button == null or _dev_jump_feedback == null:
-		return
-	var bounds := _docx_source_bounds()
-	var current_source := int(_current_event.get("source", 0))
-	_dev_jump_range_label.text = "当前 DOCX 行：%s　|　可跳转来源范围：%d–%d　|　F4 打开/关闭" % [
-		str(current_source) if current_source > 0 else "等待启动",
-		bounds.x,
-		bounds.y,
-	]
-	var raw := _dev_jump_input.text.strip_edges()
-	if raw.is_empty():
-		_dev_jump_feedback.text = "请输入一个 DOCX 行号。"
-		_dev_jump_button.disabled = true
-		return
-	if not raw.is_valid_int() or int(raw) <= 0:
-		_dev_jump_feedback.text = "行号必须是正整数。"
-		_dev_jump_button.disabled = true
-		return
-	var requested_source := int(raw)
-	var resolved := _resolve_docx_source_line(requested_source)
-	if resolved.is_empty():
-		_dev_jump_feedback.text = "第 %d 行之后没有剧情事件；最后一个来源行是 %d。" % [requested_source, bounds.y]
-		_dev_jump_button.disabled = true
-		return
-	var actual_source := int(resolved.get("source", 0))
-	var event: Dictionary = resolved.get("event", {})
-	var event_id := _event_debug_id(event)
-	if bool(resolved.get("exact", false)):
-		_dev_jump_feedback.text = "精确落点：DOCX 第 %d 行 · %s / %s" % [actual_source, event.get("type", ""), event_id]
-	else:
-		_dev_jump_feedback.text = "第 %d 行没有事件，将从下一条：DOCX 第 %d 行 · %s / %s 开始" % [
-			requested_source,
-			actual_source,
-			event.get("type", ""),
-			event_id,
-		]
-	_dev_jump_button.disabled = false
+	if _dev_jump_overlay != null:
+		_dev_jump_overlay.refresh_preview(int(_current_event.get("source", 0)))
 
 
-func _submit_dev_jump() -> void:
-	if _dev_jump_input == null:
-		return
-	var raw := _dev_jump_input.text.strip_edges()
-	if not raw.is_valid_int() or int(raw) <= 0:
-		_refresh_dev_jump_preview()
-		return
-	var requested_source := int(raw)
-	var resolved := _resolve_docx_source_line(requested_source)
-	if resolved.is_empty():
-		_refresh_dev_jump_preview()
-		return
-	var actual_source := int(resolved.get("source", 0))
-	var target_index := int(resolved.get("index", -1))
-	var from_source := int(_current_event.get("source", 0))
-	var payload := {
-		"requested_source": requested_source,
-		"actual_source": actual_source,
-		"target_index": target_index,
-		"from_source": from_source,
-		"requested_at": Time.get_datetime_string_from_system(),
-	}
-	_log_runtime("DEV_JUMP_REQUEST from_source=%d requested_source=%d actual_source=%d target_step=%d exact=%s" % [
+## 面板已经把 payload 写进 root meta，这里只负责记日志并真正切场景：
+## 回森林自己是重载，去婚礼是换场景。
+func _on_dev_jump_requested(payload: Dictionary) -> void:
+	var target_chapter := str(payload.get("chapter", DEV_JUMP_CHAPTER_ID))
+	var requested_source := int(payload.get("requested_source", 0))
+	var actual_source := int(payload.get("actual_source", 0))
+	var target_index := int(payload.get("target_index", -1))
+	var from_source := int(payload.get("from_source", 0))
+	_log_runtime("DEV_JUMP_REQUEST from_chapter=%s to_chapter=%s from_source=%d requested_source=%d actual_source=%d target_step=%d exact=%s" % [
+		DEV_JUMP_CHAPTER_ID,
+		target_chapter,
 		from_source,
 		requested_source,
 		actual_source,
 		target_index + 1,
-		resolved.get("exact", false),
+		payload.get("exact", false),
 	])
-	_append_log(TRACE_LOG_PATH, "%s | phase=DEV_JUMP_REQUEST | from_source=%d | requested_source=%d | actual_source=%d | target_step=%d" % [
+	_append_log(TRACE_LOG_PATH, "%s | phase=DEV_JUMP_REQUEST | to_chapter=%s | from_source=%d | requested_source=%d | actual_source=%d | target_step=%d" % [
 		Time.get_time_string_from_system(),
+		target_chapter,
 		from_source,
 		requested_source,
 		actual_source,
 		target_index + 1,
 	])
-	get_tree().root.set_meta(DEV_JUMP_META_KEY, payload)
-	_dev_jump_button.disabled = true
-	_dev_jump_feedback.text = "正在跳转到 DOCX 第 %d 行……" % actual_source
-	call_deferred("_reload_for_dev_jump")
+	if bool(payload.get("same_chapter", true)):
+		call_deferred("_reload_for_dev_jump")
+		return
+	call_deferred("_change_scene_for_dev_jump", str(payload.get("scene", "")))
 
 
 func _reload_for_dev_jump() -> void:
@@ -1016,21 +905,24 @@ func _reload_for_dev_jump() -> void:
 	if reload_error == OK:
 		return
 	get_tree().root.remove_meta(DEV_JUMP_META_KEY)
-	_dev_jump_button.disabled = false
-	_dev_jump_feedback.text = "场景重载失败，错误码：%d" % reload_error
+	if _dev_jump_overlay != null:
+		_dev_jump_overlay.report_jump_failure("场景重载失败，错误码：%d" % reload_error)
 	_log_runtime("DEV_JUMP_RELOAD_FAIL error=%d" % reload_error)
 
 
+func _change_scene_for_dev_jump(scene_path: String) -> void:
+	var change_error := get_tree().change_scene_to_file(scene_path)
+	if change_error == OK:
+		return
+	get_tree().root.remove_meta(DEV_JUMP_META_KEY)
+	if _dev_jump_overlay != null:
+		_dev_jump_overlay.report_jump_failure("切换到 %s 失败，错误码：%d" % [scene_path, change_error])
+	_log_runtime("DEV_JUMP_CHANGE_SCENE_FAIL scene=%s error=%d" % [scene_path, change_error])
+
+
 func _take_pending_dev_jump() -> Dictionary:
-	var root := get_tree().root
-	if root == null or not root.has_meta(DEV_JUMP_META_KEY):
-		return {}
-	var raw_payload = root.get_meta(DEV_JUMP_META_KEY)
-	root.remove_meta(DEV_JUMP_META_KEY)
-	if typeof(raw_payload) == TYPE_DICTIONARY:
-		var payload: Dictionary = raw_payload
-		return payload.duplicate(true)
-	return {}
+	# 目标章节是婚礼时 payload 留在 meta 上不动，交给婚礼场景自己消费。
+	return DevJumpPanelScript.take_pending_jump(get_tree().root, DEV_JUMP_CHAPTER_ID)
 
 
 func _apply_pending_dev_jump() -> String:
@@ -1100,44 +992,15 @@ func _restore_dev_jump_scene_context(target_index: int) -> void:
 
 
 func _docx_source_bounds() -> Vector2i:
-	var min_source := 2147483647
-	var max_source := 0
-	for event in _events:
-		var source := int(event.get("source", 0))
-		if source <= 0:
-			continue
-		min_source = mini(min_source, source)
-		max_source = maxi(max_source, source)
-	if max_source == 0:
-		return Vector2i.ZERO
-	return Vector2i(min_source, max_source)
+	return DevJumpPanelScript.source_bounds(_events)
 
 
 func _resolve_docx_source_line(requested_source: int) -> Dictionary:
-	if requested_source <= 0:
-		return {}
-	var best_index := -1
-	var best_source := 2147483647
-	for i in range(_events.size()):
-		var event: Dictionary = _events[i]
-		var source := int(event.get("source", 0))
-		if source <= 0 or source < requested_source:
-			continue
-		if source < best_source:
-			best_source = source
-			best_index = i
-	if best_index < 0:
-		return {}
-	return {
-		"index": best_index,
-		"source": best_source,
-		"exact": best_source == requested_source,
-		"event": _events[best_index],
-	}
+	return DevJumpPanelScript.resolve_source_line(_events, requested_source)
 
 
 func _event_debug_id(event: Dictionary) -> String:
-	return str(event.get("id", event.get("name", event.get("type", "event"))))
+	return DevJumpPanelScript.event_debug_id(event)
 
 
 func _run_story() -> void:
@@ -2169,10 +2032,12 @@ func _validate_contract() -> PackedStringArray:
 		errors.append("左上角键盘推进提示缺失")
 	elif _advance_hint_label.anchor_left != 0.0 or _advance_hint_label.anchor_top != 0.0:
 		errors.append("键盘推进提示未固定在画面左上角")
-	if _dev_jump_overlay == null or _dev_jump_panel == null or _dev_jump_input == null or _dev_jump_button == null:
-		errors.append("F4 DOCX 行跳转开发面板不完整")
+	if _dev_jump_overlay == null or not _dev_jump_overlay.verify_contract():
+		errors.append("F4 DOCX 行跳转开发面板不完整（婚礼前夜 / 奇妙夜 / 森林三页缺失或行号范围为空）")
 	elif _dev_jump_overlay.visible:
 		errors.append("F4 DOCX 行跳转开发面板不应默认显示")
+	elif _dev_jump_overlay.get_chapter_ids() != PackedStringArray(["wedding", "mystic_night", DEV_JUMP_CHAPTER_ID]):
+		errors.append("回溯面板章节页缺失或顺序异常：%s" % str(_dev_jump_overlay.get_chapter_ids()))
 	if _story_stage == null or not _story_stage.has_method("verify_contract") or not bool(_story_stage.verify_contract()):
 		errors.append("持续剧情舞台、独立光源或人物三态动画契约不完整")
 	elif _root_bg == null or _root_bg.z_index >= int(_story_stage.get_debug_snapshot().get("world_z_index", -100)):

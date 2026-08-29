@@ -12,8 +12,14 @@ extends Control
 const NarrationUIScript := preload("res://scripts/narration_ui.gd")
 const DialogueUIScript := preload("res://scripts/dialogue_ui.gd")
 const WeddingDataScript := preload("res://scripts/wedding_data.gd")
+const MysticNightDataScript := preload("res://scripts/mystic_night_data.gd")
+const StoryDataScript := preload("res://scripts/story_data.gd")
+const DevJumpPanelScript := preload("res://scripts/dev_jump_panel.gd")
 
 const FOREST_MAIN_SCENE := "res://main.tscn"
+const WEDDING_PROLOGUE_SCENE := "res://scenes/wedding/wedding_prologue.tscn"
+const MYSTIC_NIGHT_SCENE := "res://scenes/mystic_night/mystic_night.tscn"
+const DEV_JUMP_CHAPTER_ID := "wedding"
 const FONT_PRIMARY_NAME := "Times New Roman"
 const FONT_CJK_FALLBACK_NAME := "SimSun"
 
@@ -36,6 +42,13 @@ var _visited_modules: Dictionary = {}
 var _interactions_done: Dictionary = {}
 var _failures: PackedStringArray = []
 
+var _dev_jump_overlay
+var _pending_dev_jump: Dictionary = {}
+var _dev_jump_active := false
+var _dev_jump_requested_source := 0
+var _dev_jump_actual_source := 0
+var _current_source := 0
+
 var _primary_font: SystemFont
 var _cjk_fallback_font: SystemFont
 var _root_bg: ColorRect
@@ -52,15 +65,20 @@ var _dialogue_ui
 var _shake_phase := 0.0
 var _shake_intensity := 0.0
 var _pending_interaction := ""
+var _active_line_channel := ""
 
 
 func _ready() -> void:
 	name = "WeddingPrologue"
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	_pending_dev_jump = DevJumpPanelScript.take_pending_jump(get_tree().root, DEV_JUMP_CHAPTER_ID)
 	_verify_mode = "--verify" in OS.get_cmdline_user_args() or "--verify" in OS.get_cmdline_args()
 	_configure_typography()
 	_build_ui()
 	_events = WeddingDataScript.build_events()
+	_setup_dev_jump_chapters()
+	_apply_pending_dev_jump()
 	call_deferred("_run_events")
 
 
@@ -164,7 +182,110 @@ func _build_ui() -> void:
 	_advance_hint.add_theme_color_override("font_color", COLOR_MUTED)
 	_advance_hint.text = "按 Enter / Space 继续"
 	_advance_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# 只在真的等玩家推进时才亮：常显会让 wait/effect 这类定时事件看起来像卡住。
+	_advance_hint.visible = false
 	add_child(_advance_hint)
+
+	# 章节注册要等 _events 装配好，这里只挂节点。
+	_dev_jump_overlay = DevJumpPanelScript.new()
+	add_child(_dev_jump_overlay)
+	_dev_jump_overlay.jump_requested.connect(_on_dev_jump_requested)
+
+
+func _setup_dev_jump_chapters() -> void:
+	if _dev_jump_overlay == null:
+		return
+	var forest_events: Array = StoryDataScript.get_events()
+	var chapters: Array[Dictionary] = [
+		{
+			"id": DEV_JUMP_CHAPTER_ID,
+			"title": "婚礼前夜回溯",
+			"scene": WEDDING_PROLOGUE_SCENE,
+			"events": _events,
+			"hint": "婚礼前段的 DOCX 行。若该行没有事件，将从下一条有事件的行开始。",
+		},
+		{
+			"id": "mystic_night",
+			"title": "奇妙夜回溯",
+			"scene": MYSTIC_NIGHT_SCENE,
+			"events": MysticNightDataScript.build_events(),
+			"hint": "奇妙夜的 DOCX 行。选这一页会切到奇妙夜场景并从该行开始。",
+		},
+		{
+			"id": "forest",
+			"title": "森林回溯",
+			"scene": FOREST_MAIN_SCENE,
+			"events": forest_events,
+			"hint": "森林正片的 DOCX 行。选这一页会切到森林场景并从该行开始。",
+		},
+	]
+	_dev_jump_overlay.setup(chapters, DEV_JUMP_CHAPTER_ID)
+	_dev_jump_overlay.refresh_preview(_current_source)
+
+
+func _toggle_dev_jump_panel() -> void:
+	if _dev_jump_overlay == null:
+		return
+	if _dev_jump_overlay.is_open():
+		_dev_jump_overlay.close_panel()
+	else:
+		_dev_jump_overlay.open_panel(_current_source)
+
+
+## 面板已经把 payload 写进 root meta；回自己是重载，去森林是换场景。
+func _on_dev_jump_requested(payload: Dictionary) -> void:
+	if bool(payload.get("same_chapter", true)):
+		call_deferred("_reload_for_dev_jump")
+		return
+	call_deferred("_change_scene_for_dev_jump", str(payload.get("scene", "")))
+
+
+func _reload_for_dev_jump() -> void:
+	var reload_error := get_tree().reload_current_scene()
+	if reload_error == OK:
+		return
+	get_tree().root.remove_meta(DevJumpPanelScript.META_KEY)
+	_dev_jump_overlay.report_jump_failure("场景重载失败，错误码：%d" % reload_error)
+
+
+func _change_scene_for_dev_jump(scene_path: String) -> void:
+	var change_error := get_tree().change_scene_to_file(scene_path)
+	if change_error == OK:
+		return
+	get_tree().root.remove_meta(DevJumpPanelScript.META_KEY)
+	_dev_jump_overlay.report_jump_failure("切换到 %s 失败，错误码：%d" % [scene_path, change_error])
+
+
+## 把事件指针挪到目标行，并把该行之前最后一个场景标题补回舞台上。
+func _apply_pending_dev_jump() -> void:
+	if _pending_dev_jump.is_empty():
+		return
+	var requested_source := int(_pending_dev_jump.get("requested_source", 0))
+	var resolved := DevJumpPanelScript.resolve_source_line(_events, requested_source)
+	if resolved.is_empty():
+		_failures.append("婚礼开发跳转目标无效：DOCX 第 %d 行" % requested_source)
+		return
+	var target_index := int(resolved.get("index", -1))
+	if target_index < 0 or target_index >= _events.size():
+		_failures.append("婚礼开发跳转事件索引越界：%d" % target_index)
+		return
+	_dev_jump_active = true
+	_dev_jump_requested_source = requested_source
+	_dev_jump_actual_source = int(resolved.get("source", 0))
+	_event_index = target_index
+	_restore_dev_jump_scene_context(target_index)
+
+
+func _restore_dev_jump_scene_context(target_index: int) -> void:
+	var scene_name := ""
+	for i in range(clampi(target_index, 0, _events.size())):
+		var event: Dictionary = _events[i]
+		if str(event.get("type", "")) == "scene":
+			scene_name = str(event.get("name", scene_name))
+	if scene_name.is_empty():
+		return
+	_set_scene(scene_name)
+	_scene_subtitle.text = "婚礼前段 · 开发跳转到 DOCX 第 %d 行" % _dev_jump_actual_source
 
 
 func _process(delta: float) -> void:
@@ -180,17 +301,38 @@ func _process(delta: float) -> void:
 	)
 
 
+func _input(event: InputEvent) -> void:
+	if not event is InputEventKey:
+		return
+	var key_event := event as InputEventKey
+	if not key_event.pressed or key_event.echo:
+		return
+	if key_event.keycode == KEY_F4:
+		_toggle_dev_jump_panel()
+		get_viewport().set_input_as_handled()
+		return
+	if key_event.keycode == KEY_ESCAPE and _dev_jump_overlay != null and _dev_jump_overlay.is_open():
+		_dev_jump_overlay.close_panel()
+		get_viewport().set_input_as_handled()
+
+
 func _unhandled_key_input(event: InputEvent) -> void:
 	if not event is InputEventKey:
 		return
 	var key_event := event as InputEventKey
 	if not key_event.pressed or key_event.echo:
 		return
+	# 回溯面板开着的时候 Enter 属于面板的输入框，不能拿去推进剧情。
+	if _dev_jump_overlay != null and _dev_jump_overlay.is_open():
+		return
+	if _active_line_channel.is_empty():
+		return
 	if key_event.keycode in [KEY_SPACE, KEY_ENTER, KEY_KP_ENTER]:
-		if _narration_ui != null:
+		if _active_line_channel == "NARRATION":
 			_narration_ui.request_advance()
-		if _dialogue_ui != null:
+		else:
 			_dialogue_ui.request_advance()
+		get_viewport().set_input_as_handled()
 
 
 func _run_events() -> void:
@@ -204,16 +346,19 @@ func _run_events() -> void:
 	if _verify_mode:
 		_report_verification()
 		return
-	# 小凌闭眼 → 森林正片从 EYE_OPEN 睁眼。project.godot 的主场景仍然是森林，
-	# 所以现有的 verify 与打包行为都不受影响；要把婚礼设成开场只需改主场景。
+	# 小凌闭眼后先进入奇妙夜；project.godot 的主场景仍然是森林，现有 verify
+	# 与打包入口不受影响。
 	await get_tree().create_timer(2.0).timeout
-	get_tree().change_scene_to_file(FOREST_MAIN_SCENE)
+	get_tree().change_scene_to_file(MYSTIC_NIGHT_SCENE)
 
 
 func _run_event(event: Dictionary) -> void:
 	var source := int(event.get("source", 0))
 	if source > 0:
 		_visited_sources[source] = true
+		_current_source = source
+		if _dev_jump_overlay != null and _dev_jump_overlay.is_open():
+			_dev_jump_overlay.refresh_preview(source)
 	match str(event.get("type", "")):
 		"scene":
 			_set_scene(str(event.get("name", "")))
@@ -246,14 +391,40 @@ func _set_scene(scene_name: String) -> void:
 
 
 func _show_line(event: Dictionary) -> void:
+	# present() 只等到入场动画播完，不等玩家。森林正片在 present 之后还要
+	# set_advance_waiting(true) + await advance_requested，婚礼这边原先漏了，
+	# 于是 124 条台词全部自动流过去，按 Enter 也没有反应
+	# （request_advance() 被 _waiting_for_advance == false 直接挡回）。
 	var speaker := str(event.get("speaker", ""))
 	var text := str(event.get("text", ""))
 	if speaker == "旁白":
 		_dialogue_ui.hide_dialogue()
 		await _narration_ui.present(text, _verify_mode)
+		if _verify_mode:
+			return
+		_active_line_channel = "NARRATION"
+		_narration_ui.set_advance_waiting(true)
+		_set_advance_hint(true)
+		await _narration_ui.advance_requested
+		_set_advance_hint(false)
+		_narration_ui.set_advance_waiting(false)
 	else:
 		_narration_ui.begin_fade_for_dialogue(_verify_mode)
 		await _dialogue_ui.present_line(speaker, text, _verify_mode)
+		if _verify_mode:
+			return
+		_active_line_channel = "DIALOGUE"
+		_dialogue_ui.set_advance_waiting(true)
+		_set_advance_hint(true)
+		await _dialogue_ui.advance_requested
+		_set_advance_hint(false)
+		_dialogue_ui.set_advance_waiting(false)
+	_active_line_channel = ""
+
+
+func _set_advance_hint(enabled: bool) -> void:
+	if _advance_hint != null:
+		_advance_hint.visible = enabled and not _verify_mode
 
 
 func _run_effect(event: Dictionary) -> void:
@@ -330,12 +501,18 @@ func _brief_pause() -> void:
 
 
 func _report_verification() -> void:
+	if _dev_jump_overlay == null or not _dev_jump_overlay.verify_contract():
+		_failures.append("F4 回溯面板不完整（婚礼前夜 / 奇妙夜 / 森林三页缺失或行号范围为空）")
+	elif _dev_jump_overlay.get_chapter_ids() != PackedStringArray([DEV_JUMP_CHAPTER_ID, "mystic_night", "forest"]):
+		_failures.append("回溯面板章节页缺失或顺序异常：%s" % str(_dev_jump_overlay.get_chapter_ids()))
+	elif _dev_jump_overlay.is_open():
+		_failures.append("F4 回溯面板不应默认显示")
 	if not _failures.is_empty():
 		for failure in _failures:
 			print("WEDDING_PROLOGUE_FAIL %s" % failure)
 		get_tree().quit(1)
 		return
-	print("WEDDING_PROLOGUE_PASS events=%d scenes=4 sources=%d modules=%d interactions=%d endpoint=%s narration_lines=%d dialogue_lines=%d font=Times_New_Roman cjk_fallback=SimSun text_only_stage=true" % [
+	print("WEDDING_PROLOGUE_PASS events=%d scenes=4 sources=%d modules=%d interactions=%d endpoint=%s narration_lines=%d dialogue_lines=%d font=Times_New_Roman cjk_fallback=SimSun text_only_stage=true advance_gated=true dev_docx_jump=true dev_jump_chapters=wedding_mystic_night_forest wedding_source_bounds=%s" % [
 		_events.size(),
 		_visited_sources.size(),
 		_visited_modules.size(),
@@ -343,6 +520,7 @@ func _report_verification() -> void:
 		str(_endpoint_reached),
 		_narration_ui.get_layout_sample_count(),
 		_dialogue_ui.get_presented_line_count(),
+		str(DevJumpPanelScript.source_bounds(_events)),
 	])
 	get_tree().quit(0)
 
