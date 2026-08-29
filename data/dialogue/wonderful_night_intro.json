@@ -1,9 +1,0 @@
-{
-  "id": "wonderful_night_intro",
-  "lines": [
-    {"speaker": "旁白", "text": "【奇妙夜-世界】", "action": "show_title"},
-    {"speaker": "旁白", "text": "小凌决定走入这个森林。"},
-    {"speaker": "旁白", "text": "周围全部是黑色的。只有不知名的虫子在叫。画面右侧有一束微弱的光在一棵树的背后忽明忽暗。"},
-    {"speaker": "旁白", "text": "小凌向那束光走去。"}
-  ]
-}
