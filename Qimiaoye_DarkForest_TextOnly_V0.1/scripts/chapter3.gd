@@ -412,6 +412,8 @@ func _scene_to_bg_path(scene_name: String) -> String:
             return Chapter3StageScript.BG_ENDING_BC_SUN_RUN
         Chapter3DataScript.SCENE_ENDING_B_RUN_CARPET_1:
             return Chapter3StageScript.BG_ENDING_B_RUN_CARPET_1
+        Chapter3DataScript.SCENE_ENDING_C_RUN_OUT:
+            return Chapter3StageScript.BG_ENDING_C_RUN_OUT
         Chapter3DataScript.SCENE_ENDING_C_LEAVE:
             return Chapter3StageScript.BG_ENDING_C_LEAVE
     return ""

@@ -15,6 +15,11 @@ config/custom_user_dir_name="Qimiaoye_DarkForest_TextOnly_V0.1"
 
 GameState="*res://autoload/game_state.gd"
 Chapter3State="*res://autoload/chapter3_state.gd"
+BlinkSystem="*res://addons/blink_trigger_scene_switch/blink_system.gd"
+
+[editor_plugins]
+
+enabled=PackedStringArray("blink_trigger_scene_switch")
 
 [display]
 
