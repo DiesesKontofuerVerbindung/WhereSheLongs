@@ -51,6 +51,8 @@ const EXPECTED_MODULE_BINDINGS := {
 	"StarJar": {"source": 238, "type": "module", "scene": "res://levels/minigames/firefly_bottle.tscn", "signal": "finished"},
 	"BlinkInteraction": {"source": 360, "type": "module", "scene": "res://modules/blink_interaction/blink_interaction.tscn", "signal": "finished"},
 }
+## 进入/退出玩法模块时做黑屏渐暗过渡的模块（跑酷 / 挥手输入 / 跳石头）。
+const FADE_MODULE_IDS := ["ForestRun", "TextInput", "LakeJump"]
 const ALLOWED_MODULE_IMAGE_ROOTS := [
 	"res://assets/scene/",
 	"res://assets/backgrounds/",
@@ -61,6 +63,8 @@ const ALLOWED_MODULE_IMAGE_ROOTS := [
 	"res://assets/inner_objects/",
 	"res://assets/wedding/",
 	"res://addons/hand_checkbox_gesture/assets/",
+	"res://assets/opening/",
+	"res://assets/forest_hand_sequence/",
 ]
 
 var _events: Array[Dictionary] = []
@@ -1473,8 +1477,13 @@ func _run_embedded_module(event: Dictionary, is_placeholder: bool) -> void:
 	_interaction_panel.visible = false
 	_endpoint_panel.visible = false
 	_sync_module_render_resolution("module_start:%s" % module_id)
+	var fade_module := module_id in FADE_MODULE_IDS
+	if fade_module:
+		await _fade_dark_overlay(1.0)
 	_module_host.visible = true
 	_module_viewport.add_child(module_instance)
+	if fade_module:
+		await _fade_dark_overlay(0.0)
 	await get_tree().process_frame
 	await get_tree().process_frame
 
@@ -1524,7 +1533,11 @@ func _run_embedded_module(event: Dictionary, is_placeholder: bool) -> void:
 
 	module_instance.queue_free()
 	await get_tree().process_frame
+	if fade_module:
+		await _fade_dark_overlay(1.0)
 	_module_host.visible = false
+	if fade_module:
+		await _fade_dark_overlay(0.0)
 	_module_active = false
 	_active_module_id = ""
 	_module_pointer_captured = false

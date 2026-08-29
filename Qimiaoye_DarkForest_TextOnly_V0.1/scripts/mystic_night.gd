@@ -8,8 +8,8 @@ extends Control
 const NarrationUIScript := preload("res://scripts/narration_ui.gd")
 const DialogueUIScript := preload("res://scripts/dialogue_ui.gd")
 const MysticNightDataScript := preload("res://scripts/mystic_night_data.gd")
-const Chapter3DataScript := preload("res://scripts/chapter3_data.gd")
 const WeddingDataScript := preload("res://scripts/wedding_data.gd")
+const Chapter3DataScript := preload("res://scripts/chapter3_data.gd")
 const StoryDataScript := preload("res://scripts/story_data.gd")
 const DevJumpPanelScript := preload("res://scripts/dev_jump_panel.gd")
 const ChapterTransitionScript := preload("res://scripts/chapter_transition.gd")
@@ -17,10 +17,10 @@ const UiTypographyScript := preload("res://scripts/ui_typography.gd")
 
 const FOREST_MAIN_SCENE := "res://main.tscn"
 const WEDDING_PROLOGUE_SCENE := "res://scenes/wedding/wedding_prologue.tscn"
-const MYSTIC_NIGHT_SCENE := "res://scenes/mystic_night/mystic_night.tscn"
 const CHAPTER3_SCENE := "res://scenes/chapter3/chapter3.tscn"
+const MYSTIC_NIGHT_SCENE := "res://scenes/mystic_night/mystic_night.tscn"
 const DEV_JUMP_CHAPTER_ID := "mystic_night"
-const FONT_PRIMARY_NAME := "Times New Roman"
+const FONT_PRIMARY_NAME := "Uranus Pixel"
 
 const COLOR_BG := Color(0.0, 0.0, 0.0, 1.0)
 const COLOR_TEXT := Color(0.96, 0.97, 1.0, 1.0)
@@ -39,6 +39,7 @@ const CG_NAMES := [
 	"奇妙夜鸟图",
 	"奇妙夜星星图",
 	"奇妙夜送花图",
+	"奇妙夜追逐图",
 	"奇妙夜发光动物图",
 	"奇妙夜湿地图",
 	"奇妙夜森林轮廓图",
@@ -50,11 +51,12 @@ const CAMERA_SHOT_IDS := [
 	"shot_01_wake",
 	"shot_02_turn",
 	"shot_03_landing_pulse",
-	"shot_04_reveal",
-	"shot_05_run",
-	"shot_06_forest_push",
-	"shot_07_still",
-	"shot_08_last_look",
+	"shot_04_walk",
+	"shot_05_reveal",
+	"shot_06_run",
+	"shot_07_forest_push",
+	"shot_08_still",
+	"shot_09_last_look",
 ]
 
 signal prologue_finished
@@ -79,13 +81,15 @@ var _dev_jump_requested_source := 0
 var _dev_jump_actual_source := 0
 var _dev_jump_overlay
 
-var _primary_font: SystemFont
-var _cjk_fallback_font: SystemFont
 var _typography: UiTypographyScript
+var _primary_font: Font
+var _cjk_fallback_font: SystemFont
 var _root_bg: ColorRect
 var _cg_root: Control
 var _cg_backdrop: ColorRect
 var _cg_texture: TextureRect
+var _video_player: VideoStreamPlayer
+var _active_video_end_source := 0
 var _cg_label: Label
 var _back_buffer: BackBufferCopy
 var _screen_fx: ColorRect
@@ -164,6 +168,22 @@ func _build_ui() -> void:
 	_cg_texture.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_cg_texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_cg_root.add_child(_cg_texture)
+
+	_video_player = VideoStreamPlayer.new()
+	_video_player.name = "MysticNightCgVideo"
+	_video_player.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_video_player.expand = true
+	_video_player.loop = true
+	_video_player.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_video_player.visible = false
+	_cg_root.add_child(_video_player)
+
+	_bgm_player = AudioStreamPlayer.new()
+	_bgm_player.name = "MysticNightBGMAudio"
+	_bgm_player.bus = &"Master"
+	_bgm_player.process_mode = Node.PROCESS_MODE_ALWAYS
+	_bgm_player.volume_db = -80.0
+	add_child(_bgm_player)
 
 	_cg_label = Label.new()
 	_cg_label.name = "MysticNightCgName"
@@ -299,13 +319,6 @@ void fragment() {
 	_dev_jump_overlay.jump_requested.connect(_on_dev_jump_requested)
 	call_deferred("_update_cg_pivot")
 
-	_bgm_player = AudioStreamPlayer.new()
-	_bgm_player.name = "MysticNightBGMAudio"
-	_bgm_player.bus = &"Master"
-	_bgm_player.process_mode = Node.PROCESS_MODE_ALWAYS
-	_bgm_player.volume_db = -80.0
-	add_child(_bgm_player)
-
 
 func _update_cg_pivot() -> void:
 	if _cg_root != null:
@@ -336,13 +349,6 @@ func _setup_dev_jump_chapters() -> void:
 			"scene": FOREST_MAIN_SCENE,
 			"events": StoryDataScript.get_events(),
 			"hint": "森林正片的 DOCX 行。选这一页会切到森林场景并从该行开始。",
-		},
-		{
-			"id": "chapter3",
-			"title": "典礼上的选择回溯",
-			"scene": CHAPTER3_SCENE,
-			"events": Chapter3DataScript.build_events(),
-			"hint": "章节三（典礼上的选择）的 DOCX 行。选这一页会切到章节三场景并从该行开始。",
 		},
 	]
 	_dev_jump_overlay.setup(chapters, DEV_JUMP_CHAPTER_ID)
@@ -413,7 +419,8 @@ func _restore_dev_jump_context(target_index: int) -> void:
 	if not scene_name.is_empty():
 		_current_scene = scene_name
 	if not cg_event.is_empty():
-		_set_cg_immediately(cg_event)
+		if _verify_mode or str(cg_event.get("video_asset", "")).is_empty() or not _start_cg_video(cg_event):
+			_set_cg_immediately(cg_event)
 
 
 func _input(event: InputEvent) -> void:
@@ -464,7 +471,6 @@ func _run_events() -> void:
 	if _verify_mode:
 		_report_verification()
 		return
-	await get_tree().create_timer(1.2).timeout
 	ChapterTransitionScript.begin(get_tree(), FOREST_MAIN_SCENE)
 
 
@@ -490,13 +496,15 @@ func _run_event(event: Dictionary) -> void:
 			await _apply_audio_event(event)
 		"endpoint":
 			_endpoint_reached = true
-			_cg_label.text = str(event.get("text", "请闭上眼睛"))
+			_cg_label.text = ""
 		_:
 			_failures.append("未知事件类型：%s" % str(event.get("type", "")))
 
 
 func _set_cg(cg_event: Dictionary) -> void:
 	var cg_name := str(cg_event.get("name", ""))
+	var transition_style := str(cg_event.get("transition", ""))
+	var video_asset := str(cg_event.get("video_asset", ""))
 	_visited_cgs.append(cg_name)
 	if _verify_mode:
 		_set_cg_immediately(cg_event)
@@ -507,6 +515,14 @@ func _set_cg(cg_event: Dictionary) -> void:
 		await _turn_into_darkness()
 		_set_cg_immediately(cg_event)
 		_pending_final_turn = false
+		return
+	if not video_asset.is_empty():
+		await _play_cg_video(cg_event, transition_style)
+		_pending_cg_turn = false
+		return
+	if transition_style in ["dissolve", "down_dissolve"]:
+		await _dissolve_to_cg(cg_event, transition_style == "down_dissolve")
+		_pending_cg_turn = false
 		return
 	if _pending_cg_turn:
 		await _turn_to_next_cg(cg_event)
@@ -522,7 +538,85 @@ func _set_cg(cg_event: Dictionary) -> void:
 	await fade_in.finished
 
 
+func _play_cg_video(cg_event: Dictionary, transition_style: String) -> void:
+	if not _start_cg_video(cg_event):
+		await _dissolve_to_cg(cg_event, transition_style == "down_dissolve")
+		return
+	if transition_style in ["dissolve", "down_dissolve"]:
+		var overlay := _make_transition_overlay()
+		if overlay != null:
+			await _animate_overlay_dissolve(overlay, transition_style == "down_dissolve")
+
+
+func _start_cg_video(cg_event: Dictionary) -> bool:
+	var video_path := str(cg_event.get("video_asset", ""))
+	var stream_resource := load(video_path) if not video_path.is_empty() else null
+	if not stream_resource is VideoStream:
+		var issue := "CG 视频无法载入：%s / %s" % [cg_event.get("name", ""), video_path]
+		if not _failures.has(issue):
+			_failures.append(issue)
+		return false
+	_stop_camera_motion()
+	_cg_root.position = Vector2.ZERO
+	_cg_root.scale = Vector2.ONE
+	_cg_root.modulate = Color.WHITE
+	_dark_cover.modulate.a = 0.0
+	_set_screen_fx(0.0, 0.0)
+	_current_cg = str(cg_event.get("name", ""))
+	_active_video_end_source = int(cg_event.get("video_end_source", 0))
+	_cg_label.text = ""
+	_cg_label.visible = false
+	_video_player.stop()
+	_video_player.stream = stream_resource
+	_video_player.visible = true
+	_video_player.play()
+	return true
+
+
+func _dissolve_to_cg(cg_event: Dictionary, move_down: bool) -> void:
+	var overlay := _make_transition_overlay()
+	_set_cg_immediately(cg_event)
+	if overlay == null:
+		return
+	_cg_root.add_child(overlay)
+	await _animate_overlay_dissolve(overlay, move_down)
+
+
+func _make_transition_overlay() -> TextureRect:
+	if _cg_texture == null or _cg_texture.texture == null:
+		return null
+	var overlay := TextureRect.new()
+	overlay.name = "MysticNightCgTransitionOverlay"
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	overlay.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	overlay.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.texture = _cg_texture.texture
+	overlay.z_index = 20
+	return overlay
+
+
+func _animate_overlay_dissolve(overlay: TextureRect, move_down: bool) -> void:
+	if overlay.get_parent() == null:
+		_cg_root.add_child(overlay)
+	var dissolve := create_tween()
+	dissolve.set_parallel(true)
+	dissolve.set_trans(Tween.TRANS_SINE)
+	dissolve.set_ease(Tween.EASE_IN_OUT)
+	dissolve.tween_property(overlay, "modulate:a", 0.0, 0.62)
+	if move_down:
+		dissolve.tween_property(overlay, "position:y", 96.0, 0.62)
+	await dissolve.finished
+	overlay.queue_free()
+
+
 func _set_cg_immediately(cg_event: Dictionary) -> void:
+	if _video_player != null:
+		_video_player.stop()
+		_video_player.visible = false
+		_video_player.stream = null
+	_active_video_end_source = 0
 	var cg_name := str(cg_event.get("name", ""))
 	var asset_path := str(cg_event.get("asset", ""))
 	_current_cg = cg_name
@@ -640,7 +734,7 @@ func _run_camera(event: Dictionary) -> void:
 	_visited_camera_shots.append(shot_id)
 	if _verify_mode:
 		_pending_cg_turn = shot_id == "shot_02_turn"
-		_pending_final_turn = shot_id == "shot_08_last_look"
+		_pending_final_turn = shot_id == "shot_09_last_look"
 		_reset_camera_immediately()
 		return
 	match shot_id:
@@ -650,15 +744,17 @@ func _run_camera(event: Dictionary) -> void:
 			await _shot_turn_prepare()
 		"shot_03_landing_pulse":
 			await _shot_landing_pulse()
-		"shot_04_reveal":
+		"shot_04_walk":
+			await _shot_walk()
+		"shot_05_reveal":
 			await _shot_reveal()
-		"shot_05_run":
+		"shot_06_run":
 			await _shot_run()
-		"shot_06_forest_push":
+		"shot_07_forest_push":
 			_shot_forest_push()
-		"shot_07_still":
+		"shot_08_still":
 			await _shot_still()
-		"shot_08_last_look":
+		"shot_09_last_look":
 			await _shot_last_look()
 		_:
 			_failures.append("未知重点镜头：%s" % shot_id)
@@ -693,6 +789,22 @@ func _shot_landing_pulse() -> void:
 	_active_camera_tween.tween_method(_set_radial_strength, 0.0, 0.72, 0.15).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	_active_camera_tween.tween_method(_set_radial_strength, 0.72, 0.0, 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	await _active_camera_tween.finished
+
+
+func _shot_walk() -> void:
+	_stop_camera_motion()
+	_set_screen_fx(0.008, 0.018, Vector2(1.0, 0.0))
+	for step in range(6):
+		var side := -1.0 if step % 2 == 0 else 1.0
+		_active_camera_tween = create_tween()
+		_active_camera_tween.tween_property(_cg_root, "position", Vector2(side * 1.5, side * 2.5), 0.18).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		await _active_camera_tween.finished
+	_active_camera_tween = create_tween()
+	_active_camera_tween.set_parallel(true)
+	_active_camera_tween.tween_property(_cg_root, "position", Vector2.ZERO, 0.24).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_active_camera_tween.tween_method(_set_motion_amount, 0.018, 0.0, 0.24)
+	await _active_camera_tween.finished
+	_set_screen_fx(0.0, 0.0)
 
 
 func _shot_reveal() -> void:
@@ -916,15 +1028,15 @@ func _report_verification() -> void:
 	else:
 		if _narration_ui.name != "NARRATION_UI" or _dialogue_ui.name != "DIALOGUE_UI":
 			_failures.append("旁白与对白 UI 命名异常")
-		if _narration_ui.get_layout_sample_count() != 51:
+		if _narration_ui.get_layout_sample_count() != 56:
 			_failures.append("旁白显示数量异常：%d" % _narration_ui.get_layout_sample_count())
-		if _dialogue_ui.get_presented_line_count() != 40:
+		if _dialogue_ui.get_presented_line_count() != 50:
 			_failures.append("人物对白显示数量异常：%d" % _dialogue_ui.get_presented_line_count())
 		if _psychology_lines_seen != 4:
 			_failures.append("心理括号行显示数量异常：%d" % _psychology_lines_seen)
 	if _dev_jump_overlay == null or not _dev_jump_overlay.verify_contract():
-		_failures.append("F4 回溯面板不完整（婚礼前夜 / 奇妙夜 / 森林 / 章节三 四页缺失或行号范围为空）")
-	elif _dev_jump_overlay.get_chapter_ids() != PackedStringArray(["wedding", DEV_JUMP_CHAPTER_ID, "forest", "chapter3"]):
+		_failures.append("F4 回溯面板不完整（婚礼前夜 / 奇妙夜 / 森林三页缺失或行号范围为空）")
+	elif _dev_jump_overlay.get_chapter_ids() != PackedStringArray(["wedding", DEV_JUMP_CHAPTER_ID, "forest"]):
 		_failures.append("回溯面板章节页缺失或顺序异常：%s" % str(_dev_jump_overlay.get_chapter_ids()))
 	elif _dev_jump_overlay.is_open():
 		_failures.append("F4 回溯面板不应默认显示")
@@ -934,8 +1046,8 @@ func _report_verification() -> void:
 		_failures.append("重点镜头顺序异常：%s" % str(_visited_camera_shots))
 	if not _interactions_done.has("follow_girl"):
 		_failures.append("“跟上去”交互没有完成")
-	if _current_cg != "黑屏" or _cg_texture.texture != null or not _cg_label.visible or _cg_label.text != "请闭上眼睛":
-		_failures.append("奇妙夜终点没有停在黑屏闭眼引导")
+	if _current_cg != "黑屏" or _cg_texture.texture != null or not _cg_label.visible or not _cg_label.text.is_empty():
+		_failures.append("奇妙夜终点没有停在无文字黑屏")
 	if not _endpoint_reached:
 		_failures.append("奇妙夜 endpoint 未到达")
 	if not _failures.is_empty():
@@ -943,7 +1055,7 @@ func _report_verification() -> void:
 			print("MYSTIC_NIGHT_FAIL %s" % failure)
 		get_tree().quit(1)
 		return
-	print("MYSTIC_NIGHT_PASS events=%d sources=%d cgs=%d camera_shots=%d interactions=%d endpoint=%s narration_lines=51 dialogue_lines=40 psychology_lines=4 psychology_parentheses=true first_person=true audio=true art=true dev_jump_chapters=wedding_mystic_night_forest_chapter3 source_bounds=%s" % [
+	print("MYSTIC_NIGHT_PASS events=%d sources=%d cgs=%d camera_shots=%d interactions=%d endpoint=%s font=Uranus_Pixel cjk_fallback=SimSun narration_lines=56 dialogue_lines=50 psychology_lines=4 psychology_parentheses=true first_person=true videos=3 stage_directions=10 audio=true art=true dev_jump_chapters=wedding_mystic_night_forest source_bounds=%s" % [
 		_events.size(),
 		_visited_sources.size(),
 		_visited_cgs.size(),
@@ -959,15 +1071,20 @@ func _validate_event_contract() -> void:
 	var type_counts: Dictionary = {}
 	var camera_ids := PackedStringArray()
 	var cg_names := PackedStringArray()
+	var art_scene_indices := PackedInt32Array()
 	var source_63_lines := PackedStringArray()
+	var stage_direction_count := 0
 	var psychology_count := 0
 	var psychology_sources := PackedInt32Array()
+	var video_count := 0
+	var video_ranges: Array[Vector2i] = []
 	for event in _events:
 		var event_type := str(event.get("type", ""))
 		type_counts[event_type] = int(type_counts.get(event_type, 0)) + 1
 		var text := str(event.get("text", ""))
+		var is_stage_direction := bool(event.get("stage_direction", false))
 		var is_psychology := _is_psychology_event(event)
-		if ("（" in text or "）" in text) and not is_psychology:
+		if ("（" in text or "）" in text) and not is_stage_direction and not is_psychology:
 			_failures.append("未标记的括号演出提示进入显示文字：%s" % text)
 		if is_psychology:
 			psychology_count += 1
@@ -975,35 +1092,53 @@ func _validate_event_contract() -> void:
 			var formatted_psychology := _format_psychology_text(str(event.get("speaker", "")), text)
 			if not formatted_psychology.begins_with("（") or not formatted_psychology.ends_with("）"):
 				_failures.append("心理文字未使用全角括号：%s" % event.get("source", 0))
+		if is_stage_direction:
+			stage_direction_count += 1
+			if event_type != "line" or str(event.get("speaker", "")) == "旁白":
+				_failures.append("动作对白标记异常：%s" % str(event))
 		if event_type == "camera":
 			camera_ids.append(str(event.get("id", "")))
 		if event_type == "cg":
 			var cg_name := str(event.get("name", ""))
 			var asset_path := str(event.get("asset", ""))
+			var video_path := str(event.get("video_asset", ""))
 			cg_names.append(cg_name)
-			if int(event.get("art_docx_paragraph", 0)) <= 0:
-				_failures.append("CG 缺少美术 DOCX 段落映射：%s" % cg_name)
-			if cg_name != "黑屏" and (asset_path.is_empty() or not ResourceLoader.exists(asset_path)):
-				_failures.append("CG 资源路径无效：%s / %s" % [cg_name, asset_path])
+			if cg_name != "黑屏":
+				art_scene_indices.append(int(event.get("art_scene_index", 0)))
+				if asset_path.is_empty() or not ResourceLoader.exists(asset_path):
+					_failures.append("CG 资源路径无效：%s / %s" % [cg_name, asset_path])
+			if not video_path.is_empty():
+				video_count += 1
+				video_ranges.append(Vector2i(int(event.get("source", 0)), int(event.get("video_end_source", 0))))
+				if not ResourceLoader.exists(video_path):
+					_failures.append("CG 视频路径无效：%s / %s" % [cg_name, video_path])
 		if event_type == "line" and int(event.get("source", 0)) == 63:
 			source_63_lines.append(text)
 	var expected_counts := {
 		"scene": 1,
-		"cg": 12,
-		"camera": 8,
-		"line": 91,
+		"cg": 13,
+		"camera": 9,
+		"line": 106,
 		"interaction": 1,
 		"endpoint": 1,
 		"audio": 3,
 	}
-	if type_counts != expected_counts:
-		_failures.append("事件类型统计异常：%s" % str(type_counts))
+	if type_counts != expected_counts or _events.size() != 134:
+		_failures.append("事件类型统计异常：events=%d types=%s" % [_events.size(), str(type_counts)])
 	if DevJumpPanelScript.source_bounds(_events) != Vector2i(1, 146):
 		_failures.append("奇妙夜 DOCX 来源范围异常：%s" % DevJumpPanelScript.source_bounds(_events))
 	if cg_names != PackedStringArray(CG_NAMES):
 		_failures.append("CG 数据表顺序异常：%s" % str(cg_names))
+	if art_scene_indices != PackedInt32Array(range(1, 13)):
+		_failures.append("1–12 号美术场景映射异常：%s" % str(art_scene_indices))
 	if camera_ids != PackedStringArray(CAMERA_SHOT_IDS):
 		_failures.append("重点镜头数据表顺序异常：%s" % str(camera_ids))
+	if video_count != 3:
+		_failures.append("场景 2/5/10 视频数量异常：%d" % video_count)
+	if video_ranges != [Vector2i(37, 60), Vector2i(89, 94), Vector2i(105, 133)]:
+		_failures.append("场景 2/5/10 视频区间异常：%s" % str(video_ranges))
+	if stage_direction_count != 10:
+		_failures.append("动作对白数量异常：%d" % stage_direction_count)
 	if psychology_count != 4 or psychology_sources != PackedInt32Array([81, 83, 124, 136]):
 		_failures.append("心理括号行映射异常：count=%d sources=%s" % [psychology_count, str(psychology_sources)])
 	if source_63_lines != PackedStringArray(["远处偶尔传来不知道什么动物的叫声。", "前面是一片很高的草坡。"]):
@@ -1012,10 +1147,24 @@ func _validate_event_contract() -> void:
 	_validate_split_line(45, "女孩", "可能是因为，我迷路了。")
 	_validate_split_line(64, "女孩", "你刚才在哭吗？")
 	_validate_split_line(82, "小凌", "我明天要结婚了。")
+	for expected_direction in [
+		[37, "小凌", "（回头）"], [40, "小凌", "（后退一步）"], [48, "女孩", "（点点头）"],
+		[58, "小凌", "（犹豫）"], [64, "女孩", "回头"], [66, "小凌", "（摸了一下自己的脸）"],
+		[82, "小凌", "（抬起头）"], [122, "女孩", "（看向森林深处）"],
+		[122, "小凌", "（向前走了一步）"], [134, "女孩", "（没有回答我，只是摇了摇头）"],
+	]:
+		_validate_stage_direction(int(expected_direction[0]), str(expected_direction[1]), str(expected_direction[2]))
 	for forbidden_source in [102, 135, 140]:
 		for event in _events:
 			if int(event.get("source", 0)) == forbidden_source:
 				_failures.append("未编号技术效果不应进入事件表：DOCX 第 %d 段" % forbidden_source)
+
+
+func _validate_stage_direction(source: int, speaker: String, text: String) -> void:
+	for event in _events:
+		if int(event.get("source", 0)) == source and str(event.get("speaker", "")) == speaker and str(event.get("text", "")) == text and bool(event.get("stage_direction", false)):
+			return
+	_failures.append("DOCX 第 %d 段动作对白缺失：%s %s" % [source, speaker, text])
 
 
 func _validate_split_line(source: int, speaker: String, text: String) -> void:
@@ -1034,6 +1183,8 @@ func get_debug_snapshot() -> Dictionary:
 		"mystic_night_events": _events.size(),
 		"mystic_night_scene": _current_scene,
 		"mystic_night_cg": _current_cg,
+		"mystic_night_video_playing": _video_player != null and _video_player.is_playing(),
+		"mystic_night_video_end_source": _active_video_end_source,
 		"mystic_night_endpoint": _endpoint_reached,
 		"mystic_night_sources": _visited_sources.size(),
 		"mystic_night_camera_shots": _visited_camera_shots.size(),
