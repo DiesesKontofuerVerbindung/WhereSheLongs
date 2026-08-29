@@ -5,6 +5,10 @@ extends Control
 ## 原文只留下了模块名。按上下文补成独角戏：新郎没到，主持人问"后面的流程还过吗"，
 ## 小凌说"我自己来吧"。誓词的每一句都要玩家自己按下去——空场的分量得由玩家承担，
 ## 不能用一段自动播放的过场糊过去。
+##
+## 卡片美术：assets/wedding/props/vow_card.png（由白色 A4 / takemasa 誓词卡源图抠黑底）。
+
+const VOW_CARD_PATH := "res://assets/wedding/props/vow_card.png"
 
 const VOW_LINES := [
 	"我愿意在往后的每一天里，认真地喜欢你。",
@@ -13,18 +17,22 @@ const VOW_LINES := [
 ]
 
 const COLOR_CARD := Color(0.10, 0.09, 0.12, 0.94)
-const COLOR_TEXT := Color(0.92, 0.90, 0.86, 1.0)
-const COLOR_MUTED := Color(0.60, 0.58, 0.64, 1.0)
+const COLOR_TEXT := Color(0.28, 0.24, 0.22, 1.0)
+const COLOR_MUTED := Color(0.48, 0.44, 0.42, 1.0)
+const COLOR_FALLBACK_TEXT := Color(0.92, 0.90, 0.86, 1.0)
+const COLOR_FALLBACK_MUTED := Color(0.60, 0.58, 0.64, 1.0)
 
 var _spoken := 0
 var _advance_requested := false
 var _vow_label: Label
 var _progress_label: Label
 var _hint_label: Label
+var _using_art := false
 
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	mouse_filter = Control.MOUSE_FILTER_STOP
 
 	var backdrop := ColorRect.new()
 	backdrop.color = Color(0.0, 0.0, 0.0, 0.55)
@@ -32,6 +40,72 @@ func _ready() -> void:
 	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(backdrop)
 
+	var card_tex: Texture2D = null
+	if ResourceLoader.exists(VOW_CARD_PATH):
+		card_tex = load(VOW_CARD_PATH) as Texture2D
+	_using_art = card_tex != null
+
+	if _using_art:
+		_build_art_card(card_tex)
+	else:
+		_build_fallback_card()
+
+	_refresh()
+
+
+func _build_art_card(card_tex: Texture2D) -> void:
+	var stage := Control.new()
+	stage.set_anchors_preset(Control.PRESET_CENTER)
+	stage.offset_left = -210
+	stage.offset_right = 210
+	stage.offset_top = -300
+	stage.offset_bottom = 300
+	stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(stage)
+
+	var card := TextureRect.new()
+	card.texture = card_tex
+	card.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	card.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	card.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stage.add_child(card)
+
+	# 文字落在卡片中部横线区（避开顶饰与底饰）。
+	var column := VBoxContainer.new()
+	column.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	column.offset_left = 54
+	column.offset_right = -54
+	column.offset_top = 150
+	column.offset_bottom = -88
+	column.add_theme_constant_override("separation", 14)
+	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stage.add_child(column)
+
+	_vow_label = Label.new()
+	_vow_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_vow_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_vow_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_vow_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_vow_label.add_theme_font_size_override("font_size", 20)
+	_vow_label.add_theme_color_override("font_color", COLOR_TEXT)
+	column.add_child(_vow_label)
+
+	_progress_label = Label.new()
+	_progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_progress_label.add_theme_font_size_override("font_size", 13)
+	_progress_label.add_theme_color_override("font_color", COLOR_MUTED)
+	column.add_child(_progress_label)
+
+	_hint_label = Label.new()
+	_hint_label.text = "点击 / Enter 念下一句"
+	_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hint_label.add_theme_font_size_override("font_size", 12)
+	_hint_label.add_theme_color_override("font_color", COLOR_MUTED)
+	column.add_child(_hint_label)
+
+
+func _build_fallback_card() -> void:
 	var card := PanelContainer.new()
 	card.set_anchors_preset(Control.PRESET_CENTER)
 	card.offset_left = -320
@@ -59,7 +133,7 @@ func _ready() -> void:
 	title.text = "誓词卡"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 15)
-	title.add_theme_color_override("font_color", COLOR_MUTED)
+	title.add_theme_color_override("font_color", COLOR_FALLBACK_MUTED)
 	column.add_child(title)
 
 	_vow_label = Label.new()
@@ -68,23 +142,30 @@ func _ready() -> void:
 	_vow_label.custom_minimum_size = Vector2(0, 92)
 	_vow_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_vow_label.add_theme_font_size_override("font_size", 20)
-	_vow_label.add_theme_color_override("font_color", COLOR_TEXT)
+	_vow_label.add_theme_color_override("font_color", COLOR_FALLBACK_TEXT)
 	column.add_child(_vow_label)
 
 	_progress_label = Label.new()
 	_progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_progress_label.add_theme_font_size_override("font_size", 13)
-	_progress_label.add_theme_color_override("font_color", COLOR_MUTED)
+	_progress_label.add_theme_color_override("font_color", COLOR_FALLBACK_MUTED)
 	column.add_child(_progress_label)
 
 	_hint_label = Label.new()
-	_hint_label.text = "按 Enter / Space 念下一句"
+	_hint_label.text = "点击 / Enter 念下一句"
 	_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hint_label.add_theme_font_size_override("font_size", 12)
-	_hint_label.add_theme_color_override("font_color", COLOR_MUTED)
+	_hint_label.add_theme_color_override("font_color", COLOR_FALLBACK_MUTED)
 	column.add_child(_hint_label)
 
-	_refresh()
+
+func _gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		_advance_requested = true
+		accept_event()
+	elif event is InputEventScreenTouch and event.pressed:
+		_advance_requested = true
+		accept_event()
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -120,4 +201,8 @@ func _refresh() -> void:
 
 
 func get_debug_snapshot() -> Dictionary:
-	return {"vow_spoken": _spoken, "vow_total": VOW_LINES.size()}
+	return {
+		"vow_spoken": _spoken,
+		"vow_total": VOW_LINES.size(),
+		"vow_art": _using_art,
+	}

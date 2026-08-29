@@ -7,7 +7,8 @@ extends Control
 ## 完全独立：森林正片的 _events / source bounds / docx_source_lock 都被
 ## verify 硬断言锁住了，把婚礼混进去只会把那些断言全部打掉。
 ##
-## 婚礼段暂时没有任何美术素材，场景一律是纯文字舞台占位。
+## 四场景底图走 KEEP_ASPECT_COVERED（源图约 3:2，16:9 上下各裁约 11%）。
+## 缺图时回退文字占位，避免黑屏。
 
 const NarrationUIScript := preload("res://scripts/narration_ui.gd")
 const DialogueUIScript := preload("res://scripts/dialogue_ui.gd")
@@ -27,11 +28,16 @@ const COLOR_BG := Color(0.055, 0.05, 0.07, 1.0)
 const COLOR_ACCENT := Color(0.86, 0.78, 0.62, 1.0)
 const COLOR_MUTED := Color(0.62, 0.60, 0.66, 1.0)
 
+## 场景名 → 底图。路径与 wedding_data 场景常量对齐。
+const SCENE_TEXTURE_PATHS := {
+	"婚礼背景图1": "res://assets/wedding/scene_wedding_1.png",
+	"婚礼背景图2": "res://assets/wedding/scene_wedding_2.png",
+	"车上背景图": "res://assets/wedding/scene_car.png",
+	"家里场景": "res://assets/wedding/scene_home.png",
+}
+
 const SHAKE_SECONDS := 1.1
 const SHAKE_MAX_PIXELS := 26.0
-
-## 底图比舞台外扩一圈，震动（最大 26px）时不会露出边缘。
-const SCENE_TEXTURE_OVERSCAN := 64.0
 
 signal prologue_finished
 
@@ -65,14 +71,6 @@ var _interaction_button: Button
 var _module_host: Control
 var _narration_ui
 var _dialogue_ui
-
-## 场景名 -> 底图路径。图没到位时保留文字占位回退（见 _set_scene）。
-var _scene_texture_paths := {
-	WeddingDataScript.SCENE_WEDDING_1: "res://assets/backgrounds/wedding/candidates/officiant.jpg",
-	WeddingDataScript.SCENE_WEDDING_2: "res://assets/backgrounds/wedding/wedding_2.jpg",
-	WeddingDataScript.SCENE_CAR: "res://assets/backgrounds/wedding/car.png",
-	WeddingDataScript.SCENE_HOME: "res://assets/backgrounds/wedding/home.png",
-}
 
 var _shake_phase := 0.0
 var _shake_intensity := 0.0
@@ -126,18 +124,13 @@ func _build_ui() -> void:
 	_stage_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_stage_root)
 
-	# 美术底图插在舞台层、两个占位 Label 之下；震动跟着舞台走。
+	# 底图在 Label 之前：文字叠在图上；COVERED 保满屏，3:2→16:9 上下裁边。
 	_scene_texture = TextureRect.new()
 	_scene_texture.name = "WeddingSceneTexture"
 	_scene_texture.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_scene_texture.offset_left = -SCENE_TEXTURE_OVERSCAN
-	_scene_texture.offset_top = -SCENE_TEXTURE_OVERSCAN
-	_scene_texture.offset_right = SCENE_TEXTURE_OVERSCAN
-	_scene_texture.offset_bottom = SCENE_TEXTURE_OVERSCAN
 	_scene_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_scene_texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	_scene_texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_scene_texture.visible = false
 	_stage_root.add_child(_scene_texture)
 
 	_scene_label = Label.new()
@@ -161,7 +154,7 @@ func _build_ui() -> void:
 	_scene_subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_scene_subtitle.add_theme_font_size_override("font_size", 15)
 	_scene_subtitle.add_theme_color_override("font_color", COLOR_MUTED)
-	_scene_subtitle.text = "婚礼前段 · 美术未到位，纯文字舞台占位"
+	_scene_subtitle.text = "婚礼前段 · 场景切换中"
 	_scene_subtitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_stage_root.add_child(_scene_subtitle)
 
@@ -361,6 +354,27 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
+func _unhandled_input(event: InputEvent) -> void:
+	# 手机 / 微信 H5：点击或触屏推进当前对白。
+	if _dev_jump_overlay != null and _dev_jump_overlay.is_open():
+		return
+	if _active_line_channel.is_empty():
+		return
+	var tapped := false
+	if event is InputEventMouseButton:
+		var mouse := event as InputEventMouseButton
+		tapped = mouse.pressed and mouse.button_index == MOUSE_BUTTON_LEFT
+	elif event is InputEventScreenTouch:
+		tapped = (event as InputEventScreenTouch).pressed
+	if not tapped:
+		return
+	if _active_line_channel == "NARRATION":
+		_narration_ui.request_advance()
+	else:
+		_dialogue_ui.request_advance()
+	get_viewport().set_input_as_handled()
+
+
 func _run_events() -> void:
 	while _event_index < _events.size():
 		var event := _events[_event_index]
@@ -375,6 +389,15 @@ func _run_events() -> void:
 	# 小凌闭眼后先进入奇妙夜；project.godot 的主场景仍然是森林，现有 verify
 	# 与打包入口不受影响。
 	await get_tree().create_timer(2.0).timeout
+	# 微信/网页试玩包：不继续加载后续章节，避免体积过大且便于分享。
+	if OS.has_feature("web") or OS.has_feature("wedding_demo"):
+		_scene_label.visible = true
+		_scene_label.text = "试玩到此结束"
+		_scene_subtitle.visible = true
+		_scene_subtitle.text = "谢谢试玩 · 婚礼前夜"
+		_narration_ui.hide()
+		_dialogue_ui.hide()
+		return
 	get_tree().change_scene_to_file(MYSTIC_NIGHT_SCENE)
 
 
@@ -404,6 +427,8 @@ func _run_event(event: Dictionary) -> void:
 			await _run_module(event)
 		"endpoint":
 			_endpoint_reached = true
+			_scene_label.visible = true
+			_scene_subtitle.visible = true
 			_scene_label.text = str(event.get("text", ""))
 			_scene_subtitle.text = "下一段：%s" % str(event.get("next", ""))
 		_:
@@ -412,19 +437,21 @@ func _run_event(event: Dictionary) -> void:
 
 func _set_scene(scene_name: String) -> void:
 	_current_scene = scene_name
-	var texture_path := str(_scene_texture_paths.get(scene_name, ""))
-	var texture: Texture2D = null
-	if not texture_path.is_empty() and ResourceLoader.exists(texture_path):
-		texture = load(texture_path)
-	if texture != null:
-		_scene_texture.texture = texture
-		_scene_texture.visible = true
-		_scene_label.text = ""
+	_scene_label.text = scene_name
+	var path := str(SCENE_TEXTURE_PATHS.get(scene_name, ""))
+	var tex: Texture2D = null
+	if not path.is_empty() and ResourceLoader.exists(path):
+		tex = load(path) as Texture2D
+	if _scene_texture != null:
+		_scene_texture.texture = tex
+		_scene_texture.visible = tex != null
+	if tex != null:
+		_scene_label.visible = false
+		_scene_subtitle.visible = false
 		_scene_subtitle.text = ""
 	else:
-		# 素材没到位（或导入缓存损坏导致加载失败）的场景保留文字占位回退，不让缺图变成黑屏。
-		_scene_texture.visible = false
-		_scene_label.text = scene_name
+		_scene_label.visible = true
+		_scene_subtitle.visible = true
 		_scene_subtitle.text = "婚礼前段 · 美术未到位，纯文字舞台占位"
 
 
@@ -440,6 +467,7 @@ func _show_line(event: Dictionary) -> void:
 		await _narration_ui.present(text, _verify_mode)
 		if _verify_mode:
 			return
+		# 等入场后再开推进门，避免模块残留输入立刻跳过这句。
 		await _drain_advance_input()
 		_active_line_channel = "NARRATION"
 		_narration_ui.set_advance_waiting(true)
@@ -534,6 +562,7 @@ func _run_module(event: Dictionary) -> void:
 	_module_host.visible = false
 	if is_instance_valid(instance):
 		instance.queue_free()
+	# 模块结束后排空推进键，避免下一句对白被同一帧/下一帧的 Enter 跳过。
 	if not _verify_mode:
 		await _drain_advance_input()
 
@@ -567,7 +596,17 @@ func _report_verification() -> void:
 			print("WEDDING_PROLOGUE_FAIL %s" % failure)
 		get_tree().quit(1)
 		return
-	print("WEDDING_PROLOGUE_PASS events=%d scenes=4 sources=%d modules=%d interactions=%d endpoint=%s narration_lines=%d dialogue_lines=%d font=Times_New_Roman cjk_fallback=SimSun text_only_stage=true advance_gated=true dev_docx_jump=true dev_jump_chapters=wedding_mystic_night_forest wedding_source_bounds=%s" % [
+	var scenes_with_art := 0
+	for path_variant in SCENE_TEXTURE_PATHS.values():
+		var art_path := str(path_variant)
+		if not art_path.is_empty() and ResourceLoader.exists(art_path):
+			scenes_with_art += 1
+	var stage_mode := "text_only_stage=true"
+	if scenes_with_art >= 4:
+		stage_mode = "scene_art=true scenes_textured=%d" % scenes_with_art
+	elif scenes_with_art > 0:
+		stage_mode = "scene_art=partial scenes_textured=%d" % scenes_with_art
+	print("WEDDING_PROLOGUE_PASS events=%d scenes=4 sources=%d modules=%d interactions=%d endpoint=%s narration_lines=%d dialogue_lines=%d font=Times_New_Roman cjk_fallback=SimSun %s advance_gated=true dev_docx_jump=true dev_jump_chapters=wedding_mystic_night_forest wedding_source_bounds=%s" % [
 		_events.size(),
 		_visited_sources.size(),
 		_visited_modules.size(),
@@ -575,6 +614,7 @@ func _report_verification() -> void:
 		str(_endpoint_reached),
 		_narration_ui.get_layout_sample_count(),
 		_dialogue_ui.get_presented_line_count(),
+		stage_mode,
 		str(DevJumpPanelScript.source_bounds(_events)),
 	])
 	get_tree().quit(0)
