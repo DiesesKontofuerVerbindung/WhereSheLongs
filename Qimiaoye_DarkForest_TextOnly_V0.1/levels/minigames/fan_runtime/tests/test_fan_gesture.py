@@ -1,0 +1,534 @@
+import csv
+import math
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import config
+from fan_detector import FanDetector, Point, TrajectorySample
+from fan_state import FanState
+from hand_tracker import HandFeatures, extract_hand_features
+from interference_field import (
+    InterferenceField,
+    PalmMotionTracker,
+    PalmPhysicsInput,
+    TextEntity,
+)
+from test_logger import TestLogger
+
+
+class Landmark:
+    def __init__(self, x: float, y: float) -> None:
+        self.x = x
+        self.y = y
+
+
+def open_palm_landmarks(rotation_degrees: float = 0.0) -> list[Landmark]:
+    points = [Landmark(0.5, 0.65) for _ in range(21)]
+    points[0] = Landmark(0.5, 0.78)
+    for x, indices in zip((0.36, 0.45, 0.54, 0.63), ((5, 6, 7, 8), (9, 10, 11, 12), (13, 14, 15, 16), (17, 18, 19, 20))):
+        for y, index in zip((0.62, 0.48, 0.34, 0.20), indices):
+            points[index] = Landmark(x, y)
+    radians = math.radians(rotation_degrees)
+    cosine, sine = math.cos(radians), math.sin(radians)
+    for point in points:
+        dx, dy = point.x - 0.5, point.y - 0.5
+        point.x = 0.5 + dx * cosine - dy * sine
+        point.y = 0.5 + dx * sine + dy * cosine
+    return points
+
+
+def arm(detector: FanDetector, start_time: float = 0.0) -> float:
+    detector.update(Point(500, 350), True, start_time)
+    detector.update(Point(501, 350), True, start_time + 0.10)
+    event = detector.update(Point(500, 351), True, start_time + config.PALM_ARM_TIME + 0.02)
+    assert event.state == FanState.FAN_READY
+    assert event.started
+    return start_time + config.PALM_ARM_TIME + 0.02
+
+
+def feed_x(detector: FanDetector, x: float, y: float, now: float, count: int = 4) -> tuple[float, list]:
+    events = []
+    for _ in range(count):
+        now += 0.06
+        events.append(detector.update(Point(x, y), True, now))
+    return now, events
+
+
+def text_entity(
+    x: float = 500.0,
+    y: float = 400.0,
+    mass: float = 1.0,
+    width: float = 120.0,
+    height: float = 38.0,
+    velocity_x: float = 0.0,
+    velocity_y: float = 0.0,
+    side: int = 1,
+) -> TextEntity:
+    return TextEntity(
+        text="这样不好吗",
+        x=x,
+        y=y,
+        width=width,
+        height=height,
+        mass=mass,
+        font_size=32,
+        color=(255, 255, 255),
+        velocity_x=velocity_x,
+        velocity_y=velocity_y,
+        side=side,
+    )
+
+
+def physics_field(*entities: TextEntity) -> InterferenceField:
+    field = InterferenceField(seed=1)
+    field.entities = list(entities)
+    return field
+
+
+class FanGestureTests(unittest.TestCase):
+    def test_responsive_runtime_calibration(self) -> None:
+        self.assertEqual(config.TARGET_FPS, 240)
+        self.assertLessEqual(config.PALM_ARM_TIME, 0.15)
+        self.assertLessEqual(config.FAN_START_DISTANCE, 35.0)
+        self.assertGreater(config.SMOOTHING_FACTOR, 0.5)
+
+    def test_interference_cluster_uses_only_the_four_v2_reality_voices(self) -> None:
+        field = InterferenceField(seed=7)
+        self.assertEqual({entity.text for entity in field.entities}, set(config.INTERFERENCE_PHRASES))
+        self.assertEqual(len(field.entities), config.INTERFERENCE_TEXT_ENTITY_COUNT)
+
+    def test_disabled_gravity_keeps_stationary_text_at_its_height(self) -> None:
+        field = physics_field(text_entity(y=300.0))
+        field.update(0.05, None)
+        text = field.entities[0]
+        self.assertEqual(config.LETTER_GRAVITY, 0.0)
+        self.assertEqual(text.acceleration_y, 0.0)
+        self.assertEqual(text.velocity_y, 0.0)
+        self.assertEqual(text.y, 300.0)
+
+    def test_floor_prevents_tunneling_and_small_bounce_settles(self) -> None:
+        text = text_entity(
+            y=config.LETTER_FLOOR_Y - 20.0,
+            height=40.0,
+            velocity_y=200.0,
+        )
+        field = physics_field(text)
+        field.update(0.05, None)
+        self.assertEqual(text.y, config.LETTER_FLOOR_Y - text.height / 2)
+        self.assertLessEqual(text.velocity_y, 0.0)
+        text.velocity_y = 1.0
+        field.update(0.05, None)
+        self.assertEqual(text.y, config.LETTER_FLOOR_Y - text.height / 2)
+        self.assertEqual(text.velocity_y, 0.0)
+
+    def test_hand_force_is_local_to_influence_radius(self) -> None:
+        near = text_entity(x=500.0, y=400.0)
+        far = text_entity(x=800.0, y=400.0)
+        field = physics_field(near, far)
+        field.update(0.02, PalmPhysicsInput(500.0, 400.0, 300.0, 0.0))
+        self.assertGreater(near.acceleration_x, 0.0)
+        self.assertEqual(far.acceleration_x, 0.0)
+        self.assertEqual(field.texts_inside_influence_area, 1)
+
+    def test_light_motion_inside_text_hitbox_does_not_apply_force(self) -> None:
+        text = text_entity(x=500.0, y=400.0)
+        field = physics_field(text)
+        field.update(
+            0.02,
+            PalmPhysicsInput(500.0, 400.0, config.HAND_MIN_FORCE_VELOCITY - 1.0, 0.0),
+        )
+        self.assertEqual(field.texts_inside_influence_area, 1)
+        self.assertFalse(field.hand_force_active)
+        self.assertEqual(field.local_force_strength, 0.0)
+        self.assertEqual(text.acceleration_x, 0.0)
+        self.assertEqual(text.velocity_x, 0.0)
+
+    def test_text_bounds_and_mass_follow_phrase_width(self) -> None:
+        field = InterferenceField(seed=1)
+        short_width, short_height = field._text_bounds("这样不好吗", 36)
+        long_width, long_height = field._text_bounds("可是我们要结婚……", 36)
+        short_mass = field._text_mass(short_width)
+        long_mass = field._text_mass(long_width)
+        self.assertGreater(short_width, 0.0)
+        self.assertGreater(short_height, 0.0)
+        self.assertGreater(long_width, short_width)
+        self.assertGreater(long_height, 0.0)
+        self.assertGreater(long_mass, short_mass)
+        self.assertLess(long_mass - short_mass, 0.35)
+
+    def test_sweep_through_text_left_half_receives_force(self) -> None:
+        text = text_entity(x=500.0, y=400.0, width=220.0, height=42.0)
+        field = physics_field(text)
+        field.update(
+            0.02,
+            PalmPhysicsInput(
+                x=445.0,
+                y=400.0,
+                velocity_x=300.0,
+                velocity_y=0.0,
+                previous_x=405.0,
+                previous_y=400.0,
+            ),
+        )
+        self.assertEqual(field.texts_inside_influence_area, 1)
+        self.assertGreater(text.velocity_x, 0.0)
+
+    def test_palm_velocity_controls_force_direction(self) -> None:
+        right = physics_field(text_entity(x=500.0, y=400.0))
+        right.update(0.02, PalmPhysicsInput(500.0, 400.0, 300.0, 0.0))
+        left = physics_field(text_entity(x=500.0, y=400.0))
+        left.update(0.02, PalmPhysicsInput(500.0, 400.0, -300.0, 0.0))
+        self.assertGreater(right.entities[0].velocity_x, 0.0)
+        self.assertLess(left.entities[0].velocity_x, 0.0)
+
+    def test_progressive_impulse_responds_to_medium_and_fast_strokes(self) -> None:
+        slow = physics_field(text_entity(x=500.0, y=400.0))
+        slow.update(0.01, PalmPhysicsInput(500.0, 400.0, 450.0, 0.0, 440.0, 400.0))
+        medium = physics_field(text_entity(x=500.0, y=400.0))
+        medium.update(0.01, PalmPhysicsInput(500.0, 400.0, 700.0, 0.0, 430.0, 400.0))
+        fast = physics_field(text_entity(x=500.0, y=400.0))
+        fast.update(0.01, PalmPhysicsInput(500.0, 400.0, 1000.0, 0.0, 400.0, 400.0))
+        self.assertEqual(slow.last_impulse_strength, 0.0)
+        self.assertGreater(medium.last_impulse_strength, 0.0)
+        self.assertGreater(fast.last_impulse_strength, 0.0)
+        self.assertGreater(fast.last_impulse_strength, medium.last_impulse_strength)
+        self.assertGreater(fast.entities[0].velocity_x, medium.entities[0].velocity_x)
+
+    def test_fast_palm_sweep_hits_text_between_sampled_positions(self) -> None:
+        text = text_entity(x=500.0, y=400.0)
+        field = physics_field(text)
+        palm = PalmPhysicsInput(
+            x=800.0,
+            y=400.0,
+            velocity_x=1200.0,
+            velocity_y=0.0,
+            previous_x=200.0,
+            previous_y=400.0,
+        )
+        field.update(0.01, palm)
+        self.assertEqual(field.texts_inside_influence_area, 1)
+        self.assertGreater(field.last_impulse_strength, 0.0)
+        self.assertGreater(text.velocity_x, 0.0)
+
+    def test_brief_open_palm_flicker_keeps_current_sweep_segment(self) -> None:
+        tracker = PalmMotionTracker()
+        tracker.update(config.INTERFERENCE_CENTER_X, 400.0, 0.0, True)
+        palm = tracker.update(
+            700.0,
+            400.0,
+            config.PHYSICS_OPEN_PALM_GRACE_TIME / 2,
+            False,
+        )
+        self.assertIsNotNone(palm)
+        assert palm is not None
+        self.assertEqual(
+            palm.previous_x,
+            config.INTERFERENCE_CENTER_X + config.HAND_NEUTRAL_HALF_WIDTH,
+        )
+        self.assertEqual(palm.x, 700.0)
+        self.assertEqual(palm.stroke_phase, "active")
+        self.assertGreater(palm.velocity_x, config.HAND_IMPULSE_MIN_VELOCITY)
+
+    def test_expired_open_palm_grace_disables_hand_physics(self) -> None:
+        tracker = PalmMotionTracker()
+        tracker.update(300.0, 400.0, 0.0, True)
+        palm = tracker.update(
+            700.0,
+            400.0,
+            config.PHYSICS_OPEN_PALM_GRACE_TIME + 0.01,
+            False,
+        )
+        self.assertIsNone(palm)
+
+    def test_text_keeps_inertia_after_hand_disappears(self) -> None:
+        field = physics_field(text_entity(x=500.0, y=400.0))
+        field.update(0.03, PalmPhysicsInput(500.0, 400.0, 400.0, 0.0))
+        velocity_with_hand = field.entities[0].velocity_x
+        x_with_hand = field.entities[0].x
+        field.update(0.03, None)
+        self.assertGreater(field.entities[0].velocity_x, 0.0)
+        self.assertLess(field.entities[0].velocity_x, velocity_with_hand)
+        self.assertGreater(field.entities[0].x, x_with_hand)
+
+    def test_open_palm_loss_uses_grace_without_resetting_physical_world(self) -> None:
+        tracker = PalmMotionTracker()
+        tracker.update(config.INTERFERENCE_CENTER_X, 400.0, 0.0, True)
+        palm = tracker.update(700.0, 400.0, 0.05, True)
+        field = physics_field(text_entity(x=620.0, y=400.0))
+        field.update(0.03, palm)
+        pushed_x = field.entities[0].x
+        missing = tracker.update(720.0, 400.0, 0.08, False)
+        field.update(0.03, missing)
+        self.assertIsNotNone(missing)
+        self.assertEqual(len(field.entities), 1)
+        self.assertGreater(field.entities[0].x, pushed_x)
+
+    def test_outward_stroke_is_active_and_return_to_center_is_recovery(self) -> None:
+        tracker = PalmMotionTracker()
+        tracker.update(config.INTERFERENCE_CENTER_X, 400.0, 0.0, True)
+        outward = tracker.update(700.0, 400.0, 0.10, True)
+        recovery = tracker.update(620.0, 400.0, 0.20, True)
+        self.assertIsNotNone(outward)
+        self.assertIsNotNone(recovery)
+        assert outward is not None and recovery is not None
+        self.assertEqual(outward.stroke_phase, "active")
+        self.assertEqual(outward.stroke_direction, 1)
+        self.assertEqual(recovery.stroke_phase, "recovery")
+
+    def test_recovery_stroke_does_not_push_text_back(self) -> None:
+        text = text_entity(x=650.0, y=400.0, velocity_x=300.0)
+        field = physics_field(text)
+        recovery = PalmPhysicsInput(
+            620.0,
+            400.0,
+            -900.0,
+            0.0,
+            700.0,
+            400.0,
+            stroke_phase="recovery",
+            stroke_direction=1,
+            stroke_id=1,
+        )
+        field.update(0.02, recovery)
+        self.assertFalse(field.hand_force_active)
+        self.assertEqual(field.texts_inside_influence_area, 0)
+        self.assertGreater(text.velocity_x, 0.0)
+
+    def test_open_palm_motion_automatically_drives_texts_to_both_sides(self) -> None:
+        left = text_entity(x=150.0, y=400.0, side=-1)
+        right = text_entity(x=850.0, y=400.0, side=1)
+        field = physics_field(left, right)
+        field.update(
+            0.02,
+            PalmPhysicsInput(
+                500.0,
+                400.0,
+                config.AUTO_DISPERSION_MOTION_THRESHOLD - 1.0,
+                0.0,
+                auto_dispersion=True,
+            ),
+        )
+        self.assertEqual(field.auto_dispersion_strength, 0.0)
+        self.assertEqual(left.velocity_x, 0.0)
+        self.assertEqual(right.velocity_x, 0.0)
+        field.update(
+            0.02,
+            PalmPhysicsInput(500.0, 400.0, 850.0, 0.0, auto_dispersion=True),
+        )
+        self.assertGreater(field.auto_dispersion_strength, 0.0)
+        self.assertLess(left.velocity_x, 0.0)
+        self.assertGreater(right.velocity_x, 0.0)
+
+    def test_fast_auto_assist_overrides_one_sided_local_push(self) -> None:
+        text = text_entity(x=500.0, y=400.0, side=-1)
+        field = physics_field(text)
+        field.update(
+            0.02,
+            PalmPhysicsInput(
+                x=500.0,
+                y=400.0,
+                velocity_x=config.AUTO_DISPERSION_SPEED_REFERENCE,
+                velocity_y=0.0,
+                previous_x=400.0,
+                previous_y=400.0,
+                auto_dispersion=True,
+            ),
+        )
+        self.assertTrue(field.hand_force_active)
+        self.assertEqual(field.auto_dispersion_strength, 1.0)
+        self.assertLess(text.velocity_x, 0.0)
+
+    def test_crossing_center_arms_opposite_outward_half_stroke(self) -> None:
+        tracker = PalmMotionTracker()
+        tracker.update(config.INTERFERENCE_CENTER_X, 400.0, 0.0, True)
+        right = tracker.update(720.0, 400.0, 0.10, True)
+        left = tracker.update(280.0, 400.0, 0.30, True)
+        self.assertIsNotNone(right)
+        self.assertIsNotNone(left)
+        assert right is not None and left is not None
+        self.assertEqual(right.stroke_id, 1)
+        self.assertEqual(left.stroke_phase, "active")
+        self.assertEqual(left.stroke_direction, -1)
+        self.assertEqual(left.stroke_id, 2)
+        self.assertEqual(
+            left.previous_x,
+            config.INTERFERENCE_CENTER_X - config.HAND_NEUTRAL_HALF_WIDTH,
+        )
+
+    def test_same_side_repeat_requires_return_to_neutral(self) -> None:
+        tracker = PalmMotionTracker()
+        tracker.update(config.INTERFERENCE_CENTER_X, 400.0, 0.0, True)
+        first = tracker.update(700.0, 400.0, 0.10, True)
+        tracker.update(620.0, 400.0, 0.20, True)
+        blocked_repeat = tracker.update(720.0, 400.0, 0.30, True)
+        ready = tracker.update(config.INTERFERENCE_CENTER_X, 400.0, 0.40, True)
+        second = tracker.update(700.0, 400.0, 0.50, True)
+        self.assertIsNotNone(first)
+        self.assertIsNotNone(blocked_repeat)
+        self.assertIsNotNone(ready)
+        self.assertIsNotNone(second)
+        assert first is not None and blocked_repeat is not None
+        assert ready is not None and second is not None
+        self.assertEqual(first.stroke_id, 1)
+        self.assertEqual(blocked_repeat.stroke_phase, "recovery")
+        self.assertEqual(ready.stroke_phase, "ready")
+        self.assertEqual(second.stroke_phase, "active")
+        self.assertEqual(second.stroke_id, 2)
+
+    def test_impulse_fires_only_once_per_active_stroke(self) -> None:
+        field = physics_field(text_entity(x=650.0, y=400.0))
+        palm = PalmPhysicsInput(
+            700.0,
+            400.0,
+            700.0,
+            0.0,
+            555.0,
+            400.0,
+            stroke_phase="active",
+            stroke_direction=1,
+            stroke_id=4,
+        )
+        field.update(0.01, palm)
+        velocity_after_first = field.entities[0].velocity_x
+        first_impulse = field.last_impulse_strength
+        field.update(0.01, palm)
+        velocity_added_second_frame = field.entities[0].velocity_x - velocity_after_first
+        self.assertGreater(first_impulse, 0.0)
+        self.assertEqual(field.last_impulse_stroke_id, 4)
+        expected_continuous_force_only = (
+            velocity_after_first
+            + palm.velocity_x * config.HAND_HORIZONTAL_FORCE_GAIN / field.entities[0].mass * 0.01
+        ) * math.exp(-config.LETTER_AIR_DRAG * 0.01) - velocity_after_first
+        self.assertAlmostEqual(velocity_added_second_frame, expected_continuous_force_only, places=5)
+
+    def test_same_force_accelerates_lighter_text_more(self) -> None:
+        light = text_entity(x=500.0, y=400.0, mass=0.8)
+        heavy = text_entity(x=500.0, y=400.0, mass=1.2)
+        field = physics_field(light, heavy)
+        field.update(0.01, PalmPhysicsInput(500.0, 400.0, 300.0, 0.0))
+        self.assertGreater(light.acceleration_x, heavy.acceleration_x)
+        self.assertGreater(light.velocity_x, heavy.velocity_x)
+
+    def test_unicode_entities_render_onto_opencv_canvas(self) -> None:
+        field = InterferenceField(seed=7)
+        canvas = np.zeros((config.WINDOW_HEIGHT, config.WINDOW_WIDTH, 3), dtype=np.uint8)
+        field.render(canvas)
+        self.assertGreater(int(np.count_nonzero(canvas)), 0)
+
+    def test_unicode_text_sprites_are_cached_after_first_render(self) -> None:
+        first_entity = text_entity()
+        second_entity = text_entity(x=640.0)
+        field = physics_field(first_entity, second_entity)
+        first = np.zeros((config.WINDOW_HEIGHT, config.WINDOW_WIDTH, 3), dtype=np.uint8)
+        second = np.zeros_like(first)
+        field.render(first)
+        cache_size = len(field._text_cache)
+        field.render(second)
+        self.assertEqual(cache_size, 1)
+        self.assertEqual(len(field._text_cache), cache_size)
+        self.assertTrue(np.array_equal(first, second))
+
+    def test_open_palm_feature_is_rotation_tolerant(self) -> None:
+        for rotation in (0.0, 45.0, 90.0, 180.0):
+            features = extract_hand_features(open_palm_landmarks(rotation))
+            self.assertTrue(features.open_palm, rotation)
+
+    def test_relaxed_open_palm_allows_one_bent_finger(self) -> None:
+        features = HandFeatures(0.5, 0.5, True, True, True, False)
+        self.assertTrue(features.open_palm)
+
+    def test_two_extended_fingers_are_not_an_open_palm(self) -> None:
+        features = HandFeatures(0.5, 0.5, True, True, False, False)
+        self.assertFalse(features.open_palm)
+
+    def test_open_palm_is_required_to_arm(self) -> None:
+        detector = FanDetector()
+        for index in range(10):
+            event = detector.update(Point(500, 350), False, index * 0.05)
+        self.assertEqual(event.state, FanState.TRACKING)
+        self.assertEqual(event.sweep_count, 0)
+
+    def test_stationary_open_palm_never_produces_a_sweep(self) -> None:
+        detector = FanDetector()
+        now = arm(detector)
+        for index in range(10):
+            event = detector.update(Point(500, 350), True, now + index * 0.05)
+        self.assertEqual(event.sweep_count, 0)
+        self.assertNotEqual(event.state, FanState.FANNING)
+
+    def test_vertical_motion_never_produces_a_sweep(self) -> None:
+        detector = FanDetector()
+        now = arm(detector)
+        events = [
+            detector.update(Point(500, y), True, now + index * 0.08)
+            for index, y in enumerate((300, 240, 190, 140), start=1)
+        ]
+        self.assertTrue(any(event.fail_reason == "vertical_drift" for event in events))
+        self.assertTrue(all(event.sweep_count == 0 for event in events))
+
+    def test_small_horizontal_jitter_does_not_produce_a_sweep(self) -> None:
+        detector = FanDetector()
+        now = arm(detector)
+        for index in range(30):
+            x = 500 + (5 if index % 2 else -5)
+            event = detector.update(Point(x, 350), True, now + (index + 1) * 0.03)
+        self.assertEqual(event.sweep_count, 0)
+        self.assertNotEqual(event.state, FanState.FANNING)
+
+    def test_back_and_forth_motion_increments_sweep_count(self) -> None:
+        detector = FanDetector()
+        now = arm(detector)
+        now, _ = feed_x(detector, 680, 350, now)
+        now, left_events = feed_x(detector, 320, 350, now)
+        now, right_events = feed_x(detector, 680, 350, now)
+        events = left_events + right_events
+        self.assertGreaterEqual(max(event.sweep_count for event in events), 2)
+        completed = next(event for event in events if event.completed)
+        self.assertEqual(completed.state, FanState.FANNING)
+        self.assertEqual(completed.high_level_event["event"], "fan_update")
+        self.assertGreater(completed.fan_strength, 0.0)
+
+    def test_missing_hand_timeout_resets_active_fan(self) -> None:
+        detector = FanDetector()
+        now = arm(detector)
+        now, _ = feed_x(detector, 680, 350, now)
+        event = detector.update(None, False, now + config.MAX_MISSING_HAND_TIME + 0.01)
+        self.assertTrue(event.reset)
+        self.assertTrue(event.terminal)
+        self.assertEqual(event.fail_reason, "hand_lost")
+        self.assertEqual(detector.state, FanState.TRACKING)
+
+    def test_logger_writes_fan_trial_and_trajectory_fields(self) -> None:
+        sample = TrajectorySample(
+            1.0, Point(400, 300), Point(405, 302), True, FanState.FANNING,
+            "right", 350.0, 0.6, 120.0, 2,
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            logger = TestLogger(Path(temporary_directory))
+            logger.start_trial("positive", 0.0)
+            logger.append_sample(sample)
+            logger.finish_trial("success", "", 1.0)
+            with logger.trials_path.open(newline="", encoding="utf-8") as file:
+                trial = next(csv.DictReader(file))
+            for field in (
+                "expected_type", "result", "fail_reason", "duration", "sweep_count",
+                "max_amplitude", "mean_amplitude", "peak_horizontal_velocity", "mean_fan_strength",
+            ):
+                self.assertIn(field, trial)
+            with next(logger.trajectory_dir.glob("*.csv")).open(newline="", encoding="utf-8") as file:
+                trajectory = next(csv.DictReader(file))
+            for field in (
+                "timestamp", "raw_palm_x", "raw_palm_y", "smoothed_palm_x", "smoothed_palm_y",
+                "open_palm", "state", "direction", "horizontal_velocity", "fan_strength",
+            ):
+                self.assertIn(field, trajectory)
+
+
+if __name__ == "__main__":
+    unittest.main()

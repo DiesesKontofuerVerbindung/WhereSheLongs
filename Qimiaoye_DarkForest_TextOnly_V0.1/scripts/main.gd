@@ -12,6 +12,7 @@ const CutscenePlayerScript := preload("res://scripts/cutscene_player.gd")
 const DevJumpPanelScript := preload("res://scripts/dev_jump_panel.gd")
 const WeddingDataScript := preload("res://scripts/wedding_data.gd")
 const MysticNightDataScript := preload("res://scripts/mystic_night_data.gd")
+const InnerObjectsStageScript := preload("res://scripts/inner_objects_stage.gd")
 const RUNTIME_LOG_PATH := "user://logs/runtime.log"
 const TRACE_LOG_PATH := "user://logs/trace_steps.log"
 const ENGINE_LOG_PATH := "user://logs/godot.log"
@@ -55,6 +56,7 @@ const ALLOWED_MODULE_IMAGE_ROOTS := [
 	"res://assets/stones/",
 	"res://scenes/forest/parkour/",
 	"res://assets/cutscenes/",
+	"res://assets/inner_objects/",
 ]
 
 var _events: Array[Dictionary] = []
@@ -116,6 +118,7 @@ var _dark_overlay: ColorRect
 var _vfx: Control
 var _story_stage
 var _cutscene_player
+var _inner_objects_stage
 var _cutscene_plays: Dictionary = {}
 var _diagnostic_panel: PanelContainer
 var _diagnostic_label: Label
@@ -294,6 +297,7 @@ func _build_ui() -> void:
 	# CG 是场景底图，必须在所有文字 UI 之前入树：它现在是常驻循环，
 	# 排在 NARRATION_UI / DIALOGUE_UI 之后会把对白整个盖掉。
 	_build_cutscene_player()
+	_build_inner_objects_stage()
 
 	var top_margin := MarginContainer.new()
 	top_margin.set_anchors_preset(Control.PRESET_CENTER_TOP)
@@ -349,6 +353,28 @@ func _build_cutscene_player() -> void:
 	add_child(_cutscene_player)
 
 
+## DOCX 309 主观内心背景图0 的物件舞台，与 CG 同层：盖住底板，垫在文字 UI 之下。
+func _build_inner_objects_stage() -> void:
+	_inner_objects_stage = InnerObjectsStageScript.new()
+	_inner_objects_stage.set_cutscene_player(_cutscene_player)
+	add_child(_inner_objects_stage)
+
+
+func _sync_scene_inner_objects(scene_name: String) -> void:
+	if _inner_objects_stage == null:
+		return
+	if bool(_inner_objects_stage.uses_inner_stage(scene_name)):
+		if not bool(_inner_objects_stage.is_active()):
+			_inner_objects_stage.activate(_verify_mode)
+			_log_runtime("INNER_OBJECTS_STAGE scene=%s objects=%s fan_arm_source=%d" % [
+				scene_name,
+				",".join(_inner_objects_stage.name_tags()),
+				int(_inner_objects_stage.get_debug_snapshot().get("inner_fan_arm_source", 0)),
+			])
+	else:
+		_inner_objects_stage.deactivate()
+
+
 ## CG 是占位图的替身，按场景绑定循环播放，不是播一次就走的过场。
 ## 每个占位图管到下一次场景切换为止：
 ##   人物剧情图1  DOCX 138–161   23 行
@@ -356,10 +382,19 @@ func _build_cutscene_player() -> void:
 ##   环境背景图7  DOCX 199–309  110 行  ← 这张一直缺美术，循环 CG 正好顶上
 ## 人物剧情图1 进场先停在"摸心脏前"，玩家做完 WaterfallInteraction 的触摸交互
 ## 才切成瀑布下，所以它的初始值是 touch_chest 而不是 waterfall_below。
+## 溺水沉到底之后额外留的一拍，让"闭上了眼"和"猛地睁开眼"之间有呼吸。
+const DROWNING_HOLD_SECONDS := 1.4
+## 闭眼慢、睁眼快：DOCX 195 是"闭上了眼"，201 是"猛地睁开眼"。
+## 两边用同一个时长的话，那个"猛地"就没了。
+const DROWNING_EYES_CLOSE_SECONDS := 2.2
+const DROWNING_EYES_OPEN_SECONDS := 0.35
+
 const SCENE_CUTSCENES := {
 	"人物剧情图1": "touch_chest",
 	"溺水图cg": "drowning",
 	"环境背景图7": "lake_talk",
+	# DOCX 309 主观内心：湖边谈心的循环继续播，只是被推成虚化当底。
+	"主观内心背景图0": "lake_talk",
 }
 
 
@@ -378,6 +413,9 @@ func _sync_scene_cutscene(scene_name: String) -> void:
 
 func _start_cutscene_loop(cutscene_id: String, reason: String) -> void:
 	if _cutscene_player == null or not _cutscene_player.has_cutscene(cutscene_id):
+		return
+	# 同一段已经在放就别重来，也别重复计数——溺水会被跳水结束和 196 转场各触发一次。
+	if _cutscene_player.is_looping(cutscene_id):
 		return
 	var missing: PackedStringArray = _cutscene_player.check_frames(cutscene_id)
 	if not missing.is_empty():
@@ -988,6 +1026,7 @@ func _restore_dev_jump_scene_context(target_index: int) -> void:
 	if _story_stage != null:
 		_story_stage.restore_for_source(target_source, scene_context)
 	_sync_scene_chrome_visibility(scene_context)
+	_sync_scene_inner_objects(scene_context)
 	_vfx.set_mode("none")
 
 
@@ -1031,6 +1070,13 @@ func _run_story() -> void:
 
 func _execute_event(event: Dictionary) -> void:
 	_set_advance_hint(false)
+	# 高斯模糊按 DOCX 行号分段（156 起小凌 0.70 / 阿麦 0.30），随事件推进同步。
+	var event_source := int(event.get("source", 0))
+	if event_source > 0 and _story_stage != null and _story_stage.has_method("sync_blur_for_source"):
+		_story_stage.sync_blur_for_source(event_source)
+	# DOCX 310–315 每推进一行，主观内心多浮现一件物件。
+	if event_source > 0 and _inner_objects_stage != null:
+		_inner_objects_stage.sync_for_source(event_source)
 	var kind := str(event.get("type", ""))
 	match kind:
 		"scene":
@@ -1260,6 +1306,28 @@ func _run_interaction(event: Dictionary) -> void:
 		_log_runtime("INTERACTION_COMPLETE id=%s stage=light_approach" % interaction_id)
 		return
 
+	if interaction_id == "inner_objects_fan":
+		# DOCX 315：接 Prototype_2_Fan（b198616 那套桥接），摄像头挥开六件物件。
+		_interaction_panel.visible = false
+		if _inner_objects_stage == null:
+			_log_runtime("INTERACTION_SKIP id=%s reason=no_inner_stage" % interaction_id)
+			return
+		_inner_objects_stage.arm_fan()
+		if _verify_mode:
+			_inner_objects_stage.debug_force_clear()
+			await _brief_pause()
+		else:
+			await _inner_objects_stage.objects_cleared
+		_log_runtime("INNER_OBJECTS_CLEARED camera_state=%s physics_frame=%s ratio=%.2f" % [
+			str(_inner_objects_stage.get_debug_snapshot().get("inner_fan_camera_state", "")),
+			str(_inner_objects_stage.get_debug_snapshot().get("inner_fan_physics_frame_seen", false)),
+			float(_inner_objects_stage.get_debug_snapshot().get("inner_fan_dispersed_ratio", 0.0)),
+		])
+		# 黑屏一拍，然后去掉虚化，湖边谈心的循环原样接回去。
+		await _inner_objects_stage.play_blackout_and_restore(_verify_mode)
+		_log_runtime("INTERACTION_COMPLETE id=%s stage=inner_objects_fan" % interaction_id)
+		return
+
 	_interaction_panel.visible = true
 	_interaction_prompt.text = str(event.get("prompt", ""))
 	_progress.value = 0
@@ -1429,6 +1497,12 @@ func _run_embedded_module(event: Dictionary, is_placeholder: bool) -> void:
 	_module_pointer_captured = false
 	_set_module_pointer_inside(false)
 	_status("[MODULE_RETURN] %s → 剧情继续" % module_id)
+	if module_id == "LakeJump":
+		# DOCX 192 踏入湖里、193 跳水，紧接着 195 就是"在水中不断下沉"。
+		# 但场景要到 196 DROWNING_CG 才切，中间这句会配着"两人站在岸边"的
+		# 湖边舞台说出来。跳完水立刻起溺水循环，让 195 就在水里说。
+		# 196 再调 play_looping("drowning") 会因为 id 相同直接返回，衔接无缝。
+		_start_cutscene_loop("drowning", "lake_jump_done")
 
 
 func _on_embedded_module_completed_without_result() -> void:
@@ -1612,10 +1686,28 @@ func _play_transition(event: Dictionary) -> void:
 			await _tween_alpha(_dark_overlay, 0.0, duration * 0.5)
 			_vfx.set_mode("none")
 		"DROWNING_CG":
-			# DOCX 195 小凌下沉，196 切溺水图 CG。
-			await _tween_alpha(_dark_overlay, 1.0, duration * 0.5)
+			# DOCX 195 小凌下沉，196 切溺水图 CG，199 就转去环境背景图7。
+			# 这两个转场之间没有任何 line 事件，不等的话溺水刚起就被停掉，
+			# 玩家在"闭上了眼"和"猛地睁开眼"之间什么都看不见。
+			# 跳水结束时溺水循环已经起来了，这里再压黑一次画面会无谓闪一下。
+			if _cutscene_player != null and _cutscene_player.is_looping("drowning"):
+				_set_scene(target)
+			else:
+				await _tween_alpha(_dark_overlay, 1.0, duration * 0.5)
+				_set_scene(target)
+				await _tween_alpha(_dark_overlay, 0.0, duration * 0.5)
+			await _cutscene_player.wait_until_pass_done(_verify_mode)
+			# 沉到底的那一帧再留一拍，别让画面刚定住就被下一段抢走。
+			if not _verify_mode:
+				await get_tree().create_timer(DROWNING_HOLD_SECONDS).timeout
+				# 缓慢压黑 = 缓慢闭上眼，接 199 的 DROWNING_EXIT。
+				await _tween_alpha(_dark_overlay, 1.0, DROWNING_EYES_CLOSE_SECONDS)
+		"DROWNING_EXIT":
+			# 走到这里画面已经全黑（上面闭眼压下来的）。F4 直接跳 199 时黑幕
+			# 未必是全黑，先补上，否则"睁眼"会变成没有起点的一次空淡入。
+			_dark_overlay.modulate.a = 1.0
 			_set_scene(target)
-			await _tween_alpha(_dark_overlay, 0.0, duration * 0.5)
+			await _tween_alpha(_dark_overlay, 0.0, 0.012 if _verify_mode else DROWNING_EYES_OPEN_SECONDS)
 		_:
 			await _tween_alpha(_dark_overlay, 1.0, duration * 0.5)
 			_set_scene(target)
@@ -1633,6 +1725,7 @@ func _set_scene(scene_name: String) -> void:
 		_story_stage.set_scene(scene_name, _verify_mode)
 	_sync_scene_chrome_visibility(scene_name)
 	_sync_scene_cutscene(scene_name)
+	_sync_scene_inner_objects(scene_name)
 	_log_runtime("SCENE scene=%s" % scene_name)
 	_refresh_diagnostics()
 
@@ -1643,8 +1736,13 @@ func _sync_scene_chrome_visibility(scene_name: String) -> void:
 		and _story_stage.has_method("uses_art_stage")
 		and bool(_story_stage.uses_art_stage(scene_name))
 	)
-	_scene_label.visible = not uses_long_scene
-	_scene_subtitle.visible = not uses_long_scene
+	# 主观内心舞台有自己的底图和物件，占位场景名同样要让位。
+	var uses_inner_stage: bool = (
+		_inner_objects_stage != null
+		and bool(_inner_objects_stage.uses_inner_stage(scene_name))
+	)
+	_scene_label.visible = not uses_long_scene and not uses_inner_stage
+	_scene_subtitle.visible = not uses_long_scene and not uses_inner_stage
 	if uses_long_scene:
 		# 森林舞台有自己的遮暗层，主场景黑幕必须保持透明，避免两层叠成近乎全黑。
 		_dark_overlay.modulate.a = 0.0
@@ -2042,6 +2140,8 @@ func _validate_contract() -> PackedStringArray:
 		errors.append("持续剧情舞台、独立光源或人物三态动画契约不完整")
 	elif _root_bg == null or _root_bg.z_index >= int(_story_stage.get_debug_snapshot().get("world_z_index", -100)):
 		errors.append("森林长图被主黑色底板遮挡")
+	if _inner_objects_stage == null or not bool(_inner_objects_stage.verify_contract()):
+		errors.append("DOCX 309 主观内心物件舞台（六件 Szene/物件33 切图 + Prototype_2_Fan 桥接）契约不完整")
 	errors.append_array(_validate_module_render_contract())
 	if _module_host != null and _module_viewport != null and (_module_host.visible or _module_viewport.get_child_count() != 0):
 		errors.append("模块宿主启动时应保持隐藏且为空")
@@ -2130,6 +2230,8 @@ func _validate_runtime_completion() -> PackedStringArray:
 			errors.append("CG 正片层没有保持宽高比，画面会被拉伸变形")
 	if _module_viewport != null and _module_viewport.get_child_count() != 0:
 		errors.append("全流程结束时模块实例未释放：%d" % _module_viewport.get_child_count())
+	if _inner_objects_stage != null and int(_inner_objects_stage.get_debug_snapshot().get("inner_objects_cleared_count", 0)) < 1:
+		errors.append("DOCX 315 的手势挥开没有走完：主观内心物件从未被挥净")
 	if _narration_lines_seen < 61:
 		errors.append("全流程 NARRATION_UI 覆盖不足：%d" % _narration_lines_seen)
 	if _dialogue_lines_seen < 60:
@@ -2242,7 +2344,7 @@ func _is_allowed_module_image_path(path: String) -> bool:
 func _find_forbidden_visual_nodes(node: Node) -> PackedStringArray:
 	var found := PackedStringArray()
 	for child in node.get_children():
-		if child == _module_host or child == _story_stage or child == _cutscene_player:
+		if child == _module_host or child == _story_stage or child == _cutscene_player or child == _inner_objects_stage:
 			continue
 		if child is Sprite2D or child is AnimatedSprite2D or child is TextureRect or child is CharacterBody2D:
 			found.append("%s (%s)" % [child.get_path(), child.get_class()])
@@ -2360,7 +2462,7 @@ func _refresh_diagnostics() -> void:
 
 func _finish_verification(success: bool, issues: PackedStringArray) -> void:
 	if success:
-		var message := "FULL_FLOW_PASS events=%d scenes=%d modules=%d endpoint=%s narration_lines=%d dialogue_lines=%d psychology_lines=%d narration_queue_max=%d dialogue_queue_max=%d narration_layout_samples=%d dialogue_layout_samples=%d choice_layout_samples=%d split_ui=true narration_top_2_20=true narration_centered=true narration_direct_reveal=true dialogue_progressive_reveal=true psychology_in_dialogue=true psychology_parentheses=true dialogue_left_aligned=true dialogue_body_top=true continue_button_centered=true choices_centered=true shortcut_hint=true shake_start_source=354 shake_peak_source=365 shake_end_source=366 shake_progressive=true shake_reset=true dev_docx_jump=true docx_jump_all_sources_resolvable=true docx_source_lock=53ba079 dev_jump_logs_preserved=true font=Times_New_Roman cjk_fallback=SimSun persistent_story_stage=true continuous_forest_long_scene=true forest_source_size=9342x1440 waterfall_source_size=2560x1440 continuous_world_source_size=11902x1440 waterfall_appended=true waterfall_layers=back_front_particles waterfall_slope_up_right=true waterfall_slope_gentle=true waterfall_stop_before_fall=true dev_jump_125_restores_waterfall_approach=true scene_hard_cut=false forest_scroll_right=true forest_art_visible=true forest_single_darkness_layer=true actor_between_back_and_front=true actor_between_waterfall_layers=true xiaoling_visual_scale=0.28 amai_visual_scale=0.34 xiaoling_gaussian_blur=0.90 actor_ground_ratio=0.84 actor_feet_grounded=true dialogue_face_to_face=true continuous_scene_run=true continuous_scene_run_min_seconds=2.4 amai_scripted_run_sync=true amai_run_facing_right=true light_hover_walk=true light_mouse_exit_stop=true light_trigger_source=51 face_to_face=true heart_glow_at_amai=true heart_glow_chest_aligned=true heart_glow_warm_yellow=true actor_actions_from_story=true actor_screen_bounded=true ForestRun_entry_movement_source=121 ForestRun_source=122 ForestRun_ready=true Xiaoling_animation_v2=true Xiaoling_idle_frames=151 Xiaoling_run_start_frames=13 Xiaoling_run_frames=30 Amai_jump_animation=true Amai_jump_frames=77 ForestRun_segment02_roots=4 ForestRun_jump_each=true ForestRun_slide_each=true TextInput_source=157 TextInput_ready=true TextInput_interference=true TextInput_opencv_fan=true TextInput_raw_text_logged=false LakeJump_source=193 LakeJump_ready=true LakeJump_placeholder=false StarJar_source=238 StarJar_ready=true module_subviewport_isolated=true module_logical_size=1280x720 module_native_render=true module_aspect_keep=true module_resize_sync=true" % [
+		var message := "FULL_FLOW_PASS events=%d scenes=%d modules=%d endpoint=%s narration_lines=%d dialogue_lines=%d psychology_lines=%d narration_queue_max=%d dialogue_queue_max=%d narration_layout_samples=%d dialogue_layout_samples=%d choice_layout_samples=%d split_ui=true narration_top_2_20=true narration_centered=true narration_direct_reveal=true dialogue_progressive_reveal=true psychology_in_dialogue=true psychology_parentheses=true dialogue_left_aligned=true dialogue_body_top=true continue_button_centered=true choices_centered=true shortcut_hint=true shake_start_source=354 shake_peak_source=365 shake_end_source=366 shake_progressive=true shake_reset=true dev_docx_jump=true docx_jump_all_sources_resolvable=true docx_source_lock=53ba079 dev_jump_logs_preserved=true font=Times_New_Roman cjk_fallback=SimSun persistent_story_stage=true continuous_forest_long_scene=true forest_source_size=9342x1440 waterfall_source_size=2560x1440 continuous_world_source_size=11902x1440 waterfall_appended=true waterfall_layers=back_front_particles waterfall_slope_up_right=true waterfall_slope_gentle=true waterfall_stop_before_fall=true dev_jump_125_restores_waterfall_approach=true scene_hard_cut=false forest_scroll_right=true forest_art_visible=true forest_single_darkness_layer=true actor_between_back_and_front=true actor_between_waterfall_layers=true xiaoling_visual_scale=0.28 amai_visual_scale=0.34 actor_ground_ratio=0.84 actor_feet_grounded=true dialogue_face_to_face=true continuous_scene_run=true continuous_scene_run_min_seconds=2.4 amai_scripted_run_sync=true amai_run_facing_right=true light_hover_walk=true light_mouse_exit_stop=true light_trigger_source=51 face_to_face=true heart_glow_at_amai=true heart_glow_chest_aligned=true heart_glow_warm_yellow=true actor_actions_from_story=true actor_screen_bounded=true ForestRun_entry_movement_source=121 ForestRun_source=122 ForestRun_ready=true Xiaoling_animation_v2=true Xiaoling_idle_frames=151 Xiaoling_run_start_frames=13 Xiaoling_run_frames=30 Amai_jump_animation=true Amai_jump_frames=77 ForestRun_segment02_roots=4 ForestRun_jump_each=true ForestRun_slide_each=true TextInput_source=157 TextInput_ready=true TextInput_interference=true TextInput_opencv_fan=true TextInput_raw_text_logged=false LakeJump_source=193 LakeJump_ready=true LakeJump_placeholder=false StarJar_source=238 StarJar_ready=true module_subviewport_isolated=true module_logical_size=1280x720 module_native_render=true module_aspect_keep=true module_resize_sync=true" % [
 			_events.size(),
 			_visited_scenes.size(),
 			_visited_modules.size(),
@@ -2374,6 +2476,25 @@ func _finish_verification(success: bool, issues: PackedStringArray) -> void:
 			_dialogue_ui.get_presented_line_count(),
 			_dialogue_ui.get_choice_layout_sample_count(),
 		]
+		if _story_stage != null:
+			# 模糊不再是常量，PASS 串直接读舞台的实际状态，而不是写死 0.90。
+			var blur_snapshot: Dictionary = _story_stage.get_debug_snapshot()
+			message += " gaussian_blur_stage_source=%d gaussian_blur_stage_late=%s xiaoling_gaussian_blur=%.2f amai_gaussian_blur=%.2f xiaoling_gaussian_blur_before_156=%.2f amai_gaussian_blur_before_156=%.2f" % [
+				int(blur_snapshot.get("gaussian_blur_stage_source", 0)),
+				str(bool(blur_snapshot.get("gaussian_blur_stage_late", false))),
+				float(blur_snapshot.get("xiaoling_gaussian_blur_strength", -1.0)),
+				float(blur_snapshot.get("amai_gaussian_blur_strength", -1.0)),
+				StoryStageScript.XIAOLING_GAUSSIAN_BLUR_STRENGTH,
+				StoryStageScript.AMAI_GAUSSIAN_BLUR_STRENGTH,
+			]
+		if _inner_objects_stage != null:
+			var inner_snapshot: Dictionary = _inner_objects_stage.get_debug_snapshot()
+			message += " inner_objects_source=309 inner_objects_count=%d inner_objects=%s inner_objects_backdrop=lake_talk_blurred inner_objects_reveal=fade_in inner_objects_fan_source=%d inner_objects_fan_runtime=prototype2_b198616 inner_objects_cleared=%d inner_objects_blackout_then_lake_talk=true" % [
+				int(inner_snapshot.get("inner_object_count", 0)),
+				",".join(inner_snapshot.get("inner_object_name_tags", PackedStringArray())),
+				int(inner_snapshot.get("inner_fan_arm_source", 0)),
+				int(inner_snapshot.get("inner_objects_cleared_count", 0)),
+			]
 		message += " dialogue_reveal_speed=1.25x heart_glow_source_offset=579 lake_stage=true lake_source_size=6117x1440 lake_layers=back_front_particles"
 		message += " cutscene_touch_chest=%d cutscene_waterfall_below=%d cutscene_drowning=%d cutscene_lake_talk=%d cutscene_looped_backdrop=true cutscene_streamed=true cutscene_blur_fill=true" % [
 			int(_cutscene_plays.get("touch_chest", 0)),

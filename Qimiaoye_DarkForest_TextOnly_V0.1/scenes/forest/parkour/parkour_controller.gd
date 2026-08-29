@@ -622,7 +622,7 @@ func verify_contract() -> bool:
     var expected_route := PackedVector2Array([
         Vector2(2070.0, 584.0),
         Vector2(2122.0, 584.0),
-        Vector2(2538.0, 584.0),
+        Vector2(2538.0, 624.0),
         Vector2(2946.0, 584.0),
         Vector2(3371.0, 584.0),
         Vector2(3820.0, 584.0),

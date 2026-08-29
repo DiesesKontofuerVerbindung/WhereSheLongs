@@ -30,6 +30,12 @@ const ACTOR_MARGIN := 112.0
 const XIAOLING_VISUAL_SCALE := 0.28
 const AMAI_VISUAL_SCALE := 0.34
 const XIAOLING_GAUSSIAN_BLUR_STRENGTH := 0.90
+# DOCX 156 是"因为……"那一句：从这里开始小凌看清了一点，阿麦反而开始模糊。
+# 模糊强度从此是随剧情推进的状态，不再是常量，断言必须按阶段判断。
+const GAUSSIAN_BLUR_STAGE_SOURCE := 156
+const XIAOLING_GAUSSIAN_BLUR_LATE := 0.70
+const AMAI_GAUSSIAN_BLUR_STRENGTH := 0.0
+const AMAI_GAUSSIAN_BLUR_LATE := 0.30
 # 两套角色原图均以画布中心为 Sprite2D 原点；以下数值来自首帧非透明像素脚底。
 const XIAOLING_FOOT_FROM_CENTER := 558.0
 const AMAI_FOOT_FROM_CENTER := 545.0
@@ -101,6 +107,7 @@ var _manual_follow_drives_amai := false
 ## 锚定后按 _lake_root 的位移同步他的屏幕坐标，等价于把他放进湖面世界。
 var _lake_amai_anchored := false
 var _lake_amai_anchor_x := 0.0
+var _blur_stage_late := false
 var _last_continuous_transition := ""
 var _last_continuous_transition_duration := 0.0
 var _last_continuous_transition_ran_actors := false
@@ -210,7 +217,7 @@ func _build_characters() -> void:
 	_xiaoling_visual.scale = Vector2.ONE * XIAOLING_VISUAL_SCALE
 	_xiaoling_visual.position = Vector2(0.0, -XIAOLING_FOOT_FROM_CENTER * XIAOLING_VISUAL_SCALE)
 	_xiaoling_visual.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	_xiaoling_visual.material = _make_xiaoling_blur_material()
+	_xiaoling_visual.material = _make_blur_material(XIAOLING_GAUSSIAN_BLUR_STRENGTH)
 	_xiaoling.add_child(_xiaoling_visual)
 
 	_amai = CharacterBody2D.new()
@@ -223,11 +230,13 @@ func _build_characters() -> void:
 	_amai_visual.scale = Vector2.ONE * AMAI_VISUAL_SCALE
 	_amai_visual.position = Vector2(0.0, -AMAI_FOOT_FROM_CENTER * AMAI_VISUAL_SCALE)
 	_amai_visual.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	# 阿麦必须持有自己的一份 ShaderMaterial，两人共用实例会让模糊互相串改。
+	_amai_visual.material = _make_blur_material(AMAI_GAUSSIAN_BLUR_STRENGTH)
 	_amai.add_child(_amai_visual)
 	_amai.visible = false
 
 
-func _make_xiaoling_blur_material() -> ShaderMaterial:
+func _make_blur_material(strength: float) -> ShaderMaterial:
 	var blur_shader := Shader.new()
 	blur_shader.code = """
 shader_type canvas_item;
@@ -250,8 +259,42 @@ void fragment() {
 """
 	var blur_material := ShaderMaterial.new()
 	blur_material.shader = blur_shader
-	blur_material.set_shader_parameter("blur_strength", XIAOLING_GAUSSIAN_BLUR_STRENGTH)
+	blur_material.set_shader_parameter("blur_strength", strength)
 	return blur_material
+
+
+## 模糊按 DOCX 行号分段：156 之前 小凌 0.90 / 阿麦 0，156 起 0.70 / 0.30。
+func sync_blur_for_source(source: int) -> void:
+	set_blur_stage(source >= GAUSSIAN_BLUR_STAGE_SOURCE)
+
+
+func set_blur_stage(late: bool) -> void:
+	_blur_stage_late = late
+	_apply_blur_strength(_xiaoling_visual, expected_blur_strength(_xiaoling_visual))
+	_apply_blur_strength(_amai_visual, expected_blur_strength(_amai_visual))
+
+
+func expected_blur_strength(visual: AnimatedSprite2D) -> float:
+	if visual == _amai_visual:
+		return AMAI_GAUSSIAN_BLUR_LATE if _blur_stage_late else AMAI_GAUSSIAN_BLUR_STRENGTH
+	return XIAOLING_GAUSSIAN_BLUR_LATE if _blur_stage_late else XIAOLING_GAUSSIAN_BLUR_STRENGTH
+
+
+func _apply_blur_strength(visual: AnimatedSprite2D, strength: float) -> void:
+	if visual == null:
+		return
+	var blur_material := visual.material as ShaderMaterial
+	if blur_material != null:
+		blur_material.set_shader_parameter("blur_strength", strength)
+
+
+func current_blur_strength(visual: AnimatedSprite2D) -> float:
+	if visual == null:
+		return -1.0
+	var blur_material := visual.material as ShaderMaterial
+	if blur_material == null:
+		return -1.0
+	return float(blur_material.get_shader_parameter("blur_strength"))
 
 
 func _build_light_hover_area() -> void:
@@ -619,6 +662,8 @@ func play_action(action_id: String, verify_mode: bool) -> void:
 		"xiaoling_run_follow":
 			var tween := _start_actor_motion(_xiaoling, 0.59, 300.0, verify_mode)
 			await tween.finished
+			# DOCX 120 追赶过程朝右是对的；停下之后两人要面对面。
+			_face_actors_toward_each_other()
 		"xiaoling_look_back", "xiaoling_look_left":
 			_set_facing(_xiaoling_visual, false)
 		"amai_turn_back", "amai_look_xiaoling":
@@ -628,7 +673,8 @@ func play_action(action_id: String, verify_mode: bool) -> void:
 		"lake_approach":
 			var tween := _start_actor_motion(_amai, LAKE_AMAI_SHORE_RATIO, 150.0, verify_mode)
 			await tween.finished
-			_set_facing(_amai_visual, true)
+			# DOCX 167 走到湖岸后回身对着小凌（朝左），不再背对她面湖。
+			_set_facing(_amai_visual, false)
 			# 走到位之后他就不再自己移动了，从这一刻起交给湖面卷动带。
 			_anchor_amai_to_lake()
 		"amai_turn_lake":
@@ -645,8 +691,12 @@ func play_line_cue(cue: String, verify_mode: bool) -> void:
 			var target_x := minf(size.x * 0.90, _amai.position.x + size.x * 0.10)
 			_start_actor_motion_to_x(_amai, target_x, 135.0, verify_mode)
 		"both_walk_to_fork":
-			_start_actor_motion(_amai, 0.84, 130.0, verify_mode)
-			_start_actor_motion(_xiaoling, 0.68, 125.0, verify_mode)
+			# DOCX 88 是旁白，不走 prepare_dialogue。小凌这一段是往左退回 0.68，
+			# 位移方向会把她转成朝左、背对阿麦，所以走完必须自己转回来。
+			var amai_tween := _start_actor_motion(_amai, 0.84, 130.0, verify_mode)
+			var xiaoling_tween := _start_actor_motion(_xiaoling, 0.68, 125.0, verify_mode)
+			amai_tween.finished.connect(_face_actors_toward_each_other)
+			xiaoling_tween.finished.connect(_face_actors_toward_each_other)
 		"amai_run_ahead":
 			_start_actor_motion(_amai, 0.90, 355.0, verify_mode)
 		_:
@@ -792,6 +842,8 @@ func restore_for_source(source: int, scene_name: String) -> void:
 	visible = uses_art_stage(scene_name)
 	_sync_active_world(scene_name)
 	_cancel_all_actor_tweens()
+	# 模糊是角色材质状态，与舞台是否可见无关，必须在提前 return 之前同步。
+	sync_blur_for_source(source)
 	if not visible:
 		return
 	if uses_lake_stage(scene_name):
@@ -799,7 +851,7 @@ func restore_for_source(source: int, scene_name: String) -> void:
 		if source >= 167:
 			_set_actor_ratio(_amai, LAKE_AMAI_SHORE_RATIO)
 			_anchor_amai_to_lake()
-		if source >= 173:
+			# 与 lake_approach 一致：167 走到岸边就已经转向小凌。
 			_set_facing(_amai_visual, false)
 		queue_redraw()
 		return
@@ -829,16 +881,27 @@ func restore_for_source(source: int, scene_name: String) -> void:
 		set_darkness_level(0.80 if source <= 56 else 0.20)
 		_heart_glow_visible = source >= 53
 	elif source < 89:
-		_set_actor_ratio(_xiaoling, 0.57 if source < 84 else 0.72)
-		_set_actor_ratio(_amai, 0.84 if source < 77 else 0.90)
-		_set_facing(_xiaoling_visual, true)
-		_set_facing(_amai_visual, true)
+		if source >= 88:
+			# DOCX 88 两人走到岔路口后面对面。
+			_set_actor_ratio(_xiaoling, 0.68)
+			_set_actor_ratio(_amai, 0.84)
+			_face_actors_toward_each_other()
+		else:
+			_set_actor_ratio(_xiaoling, 0.57 if source < 84 else 0.72)
+			_set_actor_ratio(_amai, 0.84 if source < 77 else 0.90)
+			_set_facing(_xiaoling_visual, true)
+			_set_facing(_amai_visual, true)
 		set_darkness_level(0.12)
 	elif source < 117:
 		_set_actor_ratio(_xiaoling, 0.62)
 		_set_actor_ratio(_amai, 0.78)
 		_set_facing(_xiaoling_visual, true)
 		_set_facing(_amai_visual, false)
+	elif source == 120:
+		# DOCX 120 小凌跑到 0.59 停下，两人面对面。
+		_set_actor_ratio(_xiaoling, 0.59)
+		_set_actor_ratio(_amai, 0.90)
+		_face_actors_toward_each_other()
 	else:
 		_set_actor_ratio(_xiaoling, 0.78 if source >= 120 else 0.62)
 		_set_actor_ratio(_amai, 0.90)
@@ -996,8 +1059,13 @@ func verify_contract() -> bool:
 		return false
 	if not is_equal_approx(_xiaoling_visual.scale.x, XIAOLING_VISUAL_SCALE) or not is_equal_approx(_amai_visual.scale.x, AMAI_VISUAL_SCALE):
 		return false
-	var blur_material := _xiaoling_visual.material as ShaderMaterial
-	if blur_material == null or not is_equal_approx(float(blur_material.get_shader_parameter("blur_strength")), XIAOLING_GAUSSIAN_BLUR_STRENGTH):
+	# 模糊按 156 分段，断言比对的是"当前阶段应有的值"，不是固定常量。
+	# current_blur_strength 在没有 ShaderMaterial 时返回 -1.0，等价于同时检查材质存在。
+	for blur_visual in [_xiaoling_visual, _amai_visual]:
+		if not is_equal_approx(current_blur_strength(blur_visual), expected_blur_strength(blur_visual)):
+			return false
+	# 两人必须各自持有独立实例，否则改一个另一个跟着变。
+	if _xiaoling_visual.material == _amai_visual.material:
 		return false
 	if absf(_actor_feet_y(_xiaoling, _xiaoling_visual, XIAOLING_FOOT_FROM_CENTER) - _xiaoling.position.y) > 0.5:
 		return false
@@ -1057,7 +1125,10 @@ func get_debug_snapshot() -> Dictionary:
 		"xiaoling_facing_right": not _xiaoling_visual.flip_h if _xiaoling_visual != null else false,
 		"xiaoling_z_index": _xiaoling.z_index if _xiaoling != null else 0,
 		"xiaoling_visual_scale": _xiaoling_visual.scale.x if _xiaoling_visual != null else 0.0,
-		"xiaoling_gaussian_blur_strength": XIAOLING_GAUSSIAN_BLUR_STRENGTH,
+		"xiaoling_gaussian_blur_strength": current_blur_strength(_xiaoling_visual),
+		"amai_gaussian_blur_strength": current_blur_strength(_amai_visual),
+		"gaussian_blur_stage_late": _blur_stage_late,
+		"gaussian_blur_stage_source": GAUSSIAN_BLUR_STAGE_SOURCE,
 		"xiaoling_feet_y": _actor_feet_y(_xiaoling, _xiaoling_visual, XIAOLING_FOOT_FROM_CENTER),
 		"amai_x": _amai.position.x if _amai != null else 0.0,
 		"amai_visible": _amai.visible if _amai != null else false,

@@ -297,6 +297,7 @@ static func get_events() -> Array[Dictionary]:
 		{"type": "line", "source": 313, "speaker": "小凌", "text": "然后……"},
 		{"type": "wait", "source": 314, "seconds": 2.5, "status": "按原文停留 2.5 秒。"},
 		{"type": "line", "source": 315, "speaker": "女孩", "text": "然后慢慢忘记自己是谁。"},
+		{"type": "interaction", "source": 315, "id": "inner_objects_fan", "prompt": "张开手掌，水平往返挥扫，把这些挥开"},
 		{"type": "line", "source": 316, "speaker": "旁白", "text": "小凌眼眶突然红了。"},
 		{"type": "line", "source": 317, "speaker": "旁白", "text": "她看着女孩。"},
 		{"type": "line", "source": 318, "speaker": "小凌", "text": "……你也会这样想吗？"},

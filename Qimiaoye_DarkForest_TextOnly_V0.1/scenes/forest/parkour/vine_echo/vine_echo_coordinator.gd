@@ -217,15 +217,23 @@ func debug_buffer_action(action: int) -> bool:
 func retry_locked_player_action(action: int) -> bool:
     if not _running or not action_locked or not _action_executed:
         return false
-    if action != _locked_player_action:
+    if action != RunnerAction.UP and action != RunnerAction.DOWN:
         return false
     if player.is_on_floor():
         player_runner.perform_action(action)
         _locked_retry_pending = RunnerAction.NONE
-        _trace_event("RETRY_EXECUTED", "gate=%d action=%s" % [current_gate_index + 1, action_name(action)])
+        _trace_event("RETRY_EXECUTED", "gate=%d action=%s locked_history=%s" % [
+            current_gate_index + 1,
+            action_name(action),
+            action_name(_locked_player_action),
+        ])
     else:
         _locked_retry_pending = action
-        _trace_event("RETRY_LATCHED", "gate=%d action=%s reason=airborne" % [current_gate_index + 1, action_name(action)])
+        _trace_event("RETRY_LATCHED", "gate=%d action=%s locked_history=%s reason=airborne" % [
+            current_gate_index + 1,
+            action_name(action),
+            action_name(_locked_player_action),
+        ])
     _update_debug_label()
     return true
 
@@ -660,7 +668,7 @@ func _update_debug_label() -> void:
     elif action_locked and not _action_executed:
         decision_text = "LOCKED %s · Move to action line" % action_name(_locked_player_action)
     elif action_locked:
-        decision_text = "LOCKED %s · Same key retries / move right" % action_name(_locked_player_action)
+        decision_text = "HISTORY %s · Space/S may retry either route" % action_name(_locked_player_action)
     var echo_text := "CROSSING" if _echo_crossing_gate else "WAITING AT GATE"
     var collision_text := "none"
     if player.get_slide_collision_count() > 0:

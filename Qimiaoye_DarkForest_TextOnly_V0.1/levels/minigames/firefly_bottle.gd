@@ -2,12 +2,11 @@ extends Control
 
 signal finished(result)
 
-const DialogueLayout := preload("res://systems/dialogue_layout.gd")
-const VIEW_SIZE := DialogueLayout.VIEWPORT
+const VIEW_SIZE := Vector2(1280.0, 720.0)
 const FIREFLY_COUNT := 5
 const HAND_BOTTLE_PATH := "res://assets/scene/hand_bottle_lowpoly.jpg"
 
-const SPRITE_WIDTH := 620.0
+## Texture UV of jar center / interior (relative to the hand-bottle image).
 const JAR_CENTER_NORM := Vector2(0.30, 0.46)
 const JAR_INTERIOR_NORM := Rect2(0.22, 0.24, 0.17, 0.38)
 
@@ -19,6 +18,10 @@ var _captured_total := 0
 var _busy := false
 var _hint: Label
 var _bottle_interior := Rect2()
+var _hand_sprite: Sprite2D
+var _hand_tex: Texture2D
+var _layout_ready := false
+var _was_dragging := false
 
 
 func setup(_scene_def: Dictionary) -> void:
@@ -27,9 +30,12 @@ func setup(_scene_def: Dictionary) -> void:
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# 与跑酷/跳石头一样，模块在主舞台中使用固定 1280×720 逻辑坐标；
+	# 外层 SubViewport + KEEP_ASPECT_CENTERED 负责窗口分辨率适配。
 	custom_minimum_size = VIEW_SIZE
 	clip_contents = true
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	resized.connect(_on_resized)
 
 	var backdrop := ColorRect.new()
 	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -37,28 +43,76 @@ func _ready() -> void:
 	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(backdrop)
 
-	_add_hand_bottle_sprite()
-	_spawn_fireflies()
-	_create_hint()
-
-
-func _add_hand_bottle_sprite() -> void:
-	var tex: Texture2D = load(HAND_BOTTLE_PATH)
-	if tex == null:
+	_hand_tex = load(HAND_BOTTLE_PATH)
+	if _hand_tex == null:
 		push_error("Missing hand bottle texture: %s" % HAND_BOTTLE_PATH)
+	else:
+		_hand_sprite = Sprite2D.new()
+		_hand_sprite.texture = _hand_tex
+		_hand_sprite.centered = false
+		add_child(_hand_sprite)
+
+	_hint = Label.new()
+	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hint.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	_hint.text = "把星光拖入瓶子内"
+	add_child(_hint)
+
+	for i in range(FIREFLY_COUNT):
+		var firefly := _LowPolyStar.new()
+		firefly.mouse_filter = Control.MOUSE_FILTER_STOP
+		firefly.gui_input.connect(_on_firefly_gui_input.bind(i))
+		add_child(firefly)
+		_fireflies.append(firefly)
+		_home_positions.append(Vector2.ZERO)
+
+	# Defer first layout until Control has a real size.
+	call_deferred("_apply_responsive_layout")
+
+
+func _on_resized() -> void:
+	if _layout_ready and _dragging_idx < 0 and not _busy:
+		_apply_responsive_layout()
+
+
+func _view_size() -> Vector2:
+	return VIEW_SIZE
+
+
+func _apply_responsive_layout() -> void:
+	var view := _view_size()
+	var scale_factor := minf(view.x / VIEW_SIZE.x, view.y / VIEW_SIZE.y)
+	scale_factor = clampf(scale_factor, 0.45, 2.5)
+
+	_layout_hint(view, scale_factor)
+	_layout_hand_bottle(view)
+	_layout_fireflies(view, scale_factor)
+	_layout_ready = true
+
+
+func _layout_hint(view: Vector2, scale_factor: float) -> void:
+	if _hint == null:
+		return
+	_hint.offset_top = view.y * 0.035
+	_hint.offset_bottom = view.y * 0.035 + maxf(28.0, 36.0 * scale_factor)
+	_hint.add_theme_font_size_override("font_size", int(round(20.0 * scale_factor)))
+
+
+func _layout_hand_bottle(view: Vector2) -> void:
+	if _hand_sprite == null or _hand_tex == null:
 		return
 
-	var tex_size := Vector2(tex.get_width(), tex.get_height())
-	var scale := SPRITE_WIDTH / tex_size.x
-	var jar_center_on_screen := Vector2(VIEW_SIZE.x * 0.5, VIEW_SIZE.y * 0.56)
+	var tex_size := Vector2(_hand_tex.get_width(), _hand_tex.get_height())
+	# 保留原版 1280×720 下约 620px 的图片宽度，再按窗口等比缩放；
+	# 不能按瓶内区域反推整张手部图，否则手部会被放大到铺满画面。
+	var viewport_scale := minf(view.x / 1280.0, view.y / 720.0)
+	var target_sprite_width := 620.0 * viewport_scale
+	var scale := target_sprite_width / tex_size.x
+	var jar_center_on_screen := Vector2(view.x * 0.5, view.y * 0.58)
 	var sprite_pos := jar_center_on_screen - JAR_CENTER_NORM * tex_size * scale
 
-	var sprite := Sprite2D.new()
-	sprite.texture = tex
-	sprite.centered = false
-	sprite.position = sprite_pos
-	sprite.scale = Vector2(scale, scale)
-	add_child(sprite)
+	_hand_sprite.position = sprite_pos
+	_hand_sprite.scale = Vector2(scale, scale)
 
 	_bottle_interior = Rect2(
 		sprite_pos + JAR_INTERIOR_NORM.position * tex_size * scale,
@@ -66,34 +120,25 @@ func _add_hand_bottle_sprite() -> void:
 	)
 
 
-func _create_hint() -> void:
-	_hint = Label.new()
-	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_hint.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	_hint.offset_top = 20.0
-	_hint.offset_bottom = 56.0
-	_hint.add_theme_font_size_override("font_size", 20)
-	_hint.text = "把星光拖入瓶子内"
-	add_child(_hint)
+func _layout_fireflies(view: Vector2, scale_factor: float) -> void:
+	var star_size := clampf(64.0 * scale_factor, 36.0, 96.0)
+	var margin_x := view.x * 0.08
+	var spread := maxf(40.0, view.x - margin_x * 2.0)
+	var base_y := view.y * 0.12
 
-
-func _spawn_fireflies() -> void:
-	var spread := VIEW_SIZE.x - 180.0
-	for i in range(FIREFLY_COUNT):
-		var firefly := _LowPolyStar.new()
-		firefly.custom_minimum_size = Vector2(64, 64)
-		firefly.size = Vector2(64, 64)
-		firefly.mouse_filter = Control.MOUSE_FILTER_STOP
+	for i in range(_fireflies.size()):
+		var firefly := _fireflies[i]
+		firefly.custom_minimum_size = Vector2(star_size, star_size)
+		firefly.size = Vector2(star_size, star_size)
+		firefly.set_star_scale(scale_factor)
+		var t := 0.0 if FIREFLY_COUNT <= 1 else float(i) / float(FIREFLY_COUNT - 1)
 		var home := Vector2(
-			90.0 + spread * float(i) / float(FIREFLY_COUNT - 1),
-			72.0 + sin(float(i) * 1.35) * 22.0
+			margin_x + spread * t,
+			base_y + sin(float(i) * 1.35) * (view.y * 0.04)
 		)
-		firefly.position = home - firefly.size * 0.5
-		firefly.gui_input.connect(_on_firefly_gui_input.bind(i))
-		add_child(firefly)
-		move_child(firefly, -1)
-		_fireflies.append(firefly)
-		_home_positions.append(firefly.position)
+		var pos := home - firefly.size * 0.5
+		firefly.position = pos
+		_home_positions[i] = pos
 
 
 func _on_firefly_gui_input(event: InputEvent, index: int) -> void:
@@ -102,6 +147,7 @@ func _on_firefly_gui_input(event: InputEvent, index: int) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
 			_dragging_idx = index
+			_was_dragging = true
 			_drag_offset = _fireflies[index].global_position - get_global_mouse_position()
 			_fireflies[index].z_index = 10
 		else:
@@ -109,6 +155,16 @@ func _on_firefly_gui_input(event: InputEvent, index: int) -> void:
 				_try_capture(index)
 				_dragging_idx = -1
 				_fireflies[index].z_index = 1
+	elif event is InputEventScreenTouch:
+		if event.pressed:
+			_dragging_idx = index
+			_was_dragging = true
+			_drag_offset = _fireflies[index].global_position - event.position
+			_fireflies[index].z_index = 10
+		elif _dragging_idx == index:
+			_try_capture(index)
+			_dragging_idx = -1
+			_fireflies[index].z_index = 1
 
 
 func _process(_delta: float) -> void:
@@ -135,7 +191,7 @@ func _try_capture(index: int) -> void:
 	fly.z_index = 2
 	var target := Vector2(
 		_bottle_interior.position.x + _bottle_interior.size.x * 0.5,
-		_bottle_interior.end.y - 30.0
+		_bottle_interior.end.y - fly.size.y * 0.45
 	) - fly.size * 0.5
 	var tween := create_tween()
 	tween.set_trans(Tween.TRANS_QUAD)
@@ -156,6 +212,11 @@ func _try_capture(index: int) -> void:
 
 class _LowPolyStar extends Control:
 	var _phase := randf() * TAU
+	var _draw_scale := 1.0
+
+	func set_star_scale(scale_factor: float) -> void:
+		_draw_scale = clampf(scale_factor, 0.45, 2.5)
+		queue_redraw()
 
 	func _ready() -> void:
 		_phase = randf() * TAU
@@ -168,6 +229,7 @@ class _LowPolyStar extends Control:
 	func _draw() -> void:
 		var pulse := 0.52 + sin(_phase) * 0.38
 		var center := size * 0.5
+		var s := _draw_scale
 		var glow := Color(1.0, 0.90, 0.42)
 
 		# Circular halos — soft concentric rings that pulse with twinkle.
@@ -178,15 +240,15 @@ class _LowPolyStar extends Control:
 			{"r": 22.0, "a": 0.16},
 			{"r": 16.0, "a": 0.22},
 		]:
-			draw_circle(center, layer.r, glow * Color(1, 1, 1, layer.a * pulse))
+			draw_circle(center, layer.r * s, glow * Color(1, 1, 1, layer.a * pulse))
 
 		for i in range(6):
 			var a0 := TAU * float(i) / 6.0
 			var a1 := TAU * float(i + 1) / 6.0
 			var tri := PackedVector2Array([
 				center,
-				center + Vector2(cos(a0), sin(a0)) * 24.0,
-				center + Vector2(cos(a1), sin(a1)) * 24.0,
+				center + Vector2(cos(a0), sin(a0)) * 24.0 * s,
+				center + Vector2(cos(a1), sin(a1)) * 24.0 * s,
 			])
 			draw_colored_polygon(tri, glow * Color(1, 1, 1, 0.14 * pulse))
 
@@ -207,7 +269,7 @@ class _LowPolyStar extends Control:
 		for i in range(facets.size()):
 			var poly := PackedVector2Array()
 			for p in facets[i]:
-				poly.append(center + p)
+				poly.append(center + p * s)
 			draw_colored_polygon(poly, colors[i] * Color(1, 1, 1, pulse))
 			draw_polyline(
 				poly + PackedVector2Array([poly[0]]),
@@ -215,4 +277,4 @@ class _LowPolyStar extends Control:
 				1.0
 			)
 
-		draw_circle(center, 3.5, Color(1.0, 0.96, 0.65, 0.85 * pulse))
+		draw_circle(center, 3.5 * s, Color(1.0, 0.96, 0.65, 0.85 * pulse))
