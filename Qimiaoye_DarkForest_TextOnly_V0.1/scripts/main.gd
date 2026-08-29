@@ -66,6 +66,7 @@ const ALLOWED_MODULE_IMAGE_ROOTS := [
 	"res://assets/inner_objects/",
 	"res://assets/wedding/",
 	"res://addons/hand_checkbox_gesture/assets/",
+	"res://assets/opening/",
 ]
 
 var _events: Array[Dictionary] = []
