@@ -6,6 +6,7 @@ const DialogueLoader := preload("res://data/dialogue_loader.gd")
 signal present_dialogue(scene_def)
 signal present_level(scene_def)
 signal present_cg(scene_def)
+signal present_chapter3(scene_def)
 signal present_title
 signal present_game_over(payload: Dictionary)
 signal fade_requested(fade_in: bool)
@@ -46,6 +47,8 @@ func go_to(scene_id: String) -> void:
 			present_level.emit(scene_def)
 		"cg":
 			present_cg.emit(scene_def)
+		"chapter3":
+			present_chapter3.emit(scene_def)
 		_:
 			push_error("Unknown scene type for %s" % scene_id)
 

@@ -31,6 +31,7 @@ func _ready() -> void:
 	SceneManager.present_dialogue.connect(_on_present_dialogue)
 	SceneManager.present_level.connect(_on_present_level)
 	SceneManager.present_cg.connect(_on_present_cg)
+	SceneManager.present_chapter3.connect(_on_present_chapter3)
 	SceneManager.present_title.connect(_on_present_title)
 	SceneManager.present_game_over.connect(_on_present_game_over)
 	_transition = TransitionScript.new()
@@ -147,6 +148,24 @@ func _on_present_cg(scene_def: Dictionary) -> void:
 	def["lines"] = preload("res://data/dialogue_loader.gd").resolve_lines({"dialogue_id": dialogue_id})
 	def["choices"] = preload("res://data/dialogue_loader.gd").resolve_choices({"dialogue_id": dialogue_id})
 	_on_present_dialogue(def)
+
+
+func _on_present_chapter3(scene_def: Dictionary) -> void:
+	_hide_menu()
+	_clear_content()
+	var path := str(scene_def.get("packed_scene", ""))
+	if path.is_empty() or not ResourceLoader.exists(path):
+		push_error("Chapter3 scene missing: %s" % path)
+		return
+	var packed: PackedScene = load(path)
+	var chapter: Node = packed.instantiate()
+	_content.add_child(chapter)
+	_active_level = chapter
+	# Integrated mode: keep control in the main game after the chapter ends.
+	if chapter.has_method("set_integrated"):
+		chapter.call("set_integrated", true)
+	if chapter.has_signal("chapter_finished"):
+		chapter.chapter_finished.connect(_on_level_finished, CONNECT_ONE_SHOT)
 
 
 func _on_level_finished(result: Dictionary) -> void:

@@ -132,8 +132,15 @@ const SCENES := {
 		"type": "cg",
 		"cg_id": "mystery_girl_save",
 		"dialogue_id": "part4_mystery_girl",
-		"on_complete": "demo_end",
+		"on_complete": "chapter3_ceremony",
 		"effects": {"vars": {"current_part": "part_4"}},
+	},
+	"chapter3_ceremony": {
+		"id": "chapter3_ceremony",
+		"type": "chapter3",
+		"title": "章节三 · 典礼上的选择",
+		"packed_scene": "res://scenes/chapter3/chapter3.tscn",
+		"on_complete": "demo_end",
 	},
 	"demo_end": {
 		"id": "demo_end",

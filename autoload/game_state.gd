@@ -27,6 +27,11 @@ var level_progress: Dictionary = {}
 var quests: Dictionary = {}
 var variables: Dictionary = {}
 
+# Chapter 3 ending tracking (see unlock_ending / _best_ending_id).
+var unlocked_endings: Array[String] = []
+var last_ending: String = ""
+var best_ending: String = ""
+
 var checkpoint: Dictionary = {
 	"scene_id": "",
 	"map_id": "",
@@ -50,6 +55,9 @@ func reset() -> void:
 	level_progress = {}
 	quests = {}
 	variables = {}
+	unlocked_endings = []
+	last_ending = ""
+	best_ending = ""
 	checkpoint = {"scene_id": "", "map_id": "", "position": Vector2.ZERO, "part": ""}
 	changed.emit()
 
@@ -154,6 +162,32 @@ func set_checkpoint(scene_id: String, map_id: String = "", position: Vector2 = V
 	changed.emit()
 
 
+## Record a chapter ending as unlocked. Best-endings follow the official
+## chapter-3 recommendation order C > A > B (matches the standalone project).
+func unlock_ending(ending_id: String) -> void:
+	last_ending = ending_id
+	if not ending_id in unlocked_endings:
+		unlocked_endings.append(ending_id)
+	best_ending = _best_ending_id()
+	changed.emit()
+
+
+func is_unlocked(ending_id: String) -> bool:
+	return ending_id in unlocked_endings
+
+
+func ending_count() -> int:
+	return unlocked_endings.size()
+
+
+func _best_ending_id() -> String:
+	# 最佳结局排序（官方推荐）：C > A > B。
+	for candidate in ["C", "A", "B"]:
+		if candidate in unlocked_endings:
+			return candidate
+	return ""
+
+
 func to_dict() -> Dictionary:
 	return {
 		"version": VersionDB.STRING,
@@ -171,6 +205,9 @@ func to_dict() -> Dictionary:
 		"level_progress": level_progress.duplicate(true),
 		"quests": quests.duplicate(true),
 		"variables": variables.duplicate(true),
+		"unlocked_endings": unlocked_endings.duplicate(true),
+		"last_ending": last_ending,
+		"best_ending": best_ending,
 		"checkpoint": {
 			"scene_id": checkpoint.get("scene_id", ""),
 			"map_id": checkpoint.get("map_id", ""),
@@ -195,6 +232,13 @@ func from_dict(data: Dictionary) -> void:
 	level_progress = data.get("level_progress", {})
 	quests = data.get("quests", {})
 	variables = data.get("variables", {})
+	var raw_endings: Variant = data.get("unlocked_endings", [])
+	if raw_endings is Array:
+		unlocked_endings.assign(raw_endings as Array)
+	else:
+		unlocked_endings.clear()
+	last_ending = str(data.get("last_ending", ""))
+	best_ending = str(data.get("best_ending", ""))
 	var cp: Dictionary = data.get("checkpoint", {})
 	var pos: Dictionary = cp.get("position", {})
 	checkpoint = {
