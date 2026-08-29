@@ -6,11 +6,19 @@ signal choice_selected(choice_id: String)
 signal line_presented(token: int)
 signal queue_idle
 
-const COLOR_PANEL := Color("10141de8")
-const COLOR_TEXT := Color("edf1f7")
-const COLOR_ACCENT := Color("8fd3ff")
+const COLOR_TEXT := Color("252931")
+const COLOR_ACCENT := Color("555b66")
+const DIALOGUE_BOX_PATH := "res://assets/ui/dialogue/dialogue_box.png"
+const NAME_PLATE_PATH := "res://assets/ui/dialogue/name_plate.png"
+const DIALOGUE_RECT := Rect2(110.0, 458.0, 1060.0, 218.0)
+const DIALOGUE_SOURCE_REGION := Rect2(110.0, 458.0, 1060.0, 218.0)
+const NAME_PLATE_SOURCE_REGION := Rect2(198.0, 422.0, 166.0, 82.0)
+const NAME_PLATE_LEFT_POSITION := Vector2(88.0, -36.0)
+const NAME_PLATE_RIGHT_POSITION := Vector2(810.0, -36.0)
+const NAME_PLATE_SIZE := Vector2(166.0, 82.0)
 const TextRevealProfile := preload("res://scripts/text_reveal_profile.gd")
 
+var _speaker_panel: PanelContainer
 var _speaker_label: Label
 var _body_label: Label
 var _continue_button: Button
@@ -26,10 +34,17 @@ var _presented_line_count := 0
 var _choice_layout_sample_count := 0
 var _choice_layout_violation_count := 0
 var _choice_layout_max_center_error := 0.0
+var _speaker_side := "left"
 
 
 func _ready() -> void:
 	_build_ui()
+
+
+func set_speaker_side(side: String) -> void:
+	_speaker_side = side if side in ["left", "right"] else "left"
+	if _speaker_panel != null:
+		_speaker_panel.position = NAME_PLATE_RIGHT_POSITION if _speaker_side == "right" else NAME_PLATE_LEFT_POSITION
 
 
 func present_line(speaker: String, text: String, instant := false) -> void:
@@ -69,6 +84,7 @@ func request_advance() -> void:
 
 
 func show_choice(prompt: String, options: Array) -> void:
+	set_speaker_side("left")
 	visible = true
 	_waiting_for_advance = false
 	_continue_button.visible = false
@@ -140,17 +156,22 @@ func get_choice_layout_max_center_error() -> float:
 
 
 func is_panel_centered() -> bool:
-	if not is_equal_approx(anchor_left + anchor_right, 1.0):
-		return false
-	if not is_equal_approx(offset_left + offset_right, 0.0):
-		return false
-	return true
+	return (
+		is_equal_approx(anchor_left, 0.0)
+		and is_equal_approx(anchor_right, 1.0)
+		and is_equal_approx(anchor_top, 1.0)
+		and is_equal_approx(anchor_bottom, 1.0)
+		and is_equal_approx(offset_left, DIALOGUE_RECT.position.x)
+		and is_equal_approx(offset_right, -(1280.0 - DIALOGUE_RECT.end.x))
+		and is_equal_approx(offset_top, -(720.0 - DIALOGUE_RECT.position.y))
+		and is_equal_approx(offset_bottom, -(720.0 - DIALOGUE_RECT.end.y))
+	)
 
 
 func is_text_left_aligned() -> bool:
 	if _speaker_label == null or _body_label == null or _continue_button == null:
 		return false
-	if _speaker_label.horizontal_alignment != HORIZONTAL_ALIGNMENT_LEFT:
+	if _speaker_label.horizontal_alignment != HORIZONTAL_ALIGNMENT_CENTER:
 		return false
 	return _body_label.horizontal_alignment == HORIZONTAL_ALIGNMENT_LEFT
 
@@ -199,35 +220,35 @@ func is_choice_group_centered() -> bool:
 
 func _build_ui() -> void:
 	set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	offset_left = 72
-	offset_right = -72
-	offset_top = -258
-	offset_bottom = -28
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = COLOR_PANEL
-	panel_style.border_color = Color(0.26, 0.34, 0.46, 0.78)
-	panel_style.set_border_width_all(1)
-	panel_style.set_corner_radius_all(10)
-	add_theme_stylebox_override("panel", panel_style)
+	offset_left = DIALOGUE_RECT.position.x
+	offset_right = -(1280.0 - DIALOGUE_RECT.end.x)
+	offset_top = -(720.0 - DIALOGUE_RECT.position.y)
+	offset_bottom = -(720.0 - DIALOGUE_RECT.end.y)
+	add_theme_stylebox_override("panel", _cropped_style(DIALOGUE_BOX_PATH, DIALOGUE_SOURCE_REGION))
 
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 24)
-	margin.add_theme_constant_override("margin_right", 24)
-	margin.add_theme_constant_override("margin_top", 18)
-	margin.add_theme_constant_override("margin_bottom", 18)
-	add_child(margin)
+	var canvas := Control.new()
+	canvas.name = "DialogueContent"
+	canvas.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(canvas)
 
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 10)
-	margin.add_child(col)
+	_speaker_panel = PanelContainer.new()
+	_speaker_panel.position = NAME_PLATE_LEFT_POSITION
+	_speaker_panel.size = NAME_PLATE_SIZE
+	_speaker_panel.add_theme_stylebox_override("panel", _cropped_style(NAME_PLATE_PATH, NAME_PLATE_SOURCE_REGION))
+	canvas.add_child(_speaker_panel)
 
 	_speaker_label = Label.new()
-	_speaker_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_speaker_label.add_theme_font_size_override("font_size", 21)
+	_speaker_label.custom_minimum_size = NAME_PLATE_SIZE
+	_speaker_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_speaker_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_speaker_label.add_theme_font_size_override("font_size", 22)
 	_speaker_label.add_theme_color_override("font_color", COLOR_ACCENT)
-	col.add_child(_speaker_label)
+	_speaker_panel.add_child(_speaker_label)
 
 	_body_label = Label.new()
+	_body_label.position = Vector2(96.0, 72.0)
+	_body_label.size = Vector2(900.0, 64.0)
 	_body_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_body_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	_body_label.add_theme_font_size_override("font_size", 22)
@@ -235,27 +256,38 @@ func _build_ui() -> void:
 	_body_label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
 	_body_label.custom_minimum_size.y = 64
 	_body_label.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	col.add_child(_body_label)
+	canvas.add_child(_body_label)
 
 	_choice_box = VBoxContainer.new()
+	_choice_box.position = Vector2(0.0, 118.0)
+	_choice_box.size = Vector2(1060.0, 92.0)
 	_choice_box.add_theme_constant_override("separation", 8)
 	_choice_box.visible = false
-	col.add_child(_choice_box)
-
-	var spacer := Control.new()
-	spacer.name = "DialogueBottomSpacer"
-	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	col.add_child(spacer)
+	canvas.add_child(_choice_box)
 
 	_continue_button = Button.new()
+	_continue_button.position = Vector2(370.0, 166.0)
+	_continue_button.size = Vector2(320.0, 40.0)
 	_continue_button.text = "继续"
 	_continue_button.custom_minimum_size = Vector2(320, 40)
 	_continue_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_continue_button.visible = false
 	_continue_button.pressed.connect(request_advance)
-	col.add_child(_continue_button)
+	canvas.add_child(_continue_button)
 	hide_dialogue()
+
+
+func _cropped_style(path: String, region: Rect2) -> StyleBoxTexture:
+	var atlas := AtlasTexture.new()
+	atlas.atlas = load(path) as Texture2D
+	atlas.region = region
+	var style := StyleBoxTexture.new()
+	style.texture = atlas
+	style.content_margin_left = 0.0
+	style.content_margin_top = 0.0
+	style.content_margin_right = 0.0
+	style.content_margin_bottom = 0.0
+	return style
 
 
 func _drain_line_queue() -> void:

@@ -11,6 +11,7 @@ const P2_PATH := "res://addons/hand_checkbox_gesture/assets/p2.png"
 const COLOR_HINT := Color(0.92, 0.90, 0.86, 1.0)
 const COLOR_STATUS := Color(0.75, 0.73, 0.70, 0.9)
 const HINT_SECONDS := 3.0
+const AUTO_DISMISS_SECONDS := 2.0
 
 var _done := false
 var _advance_requested := false
@@ -110,6 +111,11 @@ func run(verify_mode := false) -> void:
 	if OS.has_feature("web") or OS.has_feature("mobile"):
 		_status.text = "Checklist %s · 点击清单打勾" % _variant
 		_hint.text = "点击清单打勾（或按 Enter）"
+	elif AUTO_DISMISS_SECONDS > 0.0:
+		# 自动完成开关：仅在能启动摄像头的环境下生效，用于试玩/联调快速通过。
+		_status.text = "Checklist %s · 即将自动完成" % _variant
+		await get_tree().create_timer(AUTO_DISMISS_SECONDS).timeout
+		_complete("success")
 	else:
 		_start_camera()
 

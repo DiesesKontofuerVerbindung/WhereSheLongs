@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cac1hocsxo2bi"
-path="res://.godot/imported/小凌思羽窗边谈话-2.png-92c1d8e0f6c3f2bd4ade9694bb044a84.ctex"
+uid="uid://s1akym4mkln0"
+path="res://.godot/imported/name_plate.png-ef912a802e1be0be58f0318ea81e5778.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/backgrounds/小凌思羽窗边谈话-2.png"
-dest_files=["res://.godot/imported/小凌思羽窗边谈话-2.png-92c1d8e0f6c3f2bd4ade9694bb044a84.ctex"]
+source_file="res://assets/ui/dialogue/name_plate.png"
+dest_files=["res://.godot/imported/name_plate.png-ef912a802e1be0be58f0318ea81e5778.ctex"]
 
 [params]
 

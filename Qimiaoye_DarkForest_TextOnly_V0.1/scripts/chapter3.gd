@@ -9,18 +9,15 @@ const NarrationUIScript := preload("res://scripts/narration_ui.gd")
 const DialogueUIScript := preload("res://scripts/dialogue_ui.gd")
 const Chapter3DataScript := preload("res://scripts/chapter3_data.gd")
 const Chapter3StageScript := preload("res://scenes/chapter3/chapter3_stage.gd")
-const DevJumpPanelScript := preload("res://scripts/dev_jump_panel.gd")
-const WeddingDataScript := preload("res://scripts/wedding_data.gd")
 const MysticNightDataScript := preload("res://scripts/mystic_night_data.gd")
-const StoryDataScript := preload("res://scripts/story_data.gd")
-
-const WEDDING_PROLOGUE_SCENE := "res://scenes/wedding/wedding_prologue.tscn"
-const MYSTIC_NIGHT_SCENE := "res://scenes/mystic_night/mystic_night.tscn"
-const FOREST_MAIN_SCENE := "res://main.tscn"
+const DevJumpPanelScript := preload("res://scripts/dev_jump_panel.gd")
+const ChapterTransitionScript := preload("res://scripts/chapter_transition.gd")
+const UiTypographyScript := preload("res://scripts/ui_typography.gd")
 
 const CHAPTER_ID := "chapter3"
 const CHAPTER_SCENE := "res://scenes/chapter3/chapter3.tscn"
-const FONT_PRIMARY_NAME := "Times New Roman"
+const MYSTIC_NIGHT_SCENE := "res://scenes/mystic_night/mystic_night.tscn"
+const FONT_PRIMARY_NAME := "Uranus Pixel"
 const FONT_CJK_FALLBACK_NAME := "SimSun"
 
 signal chapter_finished
@@ -33,6 +30,9 @@ var _current_source := 0
 var _verify_mode := false
 var _choice_arg := ""
 var _endpoint_reached := false
+## 集成模式：作为主游戏场景的一部分运行，章节结束后不退出进程，
+## 而是由宿主（main.gd）接管 chapter_finished 信号继续推进主剧情。
+var _integrated := false
 ## 调试用：--trace 打印事件流水与看门狗，--auto 自动推进对话。
 var _trace_mode := false
 var _auto_mode := false
@@ -49,7 +49,8 @@ var _narration_ui
 var _dialogue_ui
 var _advance_hint: Label
 
-var _primary_font: SystemFont
+var _typography: UiTypographyScript
+var _primary_font: Font
 var _cjk_fallback_font: SystemFont
 
 
@@ -63,7 +64,7 @@ func _ready() -> void:
     _auto_mode = "--auto" in OS.get_cmdline_user_args() or "--auto" in OS.get_cmdline_args()
     _choice_arg = _parse_choice_arg()
     if _verify_mode:
-        Chapter3State.reset()
+        GameState.reset()
     _configure_typography()
     _build_ui()
     _events = Chapter3DataScript.build_events()
@@ -71,6 +72,12 @@ func _ready() -> void:
     _setup_dev_jump_chapters()
     _apply_pending_dev_jump()
     call_deferred("_run_events")
+
+
+## 集成模式开关：由宿主（main.gd）在实例化后调用。
+## 开启后章节结束时只发 chapter_finished 信号，不调用 get_tree().quit()。
+func set_integrated(enabled: bool) -> void:
+    _integrated = enabled
 
 
 func _parse_choice_arg() -> String:
@@ -83,17 +90,11 @@ func _parse_choice_arg() -> String:
 
 
 func _configure_typography() -> void:
-    _cjk_fallback_font = SystemFont.new()
-    _cjk_fallback_font.font_names = PackedStringArray(["SimSun", "NSimSun", "宋体", "新宋体"])
-    _cjk_fallback_font.allow_system_fallback = false
+    _typography = UiTypographyScript.new()
+    _cjk_fallback_font = _typography.cjk_fallback
+    _primary_font = _typography.body
 
-    _primary_font = SystemFont.new()
-    _primary_font.font_names = PackedStringArray([FONT_PRIMARY_NAME])
-    _primary_font.allow_system_fallback = false
-    _primary_font.fallbacks = [_cjk_fallback_font]
-
-    var app_theme := Theme.new()
-    app_theme.default_font = _primary_font
+    var app_theme := _typography.theme
     app_theme.default_font_size = 18
     theme = app_theme
 
@@ -145,11 +146,11 @@ func _setup_dev_jump_chapters() -> void:
         return
     var chapters: Array[Dictionary] = [
         {
-            "id": "wedding",
-            "title": "婚礼前夜回溯",
-            "scene": WEDDING_PROLOGUE_SCENE,
-            "events": WeddingDataScript.build_events(),
-            "hint": "婚礼前段的 DOCX 行。选这一页会切到婚礼场景并从该行开始。",
+            "id": CHAPTER_ID,
+            "title": "章节三 · 典礼上的选择",
+            "scene": CHAPTER_SCENE,
+            "events": _events,
+            "hint": "章节三的 DOCX 行。输入行号将跳转到该行或之后的下一条事件。",
         },
         {
             "id": "mystic_night",
@@ -157,20 +158,6 @@ func _setup_dev_jump_chapters() -> void:
             "scene": MYSTIC_NIGHT_SCENE,
             "events": MysticNightDataScript.build_events(),
             "hint": "奇妙夜的 DOCX 行。选这一页会切到奇妙夜场景并从该行开始。",
-        },
-        {
-            "id": "forest",
-            "title": "森林回溯",
-            "scene": FOREST_MAIN_SCENE,
-            "events": StoryDataScript.get_events(),
-            "hint": "森林正片的 DOCX 行。选这一页会切到森林场景并从该行开始。",
-        },
-        {
-            "id": CHAPTER_ID,
-            "title": "章节三 · 典礼上的选择",
-            "scene": CHAPTER_SCENE,
-            "events": _events,
-            "hint": "章节三的 DOCX 行。输入行号将跳转到该行或之后的下一条事件。",
         },
     ]
     _dev_jump_overlay.setup(chapters, CHAPTER_ID)
@@ -186,21 +173,11 @@ func _toggle_dev_jump_panel() -> void:
         _dev_jump_overlay.open_panel(_current_source)
 
 
-## 面板已经把 payload 写进 root meta；回自己是重载，去其它章节是换场景。
 func _on_dev_jump_requested(payload: Dictionary) -> void:
     if bool(payload.get("same_chapter", true)):
         call_deferred("_reload_for_dev_jump")
         return
     call_deferred("_change_scene_for_dev_jump", str(payload.get("scene", "")))
-
-
-func _change_scene_for_dev_jump(scene_path: String) -> void:
-    var change_error := get_tree().change_scene_to_file(scene_path)
-    if change_error == OK:
-        return
-    get_tree().root.remove_meta(DevJumpPanelScript.META_KEY)
-    if _dev_jump_overlay != null:
-        _dev_jump_overlay.report_jump_failure("切换到 %s 失败，错误码：%d" % [scene_path, change_error])
 
 
 func _reload_for_dev_jump() -> void:
@@ -210,6 +187,15 @@ func _reload_for_dev_jump() -> void:
     get_tree().root.remove_meta(DevJumpPanelScript.META_KEY)
     if _dev_jump_overlay != null:
         _dev_jump_overlay.report_jump_failure("场景重载失败，错误码：%d" % err)
+
+
+func _change_scene_for_dev_jump(scene_path: String) -> void:
+    var change_error := get_tree().change_scene_to_file(scene_path)
+    if change_error == OK:
+        return
+    get_tree().root.remove_meta(DevJumpPanelScript.META_KEY)
+    if _dev_jump_overlay != null:
+        _dev_jump_overlay.report_jump_failure("切换到 %s 失败，错误码：%d" % [scene_path, change_error])
 
 
 func _apply_pending_dev_jump() -> void:
@@ -329,7 +315,10 @@ func _run_events() -> void:
     if _verify_mode:
         _report_verification()
         return
-    # 章节三是最终章：停在结局画面，不切场景、不退出游戏。
+    if _integrated:
+        # 集成模式下由宿主接管后续流程，不能切换宿主场景。
+        return
+    ChapterTransitionScript.begin(get_tree(), MYSTIC_NIGHT_SCENE)
 
 
 func _run_event(event: Dictionary) -> void:
@@ -412,8 +401,6 @@ func _scene_to_bg_path(scene_name: String) -> String:
             return Chapter3StageScript.BG_ENDING_BC_SUN_RUN
         Chapter3DataScript.SCENE_ENDING_B_RUN_CARPET_1:
             return Chapter3StageScript.BG_ENDING_B_RUN_CARPET_1
-        Chapter3DataScript.SCENE_ENDING_C_RUN_OUT:
-            return Chapter3StageScript.BG_ENDING_C_RUN_OUT
         Chapter3DataScript.SCENE_ENDING_C_LEAVE:
             return Chapter3StageScript.BG_ENDING_C_LEAVE
     return ""
@@ -558,7 +545,7 @@ func _jump_to_choice(choice_id: String, options: Array) -> void:
 
 func _apply_ending(event: Dictionary) -> void:
     var ending_id := str(event.get("ending_id", ""))
-    Chapter3State.unlock_ending(ending_id)
+    GameState.unlock_ending(ending_id, not _verify_mode)
     _endpoint_reached = true
     # 结束本章，防止串到其它分支。
     _event_index = _events.size()
@@ -605,11 +592,11 @@ func _report_verification() -> void:
         get_tree().quit(1)
         return
     var bounds := DevJumpPanelScript.source_bounds(_events)
-    print("CHAPTER3_PASS events=%d source_bounds=%s labels=%d last_ending=%s unlocked_endings=%d verify_mode=true" % [
+    print("CHAPTER3_PASS events=%d source_bounds=%s labels=%d last_ending=%s unlocked_endings=%d font=Uranus_Pixel cjk_fallback=SimSun verify_mode=true" % [
         _events.size(),
         str(bounds),
         _label_to_index.size(),
-        Chapter3State.last_ending,
-        Chapter3State.ending_count(),
+        GameState.last_ending,
+        GameState.ending_count(),
     ])
     get_tree().quit(0)

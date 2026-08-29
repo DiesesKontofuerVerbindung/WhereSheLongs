@@ -1,5 +1,7 @@
 extends ColorRect
 
+const UiTypographyScript := preload("res://scripts/ui_typography.gd")
+
 ## 开发者 DOCX 行回溯面板（双章节）。
 ##
 ## 森林正片和婚礼前段各有独立的事件表和独立的 DOCX 行号空间，但回溯这件事
@@ -85,7 +87,8 @@ func _build_ui() -> void:
 	var title := Label.new()
 	title.text = "开发者功能 · DOCX 行回溯"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 25)
+	title.add_theme_font_override("font", UiTypographyScript.new().ui)
+	title.add_theme_font_size_override("font_size", 22)
 	title.add_theme_color_override("font_color", COLOR_TITLE)
 	col.add_child(title)
 

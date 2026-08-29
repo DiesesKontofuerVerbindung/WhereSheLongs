@@ -23,7 +23,6 @@ const SCENE_ENDING_B_RUN_CARPET := "结局B-光腿在地毯上奔跑"
 const SCENE_ENDING_BC_SUN_RUN := "结局BC-阳光下奔跑"
 const SCENE_WINDOW_TALK_2 := "小凌思羽窗边谈话-2"
 const SCENE_ENDING_B_RUN_CARPET_1 := "结局B-光腿在地毯上奔跑-1"
-const SCENE_ENDING_C_RUN_OUT := "结局C-跑出酒店"
 const SCENE_ENDING_C_LEAVE := "结局C-女主离开思羽看着她"
 
 static func build_events() -> Array[Dictionary]:
@@ -306,7 +305,6 @@ static func _ending_c_events() -> Array[Dictionary]:
 		{"type": "line", "source": 1164, "speaker": "旁白", "text": "她转身走向酒店的出口。"},
 		{"type": "line", "source": 1165, "speaker": "旁白", "text": "脱下高跟鞋，拎在手里。赤脚踩在酒店冰凉的地面上。", "status": "脱下高跟鞋，拎在手里。赤脚踩在酒店冰凉的地面上。"},
 		{"type": "line", "source": 1166, "speaker": "旁白", "text": "她走着走着，跑了起来。"},
-		{"type": "scene", "source": 1167, "name": SCENE_ENDING_C_RUN_OUT, "label": "结局C-跑出酒店", "subtitle": "结局C-跑出酒店"},
 		{"type": "line", "source": 1167, "speaker": "旁白", "text": "她跑出酒店。"},
 		{"type": "scene", "source": 1168, "name": SCENE_ENDING_C_LEAVE, "label": "结局C-女主离开思羽看着她", "subtitle": "结局C-女主离开思羽看着她"},
 		{"type": "line", "source": 1168, "speaker": "旁白", "text": "阳光照在脸上。小凌眯起眼睛看向太阳。"},

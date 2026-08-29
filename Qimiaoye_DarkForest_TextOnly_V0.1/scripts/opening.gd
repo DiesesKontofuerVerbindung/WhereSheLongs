@@ -208,7 +208,7 @@ func _run_verification() -> void:
 			print("OPENING_FAIL %s" % failure)
 		get_tree().quit(1)
 		return
-	print("OPENING_PASS layers=%d video=%s fallback=%s ui_font=%s display_font=%s cjk_fallback=SimSun start_target=%s" % [
+	print("OPENING_PASS layers=%d video=%s fallback=%s font=Uranus_Pixel ui_font=%s display_font=%s cjk_fallback=SimSun start_target=%s" % [
 		_layers.size(),
 		BACKGROUND_VIDEO_PATH.get_file(),
 		BACKGROUND_IMAGE_PATH.get_file(),

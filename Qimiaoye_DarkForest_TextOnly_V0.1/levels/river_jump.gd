@@ -13,6 +13,7 @@ const StoneTextures := [
 	preload("res://assets/stones/stone_c.png"),
 ]
 const BlackKeyShader := preload("res://assets/black_key.gdshader")
+const UiPanelSkinScript := preload("res://scripts/ui_panel_skin.gd")
 
 const CHARGE_TIME := 0.85
 const MIN_JUMP := 52.0
@@ -29,6 +30,7 @@ const HARD_MODE_JUMPS := 8
 var _river_rotated := false
 var _hard_mode := false
 
+@onready var _hud: CanvasLayer = $HUD
 @onready var _stones_root: Node2D = $Stones
 @onready var _reflections: Node2D = $Reflections
 @onready var _top_layer: Node2D = $TopLayer
@@ -77,6 +79,7 @@ func setup(_scene_def: Dictionary) -> void:
 
 func _ready() -> void:
 	_rng.randomize()
+	_apply_panel_skin()
 	_back.pressed.connect(_on_back)
 	_stones_root.z_index = Z_STONE
 	_stones_root.z_as_relative = false
@@ -107,6 +110,25 @@ func _ready() -> void:
 		_hint.text = "按住鼠标 / 空格蓄力，松手起跳"
 	else:
 		_hint.text = "跳到前方小光人那块石头上 · 按住蓄力，松手起跳"
+
+
+func _apply_panel_skin() -> void:
+	var module_panel := Panel.new()
+	module_panel.name = "LakeJumpPanelSkin"
+	UiPanelSkinScript.apply_fixed_rect(module_panel, UiPanelSkinScript.PANEL_RECT)
+	module_panel.add_theme_stylebox_override("panel", UiPanelSkinScript.panel_style())
+	module_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hud.add_child(module_panel)
+	_hud.move_child(module_panel, 0)
+
+	UiPanelSkinScript.apply_fixed_rect(_charge_bar, UiPanelSkinScript.INPUT_RECT)
+	UiPanelSkinScript.apply_fixed_rect(_back, UiPanelSkinScript.BUTTON_RECT)
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		_back.add_theme_stylebox_override(state, UiPanelSkinScript.button_style())
+	_back.add_theme_font_size_override("font_size", 16)
+	_hint.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_hint.position = Vector2(334.0, 201.0)
+	_hint.size = Vector2(616.0, 32.0)
 
 
 func _setup_river_bg() -> void:

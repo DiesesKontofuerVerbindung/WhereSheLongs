@@ -16,8 +16,7 @@ const BG_ENDING_A_NO_VEIL := "res://assets/backgrounds/结局A不带头纱结婚
 const BG_ENDING_B_RUN_CARPET := "res://assets/backgrounds/结局B 光腿在地毯上奔跑.png"
 const BG_ENDING_BC_SUN_RUN := "res://assets/backgrounds/结局BC阳光下奔跑.png"
 const BG_WINDOW_TALK_2 := "res://assets/backgrounds/小凌思羽窗边谈话-2.png"
-const BG_ENDING_B_RUN_CARPET_1 := "res://assets/backgrounds/d919c3c8d1916b4748de880359c4208c.png"
-const BG_ENDING_C_RUN_OUT := "res://assets/backgrounds/9e2633d411a31ccbe02560b6363b25af.png"
+const BG_ENDING_B_RUN_CARPET_1 := "res://assets/backgrounds/结局B 光腿在地毯上奔跑-1.png"
 const BG_ENDING_C_LEAVE := "res://assets/backgrounds/结局C女主离开，思羽看着她.png"
 
 const VIDEO_OPENING := "res://assets/videos/opening_video.ogv"
