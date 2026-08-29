@@ -21,6 +21,7 @@ const ENGINE_LOG_PATH := "user://logs/godot.log"
 const DEV_JUMP_META_KEY := "qimiaoye_dark_forest_dev_docx_jump"
 const DEV_JUMP_CHAPTER_ID := "forest"
 const WEDDING_PROLOGUE_SCENE := "res://scenes/wedding/wedding_prologue.tscn"
+const CHAPTER3_SCENE := "res://scenes/chapter3/chapter3.tscn"
 const MYSTIC_NIGHT_SCENE := "res://scenes/mystic_night/mystic_night.tscn"
 
 const COLOR_BG := Color("050608")
@@ -29,7 +30,7 @@ const COLOR_TEXT := Color("edf1f7")
 const COLOR_MUTED := Color("99a3b3")
 const COLOR_ACCENT := Color("8fd3ff")
 const COLOR_WARNING := Color("f4c36a")
-const FONT_PRIMARY_NAME := "Times New Roman"
+const FONT_PRIMARY_NAME := "Uranus Pixel"
 const FONT_CJK_FALLBACK_NAME := "SimSun"
 const STORY_SHAKE_START_SOURCE := 354
 const STORY_SHAKE_PEAK_SOURCE := 365
@@ -70,6 +71,7 @@ const ALLOWED_MODULE_IMAGE_ROOTS := [
 	"res://addons/hand_checkbox_gesture/assets/",
 	"res://assets/opening/",
 	"res://assets/forest_hand_sequence/",
+	"res://assets/ui/",
 ]
 
 var _events: Array[Dictionary] = []
@@ -140,7 +142,6 @@ var _hand_media_visits: Dictionary = {}
 var _cutscene_plays: Dictionary = {}
 var _diagnostic_panel: PanelContainer
 var _diagnostic_label: Label
-var _endpoint_panel: PanelContainer
 var _advance_hint_label: Label
 var _dev_jump_overlay
 var _module_host: Control
@@ -151,7 +152,7 @@ var _module_render_size := MODULE_VIEW_SIZE
 var _module_pointer_inside := false
 var _module_pointer_captured := false
 var _typography: UiTypographyScript
-var _primary_font: SystemFont
+var _primary_font: Font
 var _cjk_fallback_font: SystemFont
 
 var _awaiting_action_button := false
@@ -293,7 +294,8 @@ func _build_ui() -> void:
 	_scene_subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_scene_subtitle.add_theme_font_size_override("font_size", 16)
 	_scene_subtitle.add_theme_color_override("font_color", COLOR_MUTED)
-	_scene_subtitle.text = "剧情舞台 placeholder · 人物演出按 DOCX 行驱动"
+	_scene_subtitle.text = ""
+	_scene_subtitle.visible = false
 	_scene_subtitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_scene_subtitle)
 
@@ -347,7 +349,6 @@ func _build_ui() -> void:
 	_build_dialogue_ui()
 	_build_interaction_panel()
 	_build_diagnostic_panel()
-	_build_endpoint_panel()
 	_build_advance_hint()
 	_build_module_host()
 	_build_dev_jump_panel()
@@ -660,31 +661,6 @@ func _build_diagnostic_panel() -> void:
 	_diagnostic_label.add_theme_color_override("font_color", COLOR_TEXT)
 	margin.add_child(_diagnostic_label)
 	_refresh_diagnostics()
-
-
-func _build_endpoint_panel() -> void:
-	_endpoint_panel = PanelContainer.new()
-	_endpoint_panel.set_anchors_preset(Control.PRESET_CENTER)
-	_endpoint_panel.offset_left = -320
-	_endpoint_panel.offset_right = 320
-	_endpoint_panel.offset_top = -90
-	_endpoint_panel.offset_bottom = 90
-	_endpoint_panel.visible = false
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color("080a0ff5")
-	style.border_color = COLOR_ACCENT
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(12)
-	_endpoint_panel.add_theme_stylebox_override("panel", style)
-	add_child(_endpoint_panel)
-
-	var label := Label.new()
-	label.text = "[ENDPOINT]\n黑暗森林章节在此结束\n\n本并行版停止，不进入下一章。"
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 28)
-	label.add_theme_color_override("font_color", COLOR_TEXT)
-	_endpoint_panel.add_child(label)
 
 
 func _build_advance_hint() -> void:
@@ -1145,7 +1121,8 @@ func _restore_dev_jump_scene_context(target_index: int) -> void:
 				scene_context = str(event.get("to", scene_context))
 	_current_scene = scene_context
 	_scene_label.text = scene_context
-	_scene_subtitle.text = "剧情舞台 placeholder · 开发跳转状态恢复"
+	_scene_subtitle.text = ""
+	_scene_subtitle.visible = false
 	var target_source := int(_events[target_index].get("source", 0))
 	if target_source >= 52 and target_source <= 56:
 		_dark_overlay.modulate.a = 0.80
@@ -1250,7 +1227,6 @@ func _execute_event(event: Dictionary) -> void:
 
 func _show_line(event: Dictionary) -> void:
 	_interaction_panel.visible = false
-	_endpoint_panel.visible = false
 	var stage_cue := str(event.get("stage_cue", ""))
 	if not stage_cue.is_empty() and _story_stage != null:
 		_story_stage.play_line_cue(stage_cue, _verify_mode)
@@ -1591,7 +1567,6 @@ func _run_embedded_module(event: Dictionary, is_placeholder: bool) -> void:
 	_dialogue_ui.hide_dialogue()
 	_narration_ui.begin_fade_for_dialogue(_verify_mode)
 	_interaction_panel.visible = false
-	_endpoint_panel.visible = false
 	_sync_module_render_resolution("module_start:%s" % module_id)
 	_module_host.visible = true
 	_module_viewport.add_child(module_instance)
@@ -1886,7 +1861,7 @@ func _set_scene(scene_name: String) -> void:
 	_visited_scenes[scene_name] = true
 	_scene_label.text = scene_name
 	_scene_label.modulate.a = 1.0
-	_scene_subtitle.text = "剧情舞台 placeholder · 人物演出按 DOCX 行驱动"
+	_scene_subtitle.text = ""
 	if _story_stage != null:
 		_story_stage.set_scene(scene_name, _verify_mode)
 	_sync_scene_chrome_visibility(scene_name)
@@ -1910,7 +1885,7 @@ func _sync_scene_chrome_visibility(scene_name: String) -> void:
 	)
 	var uses_hand_media := scene_name in ["剧情图-手", "剧情图-两个手松开的特写"]
 	_scene_label.visible = not uses_long_scene and not uses_inner_stage and not uses_hand_media
-	_scene_subtitle.visible = not uses_long_scene and not uses_inner_stage and not uses_hand_media
+	_scene_subtitle.visible = false
 	if uses_long_scene:
 		# 森林舞台有自己的遮暗层，主场景黑幕必须保持透明，避免两层叠成近乎全黑。
 		_dark_overlay.modulate.a = 0.0
@@ -2120,7 +2095,6 @@ func _complete_story() -> void:
 	_dialogue_ui.hide_dialogue()
 	_narration_ui.begin_fade_for_dialogue(_verify_mode)
 	_interaction_panel.visible = false
-	_endpoint_panel.visible = true
 	_vfx.set_mode("none")
 	_refresh_diagnostics()
 	_log_runtime("LAYOUT_AUDIT narration_samples=%d narration_violations=%d max_center_error=%.3f max_width_overflow=%.3f dialogue_samples=%d psychology_samples=%d choice_samples=%d choice_violations=%d choice_max_center_error=%.3f psychology_in_dialogue=true psychology_parentheses=true dialogue_left=%s dialogue_body_top=%s continue_button_centered=%s choices_centered=%s shortcut_hint=%s narration_direct_reveal=%s dialogue_progressive_reveal=%s" % [
@@ -2156,6 +2130,7 @@ func _complete_story() -> void:
 		else:
 			for issue in runtime_errors:
 				_log_runtime("COMPLETE_ERROR %s" % issue)
+		ChapterTransitionScript.begin(get_tree(), CHAPTER3_SCENE)
 
 
 func _validate_module_render_contract() -> PackedStringArray:
@@ -2353,13 +2328,13 @@ func _validate_contract() -> PackedStringArray:
 	if _light_button.size_flags_horizontal != Control.SIZE_SHRINK_CENTER or _action_button.size_flags_horizontal != Control.SIZE_SHRINK_CENTER:
 		errors.append("交互按钮未按画面中轴居中")
 	if theme == null or theme.default_font != _primary_font:
-		errors.append("全局字体未绑定 Times New Roman")
-	if _primary_font == null or _primary_font.font_names.is_empty() or _primary_font.font_names[0] != FONT_PRIMARY_NAME:
-		errors.append("Times New Roman 主字体配置缺失")
-	elif not _primary_font.has_char("A".unicode_at(0)):
-		errors.append("Times New Roman 无法渲染拉丁字符")
+		errors.append("全局字体未绑定天王星像素体")
+	if _typography == null or not _typography.body_uses_project_font():
+		errors.append("天王星像素体主字体配置缺失")
+	elif not _primary_font.has_char("A".unicode_at(0)) or not _primary_font.has_char("中".unicode_at(0)):
+		errors.append("天王星像素体无法渲染正文基础字形")
 	if _cjk_fallback_font == null or _cjk_fallback_font.font_names.is_empty() or _cjk_fallback_font.font_names[0] != FONT_CJK_FALLBACK_NAME:
-		errors.append("中文宋体回退配置缺失")
+		errors.append("中文宋体末端回退配置缺失")
 	elif not _cjk_fallback_font.has_char("中".unicode_at(0)):
 		errors.append("中文宋体回退无法渲染中文")
 	for image_path in _find_forbidden_images("res://"):
@@ -2647,7 +2622,7 @@ func _refresh_diagnostics() -> void:
 
 func _finish_verification(success: bool, issues: PackedStringArray) -> void:
 	if success:
-		var message := "FULL_FLOW_PASS events=%d scenes=%d modules=%d endpoint=%s narration_lines=%d dialogue_lines=%d psychology_lines=%d narration_queue_max=%d dialogue_queue_max=%d narration_layout_samples=%d dialogue_layout_samples=%d choice_layout_samples=%d split_ui=true narration_top_2_20=true narration_centered=true narration_direct_reveal=true dialogue_progressive_reveal=true psychology_in_dialogue=true psychology_parentheses=true dialogue_left_aligned=true dialogue_body_top=true continue_button_centered=true choices_centered=true shortcut_hint=true shake_start_source=354 shake_peak_source=365 shake_end_source=366 shake_progressive=true shake_reset=true dev_docx_jump=true docx_jump_all_sources_resolvable=true docx_source_lock=53ba079 dev_jump_logs_preserved=true font=Times_New_Roman cjk_fallback=SimSun persistent_story_stage=true continuous_forest_long_scene=true forest_source_size=9342x1440 waterfall_source_size=2560x1440 continuous_world_source_size=11902x1440 waterfall_appended=true waterfall_layers=back_front_particles waterfall_slope_up_right=true waterfall_slope_gentle=true waterfall_stop_before_fall=true dev_jump_125_restores_waterfall_approach=true scene_hard_cut=false forest_scroll_right=true forest_art_visible=true forest_single_darkness_layer=true actor_between_back_and_front=true actor_between_waterfall_layers=true xiaoling_visual_scale=0.28 amai_visual_scale=0.34 actor_ground_ratio=0.84 actor_feet_grounded=true dialogue_face_to_face=true continuous_scene_run=true continuous_scene_run_min_seconds=2.4 amai_scripted_run_sync=true amai_run_facing_right=true light_hover_walk=true light_mouse_exit_stop=true light_trigger_source=51 face_to_face=true heart_glow_at_amai=true heart_glow_chest_aligned=true heart_glow_warm_yellow=true actor_actions_from_story=true actor_screen_bounded=true ForestRun_entry_movement_source=121 ForestRun_source=122 ForestRun_ready=true Xiaoling_animation_v2=true Xiaoling_idle_frames=151 Xiaoling_run_start_frames=13 Xiaoling_run_frames=30 Amai_jump_animation=true Amai_jump_frames=77 ForestRun_segment02_roots=4 ForestRun_jump_each=true ForestRun_slide_each=true TextInput_source=157 TextInput_ready=true TextInput_interference=true TextInput_opencv_fan=true TextInput_raw_text_logged=false LakeJump_source=193 LakeJump_ready=true LakeJump_placeholder=false StarJar_source=238 StarJar_ready=true module_subviewport_isolated=true module_logical_size=1280x720 module_native_render=true module_aspect_keep=true module_resize_sync=true" % [
+		var message := "FULL_FLOW_PASS events=%d scenes=%d modules=%d endpoint=%s narration_lines=%d dialogue_lines=%d psychology_lines=%d narration_queue_max=%d dialogue_queue_max=%d narration_layout_samples=%d dialogue_layout_samples=%d choice_layout_samples=%d split_ui=true narration_top_2_20=true narration_centered=true narration_direct_reveal=true dialogue_progressive_reveal=true psychology_in_dialogue=true psychology_parentheses=true dialogue_left_aligned=true dialogue_body_top=true continue_button_centered=true choices_centered=true shortcut_hint=true shake_start_source=354 shake_peak_source=365 shake_end_source=366 shake_progressive=true shake_reset=true dev_docx_jump=true docx_jump_all_sources_resolvable=true docx_source_lock=53ba079 dev_jump_logs_preserved=true font=Uranus_Pixel cjk_fallback=SimSun persistent_story_stage=true continuous_forest_long_scene=true forest_source_size=9342x1440 waterfall_source_size=2560x1440 continuous_world_source_size=11902x1440 waterfall_appended=true waterfall_layers=back_front_particles waterfall_slope_up_right=true waterfall_slope_gentle=true waterfall_stop_before_fall=true dev_jump_125_restores_waterfall_approach=true scene_hard_cut=false forest_scroll_right=true forest_art_visible=true forest_single_darkness_layer=true actor_between_back_and_front=true actor_between_waterfall_layers=true xiaoling_visual_scale=0.28 amai_visual_scale=0.34 actor_ground_ratio=0.84 actor_feet_grounded=true dialogue_face_to_face=true continuous_scene_run=true continuous_scene_run_min_seconds=2.4 amai_scripted_run_sync=true amai_run_facing_right=true light_hover_walk=true light_mouse_exit_stop=true light_trigger_source=51 face_to_face=true heart_glow_at_amai=true heart_glow_chest_aligned=true heart_glow_warm_yellow=true actor_actions_from_story=true actor_screen_bounded=true ForestRun_entry_movement_source=121 ForestRun_source=122 ForestRun_ready=true Xiaoling_animation_v2=true Xiaoling_idle_frames=151 Xiaoling_run_start_frames=13 Xiaoling_run_frames=30 Amai_jump_animation=true Amai_jump_frames=77 ForestRun_segment02_roots=4 ForestRun_jump_each=true ForestRun_slide_each=true TextInput_source=157 TextInput_ready=true TextInput_interference=true TextInput_opencv_fan=true TextInput_raw_text_logged=false LakeJump_source=193 LakeJump_ready=true LakeJump_placeholder=false StarJar_source=238 StarJar_ready=true module_subviewport_isolated=true module_logical_size=1280x720 module_native_render=true module_aspect_keep=true module_resize_sync=true" % [
 			_events.size(),
 			_visited_scenes.size(),
 			_visited_modules.size(),

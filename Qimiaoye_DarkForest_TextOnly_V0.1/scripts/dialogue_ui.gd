@@ -6,11 +6,13 @@ signal choice_selected(choice_id: String)
 signal line_presented(token: int)
 signal queue_idle
 
-const COLOR_PANEL := Color("10141de8")
-const COLOR_TEXT := Color("edf1f7")
-const COLOR_ACCENT := Color("8fd3ff")
+const COLOR_TEXT := Color("252931")
+const COLOR_ACCENT := Color("555b66")
+const DIALOGUE_BOX_PATH := "res://assets/ui/dialogue/dialogue_left_reference.png"
+const DIALOGUE_BOX_REGION := Rect2(104.0, 416.0, 1072.0, 262.0)
 const TextRevealProfile := preload("res://scripts/text_reveal_profile.gd")
 
+var _speaker_panel: PanelContainer
 var _speaker_label: Label
 var _body_label: Label
 var _continue_button: Button
@@ -201,13 +203,9 @@ func _build_ui() -> void:
 	set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	offset_left = 72
 	offset_right = -72
-	offset_top = -258
+	offset_top = -290
 	offset_bottom = -28
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = COLOR_PANEL
-	panel_style.border_color = Color(0.26, 0.34, 0.46, 0.78)
-	panel_style.set_border_width_all(1)
-	panel_style.set_corner_radius_all(10)
+	var panel_style := _make_texture_style(DIALOGUE_BOX_PATH, DIALOGUE_BOX_REGION, 76.0, 96.0, 76.0, 62.0)
 	add_theme_stylebox_override("panel", panel_style)
 
 	var margin := MarginContainer.new()
@@ -221,11 +219,22 @@ func _build_ui() -> void:
 	col.add_theme_constant_override("separation", 10)
 	margin.add_child(col)
 
+	var speaker_margin := MarginContainer.new()
+	speaker_margin.add_theme_constant_override("margin_left", 64)
+	col.add_child(speaker_margin)
+
+	_speaker_panel = PanelContainer.new()
+	_speaker_panel.custom_minimum_size = Vector2(178.0, 44.0)
+	_speaker_panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_speaker_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	speaker_margin.add_child(_speaker_panel)
+
 	_speaker_label = Label.new()
 	_speaker_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_speaker_label.add_theme_font_size_override("font_size", 21)
+	_speaker_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_speaker_label.add_theme_font_size_override("font_size", 22)
 	_speaker_label.add_theme_color_override("font_color", COLOR_ACCENT)
-	col.add_child(_speaker_label)
+	_speaker_panel.add_child(_speaker_label)
 
 	_body_label = Label.new()
 	_body_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -256,6 +265,19 @@ func _build_ui() -> void:
 	_continue_button.pressed.connect(request_advance)
 	col.add_child(_continue_button)
 	hide_dialogue()
+
+
+func _make_texture_style(path: String, region: Rect2, left: float, top: float, right: float, bottom: float) -> StyleBoxTexture:
+	var atlas := AtlasTexture.new()
+	atlas.atlas = load(path) as Texture2D
+	atlas.region = region
+	var style := StyleBoxTexture.new()
+	style.texture = atlas
+	style.texture_margin_left = left
+	style.texture_margin_top = top
+	style.texture_margin_right = right
+	style.texture_margin_bottom = bottom
+	return style
 
 
 func _drain_line_queue() -> void:

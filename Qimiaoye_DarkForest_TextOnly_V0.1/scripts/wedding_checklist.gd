@@ -11,6 +11,7 @@ const P2_PATH := "res://addons/hand_checkbox_gesture/assets/p2.png"
 const COLOR_HINT := Color(0.92, 0.90, 0.86, 1.0)
 const COLOR_STATUS := Color(0.75, 0.73, 0.70, 0.9)
 const HINT_SECONDS := 3.0
+const AUTO_DISMISS_SECONDS := 2.0
 
 var _done := false
 var _advance_requested := false
@@ -106,13 +107,18 @@ func run(verify_mode := false) -> void:
 		_complete("verify")
 		return
 
-	_start_camera()
-	while not _done:
-		if _advance_requested:
-			_advance_requested = false
-			_complete("mouse")
-			break
-		await get_tree().process_frame
+	if AUTO_DISMISS_SECONDS > 0.0:
+		_status.text = "Checklist %s · 即将自动完成" % _variant
+		await get_tree().create_timer(AUTO_DISMISS_SECONDS).timeout
+		_complete("success")
+	else:
+		_start_camera()
+		while not _done:
+			if _advance_requested:
+				_advance_requested = false
+				_complete("mouse")
+				break
+			await get_tree().process_frame
 	_stop_camera()
 	# 展示打勾结果，并排空残留输入，再把控制权交回剧情。
 	await get_tree().create_timer(0.9).timeout

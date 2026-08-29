@@ -20,7 +20,7 @@ const WEDDING_PROLOGUE_SCENE := "res://scenes/wedding/wedding_prologue.tscn"
 const CHAPTER3_SCENE := "res://scenes/chapter3/chapter3.tscn"
 const MYSTIC_NIGHT_SCENE := "res://scenes/mystic_night/mystic_night.tscn"
 const DEV_JUMP_CHAPTER_ID := "mystic_night"
-const FONT_PRIMARY_NAME := "Times New Roman"
+const FONT_PRIMARY_NAME := "Uranus Pixel"
 
 const COLOR_BG := Color(0.0, 0.0, 0.0, 1.0)
 const COLOR_TEXT := Color(0.96, 0.97, 1.0, 1.0)
@@ -76,7 +76,7 @@ var _dev_jump_actual_source := 0
 var _dev_jump_overlay
 
 var _typography: UiTypographyScript
-var _primary_font: SystemFont
+var _primary_font: Font
 var _cjk_fallback_font: SystemFont
 var _root_bg: ColorRect
 var _cg_root: Control
@@ -930,7 +930,7 @@ func _report_verification() -> void:
 			print("MYSTIC_NIGHT_FAIL %s" % failure)
 		get_tree().quit(1)
 		return
-	print("MYSTIC_NIGHT_PASS events=%d sources=%d cgs=%d camera_shots=%d interactions=%d endpoint=%s narration_lines=56 dialogue_lines=50 psychology_lines=4 psychology_parentheses=true first_person=true videos=3 stage_directions=10 audio=false art=true dev_jump_chapters=wedding_mystic_night_forest source_bounds=%s" % [
+	print("MYSTIC_NIGHT_PASS events=%d sources=%d cgs=%d camera_shots=%d interactions=%d endpoint=%s font=Uranus_Pixel cjk_fallback=SimSun narration_lines=56 dialogue_lines=50 psychology_lines=4 psychology_parentheses=true first_person=true videos=3 stage_directions=10 audio=false art=true dev_jump_chapters=wedding_mystic_night_forest source_bounds=%s" % [
 		_events.size(),
 		_visited_sources.size(),
 		_visited_cgs.size(),

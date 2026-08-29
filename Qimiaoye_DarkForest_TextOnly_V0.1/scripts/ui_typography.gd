@@ -2,8 +2,8 @@ extends RefCounted
 
 # 共享 UI 字体入口。四个章节外壳原先各自复制一份 SystemFont 配置，
 # 这里统一成三个角色：
-#   body    正文。仍是 Times New Roman + SimSun 链，保持既有观感与各外壳自检。
-#   ui      标题 / 按钮 / 开发者面板。项目内置的天王星像素体，缺字回退 SimSun。
+#   body    正文。项目内置的天王星像素体，只有缺字时才回退 SimSun。
+#   ui      标题 / 按钮 / 开发者面板。同一项目字体，缺字回退 SimSun。
 #   display 英文品牌字样。项目内置 Ethereal Nymeria，仅覆盖拉丁字符，
 #           因此挂 ui -> SimSun 作为后续回退，避免中文变豆腐块。
 # 字体一律来自 res:// 资产，不依赖系统是否安装。
@@ -11,12 +11,13 @@ extends RefCounted
 const DISPLAY_FONT_PATH := "res://assets/fonts/ethereal_nymeria.ttf"
 const UI_FONT_PATH := "res://assets/fonts/uranus_pixel_11px.ttf"
 
-const BODY_PRIMARY_NAME := "Times New Roman"
+const BODY_PRIMARY_NAME := "Uranus Pixel"
 const CJK_FALLBACK_NAME := "SimSun"
+const FONT_SOURCE_META := "qimiaoye_font_source"
 const CJK_FALLBACK_NAMES := ["SimSun", "NSimSun", "宋体", "新宋体"]
 
 var cjk_fallback: SystemFont
-var body: SystemFont
+var body: Font
 var ui: Font
 var display: Font
 var theme: Theme
@@ -27,12 +28,7 @@ func _init() -> void:
 	cjk_fallback.font_names = PackedStringArray(CJK_FALLBACK_NAMES)
 	cjk_fallback.allow_system_fallback = false
 
-	body = SystemFont.new()
-	body.font_names = PackedStringArray([BODY_PRIMARY_NAME])
-	body.allow_system_fallback = false
-	var body_chain: Array[Font] = [cjk_fallback]
-	body.fallbacks = body_chain
-
+	body = _load_font(UI_FONT_PATH, [cjk_fallback])
 	ui = _load_font(UI_FONT_PATH, [cjk_fallback])
 	display = _load_font(DISPLAY_FONT_PATH, [ui, cjk_fallback])
 
@@ -51,15 +47,26 @@ func _init() -> void:
 func _load_font(path: String, chain: Array[Font]) -> Font:
 	if not ResourceLoader.exists(path):
 		push_error("UI 字体资产缺失：%s" % path)
-		return body
+		return cjk_fallback
 	var loaded: Resource = load(path)
 	if loaded == null or not (loaded is Font):
 		push_error("UI 字体资产无法作为 Font 载入：%s" % path)
-		return body
+		return cjk_fallback
 	var font: Font = (loaded as Font).duplicate()
 	font.fallbacks = chain
+	font.set_meta(FONT_SOURCE_META, path)
 	return font
 
 
+func body_uses_project_font() -> bool:
+	return (
+		body != null
+		and body != cjk_fallback
+		and str(body.get_meta(FONT_SOURCE_META, "")) == UI_FONT_PATH
+		and body.fallbacks.size() == 1
+		and body.fallbacks[0] == cjk_fallback
+	)
+
+
 func has_project_fonts() -> bool:
-	return ui != body and display != body
+	return body_uses_project_font() and ui != body and display != body

@@ -27,6 +27,7 @@ const BLACKOUT_SECONDS := 0.9
 const BLACKOUT_HOLD_SECONDS := 0.5
 const CUTSCENE_BLUR_RADIUS := 0.016
 const CUTSCENE_BLUR_SECONDS := 1.2
+const AUTO_DISMISS_SECONDS := 2.0
 
 ## 素材来自 Szene/物件33 的六张透明切图；构图照 0.png 的合成稿。
 ## laptop / ring box 没有素材，本轮不做。
@@ -230,6 +231,10 @@ func arm_fan() -> void:
 	_revealed_count = _objects.size()
 	_phase = Phase.ARMED
 	_prompt_label.visible = true
+	if AUTO_DISMISS_SECONDS > 0.0:
+		_prompt_label.text = "物件将在片刻后散去……"
+		get_tree().create_timer(AUTO_DISMISS_SECONDS).timeout.connect(_on_auto_dismiss_timeout)
+		return
 	_prompt_label.text = "正在连接摄像头……"
 	if _camera_bridge != null:
 		return
@@ -319,6 +324,12 @@ func _mark_cleared() -> void:
 	_cleared_count += 1
 	_prompt_label.visible = false
 	objects_cleared.emit()
+
+
+func _on_auto_dismiss_timeout() -> void:
+	if _phase != Phase.ARMED:
+		return
+	debug_force_clear()
 
 
 ## verify / 无摄像头兜底：直接判定挥净。

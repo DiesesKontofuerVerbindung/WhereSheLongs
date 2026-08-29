@@ -3,7 +3,7 @@ extends Control
 ## 婚礼前段外壳。
 ##
 ## 复用森林正片同一套 UI（NARRATION_UI 顶部旁白、DIALOGUE_UI 底部对白、
-## Enter/Space 推进、Times New Roman + 宋体回退），但事件表、场景与推进循环
+## Enter/Space 推进、天王星像素体 + 宋体末端回退），但事件表、场景与推进循环
 ## 完全独立：森林正片的 _events / source bounds / docx_source_lock 都被
 ## verify 硬断言锁住了，把婚礼混进去只会把那些断言全部打掉。
 ##
@@ -24,7 +24,7 @@ const WEDDING_PROLOGUE_SCENE := "res://scenes/wedding/wedding_prologue.tscn"
 const CHAPTER3_SCENE := "res://scenes/chapter3/chapter3.tscn"
 const MYSTIC_NIGHT_SCENE := "res://scenes/mystic_night/mystic_night.tscn"
 const DEV_JUMP_CHAPTER_ID := "wedding"
-const FONT_PRIMARY_NAME := "Times New Roman"
+const FONT_PRIMARY_NAME := "Uranus Pixel"
 const FONT_CJK_FALLBACK_NAME := "SimSun"
 
 const COLOR_BG := Color(0.055, 0.05, 0.07, 1.0)
@@ -57,7 +57,7 @@ var _dev_jump_actual_source := 0
 var _current_source := 0
 
 var _typography: UiTypographyScript
-var _primary_font: SystemFont
+var _primary_font: Font
 var _cjk_fallback_font: SystemFont
 var _root_bg: ColorRect
 var _stage_root: Control
@@ -573,7 +573,7 @@ func _report_verification() -> void:
 			print("WEDDING_PROLOGUE_FAIL %s" % failure)
 		get_tree().quit(1)
 		return
-	print("WEDDING_PROLOGUE_PASS events=%d scenes=4 sources=%d modules=%d interactions=%d endpoint=%s narration_lines=%d dialogue_lines=%d font=Times_New_Roman cjk_fallback=SimSun text_only_stage=true advance_gated=true endpoint_text_hidden=true chapter_loading=Where_She_Longs dev_docx_jump=true dev_jump_chapters=wedding_chapter3_mystic_night_forest wedding_source_bounds=%s" % [
+	print("WEDDING_PROLOGUE_PASS events=%d scenes=4 sources=%d modules=%d interactions=%d endpoint=%s narration_lines=%d dialogue_lines=%d font=Uranus_Pixel cjk_fallback=SimSun text_only_stage=true advance_gated=true endpoint_text_hidden=true chapter_loading=Where_She_Longs dev_docx_jump=true dev_jump_chapters=wedding_chapter3_mystic_night_forest wedding_source_bounds=%s" % [
 		_events.size(),
 		_visited_sources.size(),
 		_visited_modules.size(),

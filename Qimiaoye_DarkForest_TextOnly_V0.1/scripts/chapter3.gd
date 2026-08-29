@@ -17,7 +17,7 @@ const UiTypographyScript := preload("res://scripts/ui_typography.gd")
 const CHAPTER_ID := "chapter3"
 const CHAPTER_SCENE := "res://scenes/chapter3/chapter3.tscn"
 const MYSTIC_NIGHT_SCENE := "res://scenes/mystic_night/mystic_night.tscn"
-const FONT_PRIMARY_NAME := "Times New Roman"
+const FONT_PRIMARY_NAME := "Uranus Pixel"
 const FONT_CJK_FALLBACK_NAME := "SimSun"
 
 signal chapter_finished
@@ -50,7 +50,7 @@ var _dialogue_ui
 var _advance_hint: Label
 
 var _typography: UiTypographyScript
-var _primary_font: SystemFont
+var _primary_font: Font
 var _cjk_fallback_font: SystemFont
 
 
@@ -592,7 +592,7 @@ func _report_verification() -> void:
         get_tree().quit(1)
         return
     var bounds := DevJumpPanelScript.source_bounds(_events)
-    print("CHAPTER3_PASS events=%d source_bounds=%s labels=%d last_ending=%s unlocked_endings=%d verify_mode=true" % [
+    print("CHAPTER3_PASS events=%d source_bounds=%s labels=%d last_ending=%s unlocked_endings=%d font=Uranus_Pixel cjk_fallback=SimSun verify_mode=true" % [
         _events.size(),
         str(bounds),
         _label_to_index.size(),

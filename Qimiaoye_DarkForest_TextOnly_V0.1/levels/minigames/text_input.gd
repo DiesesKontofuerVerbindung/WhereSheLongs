@@ -4,6 +4,7 @@ signal finished(result)
 signal fan_cycle_completed(result)
 
 const FanCameraBridgeScript := preload("res://levels/minigames/fan_camera_bridge.gd")
+const UiTypographyScript := preload("res://scripts/ui_typography.gd")
 
 const VIEW_SIZE := Vector2(1280.0, 720.0)
 const MAX_LENGTH := 120
@@ -15,12 +16,11 @@ const PROTOTYPE_FIELD_OFFSET := (VIEW_SIZE - PROTOTYPE_FIELD_SIZE) * 0.5
 const PHYSICS_CLEAR_RATIO := 1.0
 const MAX_INPUT_LATENCY_SECONDS := 3.2
 const INPUT_LATENCY_CURVE_EXPONENT := 0.55
-const UI_FONT_FAMILIES := [
-	"Times New Roman",
-	"SimSun",
-	"Songti SC",
-	"Noto Serif CJK SC",
-]
+const AUTO_DISMISS_SECONDS := 2.0
+const INPUT_FRAME_PATH := "res://assets/ui/text_input/input_box.png"
+const SUBMIT_BUTTON_PATH := "res://assets/ui/text_input/speak_button.png"
+const INPUT_FRAME_REGION := Rect2(668.0, 304.0, 1232.0, 88.0)
+const SUBMIT_BUTTON_REGION := Rect2(1162.0, 482.0, 236.0, 98.0)
 const COLOR_BG := Color("020307")
 const COLOR_PANEL := Color("070a10f8")
 const COLOR_BORDER := Color("304154")
@@ -88,7 +88,8 @@ var _input: LineEdit
 var _submit_button: Button
 var _feedback: Label
 var _counter: Label
-var _ui_font: SystemFont
+var _typography: UiTypographyScript
+var _ui_font: Font
 var _interference_layer: Control
 var _interference_labels: Array[Label] = []
 var _fan_prompt: Label
@@ -125,8 +126,12 @@ func _ready() -> void:
 	_camera_bridge.physics_frame_received.connect(ingest_prototype2_physics_frame)
 	_camera_bridge.status_changed.connect(_on_camera_status_changed)
 	add_child(_camera_bridge)
-	_camera_bridge.start_bridge()
+	var verify_mode := "--verify" in OS.get_cmdline_user_args() or "--verify" in OS.get_cmdline_args()
+	if AUTO_DISMISS_SECONDS <= 0.0 or verify_mode:
+		_camera_bridge.start_bridge()
 	call_deferred("_start_interference_wave")
+	if AUTO_DISMISS_SECONDS > 0.0 and not verify_mode:
+		call_deferred("_auto_dismiss_after_delay")
 
 
 func _process(_delta: float) -> void:
@@ -138,10 +143,8 @@ func _process(_delta: float) -> void:
 
 
 func _build_ui() -> void:
-	_ui_font = SystemFont.new()
-	_ui_font.font_names = PackedStringArray(UI_FONT_FAMILIES)
-	_ui_font.allow_system_fallback = true
-	_ui_font.font_weight = 400
+	_typography = UiTypographyScript.new()
+	_ui_font = _typography.ui
 	var ui_theme := Theme.new()
 	ui_theme.default_font = _ui_font
 	theme = ui_theme
@@ -211,6 +214,12 @@ func _build_ui() -> void:
 	_context_note.text = "张开手掌，水平往返挥动"
 	column.add_child(_context_note)
 
+	var input_frame := PanelContainer.new()
+	input_frame.name = "InputFrame"
+	input_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	input_frame.add_theme_stylebox_override("panel", _make_texture_style(INPUT_FRAME_PATH, INPUT_FRAME_REGION, 14.0, 14.0, 14.0, 14.0))
+	column.add_child(input_frame)
+
 	_input = LineEdit.new()
 	_input.name = "ReasonInput"
 	_input.custom_minimum_size = Vector2(0, 62)
@@ -219,9 +228,15 @@ func _build_ui() -> void:
 	_input.editable = false
 	_input.placeholder_text = "在这里写下自己的想法"
 	_input.add_theme_font_size_override("font_size", 22)
+	_input.add_theme_color_override("font_color", Color("20242b"))
+	_input.add_theme_color_override("font_placeholder_color", Color("5d6470"))
+	var empty_input_style := StyleBoxEmpty.new()
+	_input.add_theme_stylebox_override("normal", empty_input_style)
+	_input.add_theme_stylebox_override("focus", empty_input_style)
+	_input.add_theme_stylebox_override("read_only", empty_input_style)
 	_input.text_changed.connect(_on_text_changed)
 	_input.text_submitted.connect(_on_text_submitted)
-	column.add_child(_input)
+	input_frame.add_child(_input)
 
 	var status_row := HBoxContainer.new()
 	status_row.add_theme_constant_override("separation", 12)
@@ -247,18 +262,41 @@ func _build_ui() -> void:
 	button_center.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	column.add_child(button_center)
 
+	var button_frame := PanelContainer.new()
+	button_frame.name = "SubmitButtonFrame"
+	button_frame.custom_minimum_size = Vector2(210, 50)
+	button_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	button_frame.add_theme_stylebox_override("panel", _make_texture_style(SUBMIT_BUTTON_PATH, SUBMIT_BUTTON_REGION, 12.0, 12.0, 12.0, 12.0))
+	button_center.add_child(button_frame)
+
 	_submit_button = Button.new()
 	_submit_button.name = "SubmitButton"
 	_submit_button.custom_minimum_size = Vector2(210, 50)
 	_submit_button.disabled = true
 	_submit_button.add_theme_color_override("font_color", COLOR_TEXT)
 	_submit_button.add_theme_color_override("font_hover_color", COLOR_ACCENT)
-	_submit_button.add_theme_font_size_override("font_size", 20)
-	_submit_button.text = "说出来"
+	_submit_button.add_theme_font_size_override("font_size", 22)
+	_submit_button.text = ""
+	var empty_button_style := StyleBoxEmpty.new()
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		_submit_button.add_theme_stylebox_override(state, empty_button_style)
 	_submit_button.pressed.connect(_on_submit_pressed)
-	button_center.add_child(_submit_button)
+	button_frame.add_child(_submit_button)
 
 	_build_interference_layer()
+
+
+func _make_texture_style(path: String, region: Rect2, left: float, top: float, right: float, bottom: float) -> StyleBoxTexture:
+	var atlas := AtlasTexture.new()
+	atlas.atlas = load(path) as Texture2D
+	atlas.region = region
+	var style := StyleBoxTexture.new()
+	style.texture = atlas
+	style.texture_margin_left = left
+	style.texture_margin_top = top
+	style.texture_margin_right = right
+	style.texture_margin_bottom = bottom
+	return style
 
 
 func _build_interference_layer() -> void:
@@ -439,6 +477,21 @@ func _start_interference_wave() -> void:
 	_input.editable = true
 	call_deferred("_focus_input")
 	_refresh_input_status()
+
+
+func _auto_dismiss_after_delay() -> void:
+	await get_tree().create_timer(AUTO_DISMISS_SECONDS).timeout
+	if _submitted or _finish_emitted:
+		return
+	_last_physics_metrics = {"dispersed_ratio": 1.0}
+	if _fan_waiting:
+		_complete_prototype2_physics()
+		await get_tree().process_frame
+	_submitted = true
+	_input.editable = false
+	_submit_button.disabled = true
+	_pending_character_count = 0
+	_emit_finished_result()
 
 
 func _show_initial_interference_field() -> void:
@@ -634,6 +687,10 @@ func _resume_input_after_fan() -> void:
 
 func _finish_submission_after_pause() -> void:
 	await get_tree().create_timer(0.24).timeout
+	_emit_finished_result()
+
+
+func _emit_finished_result() -> void:
 	if _finish_emitted:
 		return
 	_finish_emitted = true
@@ -663,9 +720,9 @@ func verify_contract() -> bool:
 		and _submit_button != null
 		and _feedback != null
 		and _counter != null
+		and _typography != null
 		and _ui_font != null
-		and _ui_font.font_names == PackedStringArray(UI_FONT_FAMILIES)
-		and _ui_font.allow_system_fallback
+		and _ui_font == _typography.ui
 		and _instruction_label != null
 		and _context_note != null
 		and _interference_layer != null
