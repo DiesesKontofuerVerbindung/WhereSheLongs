@@ -71,6 +71,8 @@ var _current_event: Dictionary = {}
 var _current_scene := ""
 var _verify_mode := false
 var _endpoint_reached := false
+## 眨眼门收尾时置真：跳过终点结算面板，直接切最终章。
+var _blink_endpoint_used := false
 var _preflight_errors: PackedStringArray = []
 var _visited_scenes: Dictionary = {}
 var _visited_modules: Dictionary = {}
@@ -1125,8 +1127,28 @@ func _execute_event(event: Dictionary) -> void:
 			_endpoint_reached = true
 			_status("[ENDPOINT] %s" % str(event.get("text", "")))
 			_log_runtime("ENDPOINT id=%s" % str(event.get("id", "")))
+		"blink_endpoint":
+			await _run_blink_endpoint(event)
 		_:
 			_preflight_errors.append("未知事件类型：%s" % kind)
+
+
+## 365 行之后的眨眼门：等 BlinkSystem 判定眨眼成功（摄像头，或按 F8），
+## 然后按 endpoint 收尾，由 _complete_story 直接切到最终章（章节三 source 916）。
+func _run_blink_endpoint(event: Dictionary) -> void:
+	if not _verify_mode and not _dev_jump_active:
+		var blink_node = get_node_or_null("/root/BlinkSystem")
+		if blink_node != null and blink_node.has_signal("blink_detected"):
+			_status("[BLINK] 等待眨眼（或按 F8）…")
+			_log_runtime("BLINK_GATE_WAIT id=%s" % str(event.get("id", "")))
+			await blink_node.blink_detected
+			_log_runtime("BLINK_GATE_PASSED id=%s" % str(event.get("id", "")))
+		else:
+			push_warning("BlinkSystem 未启用，眨眼门直接放行。")
+	_endpoint_reached = true
+	_blink_endpoint_used = true
+	_status("[ENDPOINT] %s" % str(event.get("text", "")))
+	_log_runtime("ENDPOINT id=%s (via blink gate)" % str(event.get("id", "")))
 
 
 func _show_line(event: Dictionary) -> void:
@@ -1952,7 +1974,8 @@ func _complete_story() -> void:
 	_dialogue_ui.hide_dialogue()
 	_narration_ui.begin_fade_for_dialogue(_verify_mode)
 	_interaction_panel.visible = false
-	_endpoint_panel.visible = true
+	if not _blink_endpoint_used:
+		_endpoint_panel.visible = true
 	_vfx.set_mode("none")
 	_refresh_diagnostics()
 	_log_runtime("LAYOUT_AUDIT narration_samples=%d narration_violations=%d max_center_error=%.3f max_width_overflow=%.3f dialogue_samples=%d psychology_samples=%d choice_samples=%d choice_violations=%d choice_max_center_error=%.3f psychology_in_dialogue=true psychology_parentheses=true dialogue_left=%s dialogue_body_top=%s continue_button_centered=%s choices_centered=%s shortcut_hint=%s narration_direct_reveal=%s dialogue_progressive_reveal=%s" % [
@@ -1986,17 +2009,20 @@ func _complete_story() -> void:
 			else:
 				_log_runtime("COMPLETE status=ok")
 			# 森林正片正常走完（非验证、非开发跳转、无运行错误）后，延时切到最终章 章节三。
-			if not _verify_mode and not _dev_jump_active and runtime_errors.is_empty():
+		if not _verify_mode and not _dev_jump_active and runtime_errors.is_empty():
+			if not _blink_endpoint_used:
 				_endpoint_panel.visible = true
-				call_deferred("_advance_to_chapter3")
+			call_deferred("_advance_to_chapter3")
 		else:
 			for issue in runtime_errors:
 				_log_runtime("COMPLETE_ERROR %s" % issue)
 
 
-## 森林正片结束时延时切到最终章 章节三 · 典礼上的选择。
+## 森林正片结束时切到最终章 章节三 · 典礼上的选择（source 916 起）。
+## 眨眼门收尾时只停 0.3 秒，接近无缝直切。
 func _advance_to_chapter3() -> void:
-	await get_tree().create_timer(2.0).timeout
+	var delay := 0.3 if _blink_endpoint_used else 2.0
+	await get_tree().create_timer(delay).timeout
 	get_tree().change_scene_to_file(CHAPTER3_SCENE)
 
 
@@ -2053,7 +2079,7 @@ func _validate_contract() -> PackedStringArray:
 			var bindings: Array = module_bindings.get(module_id, [])
 			bindings.append(event)
 			module_bindings[module_id] = bindings
-		elif kind == "endpoint":
+		elif kind == "endpoint" or kind == "blink_endpoint":
 			endpoint_count += 1
 		elif kind == "line":
 			line_count += 1

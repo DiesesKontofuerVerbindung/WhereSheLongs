@@ -33,7 +33,7 @@ const COLOR_MUTED := Color(0.62, 0.60, 0.66, 1.0)
 ## 场景名 → 底图。路径与 wedding_data 场景常量对齐。
 const SCENE_TEXTURE_PATHS := {
 	"婚礼背景图1": "res://assets/wedding/scene_wedding_1.png",
-	"婚礼背景图2": "res://assets/wedding/scene_wedding_2.png",
+	"婚礼背景图2": "res://assets/backgrounds/f2aef1e97c5f36c3ecc62e19e1cf0752.png",
 	"车上背景图": "res://assets/wedding/scene_car.png",
 	"家里场景": "res://assets/wedding/scene_home.png",
 }

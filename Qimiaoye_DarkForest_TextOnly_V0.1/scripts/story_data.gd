@@ -351,7 +351,7 @@ static func get_events() -> Array[Dictionary]:
 		{"type": "effect", "source": 364, "id": "world_shake", "status": "整个世界持续摇晃；动作状态失稳，小凌伸手但未抓住女孩。"},
 		{"type": "line", "source": 364, "speaker": "旁白", "text": "整个世界在不断地摇晃震动，小凌和女孩被摇晃地站不住，小凌伸手想要抓住女孩，就要抓住的那一刻，"},
 		{"type": "line", "source": 365, "speaker": "旁白", "text": "不稳定的世界关上了门……"},
-		{"type": "endpoint", "source": 366, "id": "dark_forest_end", "text": "黑暗森林章节结束"},
+		{"type": "blink_endpoint", "source": 366, "id": "blink_to_chapter3", "text": "（闭上眼睛再睁开，或按 F8，进入最终章。）"},
 	]
 
 
