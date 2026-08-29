@@ -11,6 +11,7 @@ const COLOR_ACCENT := Color("555b66")
 const DIALOGUE_BOX_PATH := "res://assets/ui/dialogue/dialogue_left_reference.png"
 const DIALOGUE_BOX_REGION := Rect2(104.0, 416.0, 1072.0, 262.0)
 const DIALOGUE_TEXT_SHIFT := 96
+const DIALOGUE_BODY_TOP_SHIFT := 12
 const TextRevealProfile := preload("res://scripts/text_reveal_profile.gd")
 
 var _speaker_panel: PanelContainer
@@ -239,6 +240,7 @@ func _build_ui() -> void:
 
 	var body_margin := MarginContainer.new()
 	body_margin.add_theme_constant_override("margin_left", DIALOGUE_TEXT_SHIFT)
+	body_margin.add_theme_constant_override("margin_top", DIALOGUE_BODY_TOP_SHIFT)
 	col.add_child(body_margin)
 
 	_body_label = Label.new()
