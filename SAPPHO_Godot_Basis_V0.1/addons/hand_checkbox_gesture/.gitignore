@@ -1,0 +1,5 @@
+﻿__pycache__/
+*.pyc
+*.log
+last_result.json
+detection/results/

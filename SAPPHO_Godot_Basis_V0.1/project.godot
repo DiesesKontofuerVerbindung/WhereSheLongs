@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="SAPPHO Basis V0.1"
-run/main_scene="res://scenes/test_room/test_room.tscn"
+run/main_scene="res://scenes/hand_checkbox/hand_checkbox_demo.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 
 [autoload]
@@ -19,6 +19,10 @@ config/features=PackedStringArray("4.7", "GL Compatibility")
 GameState="*res://shared/game_state/game_state.gd"
 SceneManager="*res://shared/scene_manager/scene_manager.gd"
 Dialogue="*res://shared/dialogue/dialogue_ui.tscn"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/hand_checkbox_gesture/plugin.cfg")
 
 [display]
 
