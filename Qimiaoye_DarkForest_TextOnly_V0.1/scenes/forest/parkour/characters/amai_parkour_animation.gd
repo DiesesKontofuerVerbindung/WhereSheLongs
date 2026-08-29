@@ -13,6 +13,10 @@ const IDLE_FRAME_COUNT := 60
 const RUN_START_FRAME_COUNT := 21
 const RUN_FRAME_COUNT := 14
 const JUMP_FRAME_COUNT := 77
+const STORY_FRAME_ROOT := "res://assets/characters/amai_story_blur"
+const STORY_IDLE_FRAME_COUNT := 151
+const STORY_RUN_START_FRAME_COUNT := 19
+const STORY_RUN_FRAME_COUNT := 25
 
 @export var movement_threshold := 24.0
 @export var vertical_motion_threshold := 24.0
@@ -26,6 +30,7 @@ static var _cached_sprite_frames: SpriteFrames
 
 var motion_state := MotionState.IDLE
 var _stationary_time := 0.0
+var _story_art_stage := 0
 
 @onready var runner := get_parent() as CharacterBody2D
 
@@ -95,6 +100,73 @@ func play_scripted_run(horizontal_direction: float = 1.0) -> void:
 func play_scripted_idle() -> void:
     _stationary_time = stop_grace_duration
     _set_motion_state(MotionState.IDLE)
+
+
+func set_story_art_stage(stage: int) -> void:
+    var next_stage := clampi(stage, 0, 2)
+    if next_stage == _story_art_stage:
+        return
+    _story_art_stage = next_stage
+    if next_stage == 0:
+        if _cached_sprite_frames == null:
+            _cached_sprite_frames = _build_sprite_frames()
+        sprite_frames = _cached_sprite_frames
+    else:
+        sprite_frames = _build_story_sprite_frames(next_stage + 1)
+    if motion_state == MotionState.JUMP and next_stage > 0:
+        motion_state = MotionState.IDLE
+    play(get_motion_state_name())
+
+
+func get_story_art_stage() -> int:
+    return _story_art_stage
+
+
+func verify_story_art_assets() -> bool:
+    for stage in [2, 3]:
+        for spec in [
+            ["idle", STORY_IDLE_FRAME_COUNT],
+            ["run_start", STORY_RUN_START_FRAME_COUNT],
+            ["run", STORY_RUN_FRAME_COUNT],
+        ]:
+            for frame_index in range(1, int(spec[1]) + 1):
+                if not ResourceLoader.exists(_story_frame_path(stage, str(spec[0]), frame_index)):
+                    return false
+    return true
+
+
+func _build_story_sprite_frames(stage: int) -> SpriteFrames:
+    var next_frames := SpriteFrames.new()
+    next_frames.remove_animation(&"default")
+    _add_story_animation(next_frames, &"idle", stage, "idle", STORY_IDLE_FRAME_COUNT, idle_fps, true)
+    _add_story_animation(next_frames, &"run_start", stage, "run_start", STORY_RUN_START_FRAME_COUNT, run_start_fps, false)
+    _add_story_animation(next_frames, &"run", stage, "run", STORY_RUN_FRAME_COUNT, run_fps, true)
+    return next_frames
+
+
+func _add_story_animation(
+        target: SpriteFrames,
+        animation_name: StringName,
+        stage: int,
+        folder_name: String,
+        frame_count: int,
+        fps: float,
+        loops: bool
+) -> void:
+    target.add_animation(animation_name)
+    target.set_animation_speed(animation_name, fps)
+    target.set_animation_loop(animation_name, loops)
+    for frame_index in range(1, frame_count + 1):
+        var texture_path := _story_frame_path(stage, folder_name, frame_index)
+        var texture := load(texture_path) as Texture2D
+        if texture == null:
+            push_error("[AMAI STORY ANIMATION] Missing frame: %s" % texture_path)
+            continue
+        target.add_frame(animation_name, texture)
+
+
+func _story_frame_path(stage: int, folder_name: String, frame_index: int) -> String:
+    return "%s/stage%d/%s/%04d.png" % [STORY_FRAME_ROOT, stage, folder_name, frame_index]
 
 
 func _build_sprite_frames() -> SpriteFrames:
