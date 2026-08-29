@@ -289,6 +289,9 @@ func _build_ui() -> void:
 	add_child(_dark_overlay)
 
 	_build_story_stage()
+	# CG 是场景底图，必须在所有文字 UI 之前入树：它现在是常驻循环，
+	# 排在 NARRATION_UI / DIALOGUE_UI 之后会把对白整个盖掉。
+	_build_cutscene_player()
 
 	var top_margin := MarginContainer.new()
 	top_margin.set_anchors_preset(Control.PRESET_CENTER_TOP)
@@ -326,7 +329,6 @@ func _build_ui() -> void:
 	_build_endpoint_panel()
 	_build_advance_hint()
 	_build_module_host()
-	_build_cutscene_player()
 	_build_dev_jump_panel()
 
 
@@ -340,7 +342,7 @@ func _build_story_stage() -> void:
 
 
 func _build_cutscene_player() -> void:
-	# 放在模块宿主之后、F4 开发面板之前：CG 要盖住舞台和对白，但不能挡住调试跳转。
+	# 紧跟 story_stage：盖住森林舞台与黑幕，但要垫在所有文字 UI 之下。
 	_cutscene_player = CutscenePlayerScript.new()
 	add_child(_cutscene_player)
 

@@ -21,11 +21,15 @@ const FILL_DIM := 0.42
 ## 瀑布下 24fps/4.75s，其余三段 30fps/5.04s。
 ## 上一版为了压体积做过"源帧率减半 + PNG-8 量化 256 色"，画质就是那么丢的。
 ## 现在是 WebP q95 真彩色有损，567 帧共 82 MB，普通 git 装得下，不必上 LFS。
+## loop=false 的段播完停在最后一帧，等场景切走再淡出。
+## 溺水是"小凌在水中不断下沉"，单向动作，首尾接不上，硬循环会看见明显的跳；
+## 而且下沉倒放会变成上浮，乒乓也不能用。停在沉到底的那一帧才对，
+## 节奏交给玩家读完那几行再按继续。
 const CUTSCENES := {
-	"waterfall_below": {"frames": 114, "fps": 24.0},
-	"lake_talk": {"frames": 151, "fps": 30.0},
-	"drowning": {"frames": 151, "fps": 30.0},
-	"touch_chest": {"frames": 151, "fps": 30.0},
+	"waterfall_below": {"frames": 114, "fps": 24.0, "loop": true},
+	"lake_talk": {"frames": 151, "fps": 30.0, "loop": true},
+	"drowning": {"frames": 151, "fps": 30.0, "loop": false},
+	"touch_chest": {"frames": 151, "fps": 30.0, "loop": true},
 }
 
 var _frame_view: TextureRect
@@ -34,6 +38,7 @@ var _backdrop: ColorRect
 var _playing_id := ""
 var _loop_id := ""
 var _loop_starts := {}
+var _holding_last_frame := false
 var _played_frames := 0
 var _last_missing_frames := PackedStringArray()
 var _frame_cache := {}
@@ -146,6 +151,7 @@ func play_looping(cutscene_id: String, verify_mode := false) -> void:
 		push_warning("CG %s 缺 %d 帧，跳过播放" % [cutscene_id, _last_missing_frames.size()])
 		return
 	_loop_id = cutscene_id
+	_holding_last_frame = false
 	_loop_starts[cutscene_id] = int(_loop_starts.get(cutscene_id, 0)) + 1
 	if verify_mode:
 		# verify 只确认资源齐全与启停配对，不能真的挂着一个无限循环。
@@ -157,8 +163,13 @@ func play_looping(cutscene_id: String, verify_mode := false) -> void:
 	_set_frame_texture(_acquire_frame(cutscene_id, 1))
 	visible = true
 	await _tween_self_alpha(1.0, FADE_SECONDS)
+	var should_loop := bool(CUTSCENES[cutscene_id].get("loop", true))
 	while _loop_id == cutscene_id:
 		await _play_one_pass(cutscene_id)
+		if not should_loop:
+			# 停在最后一帧挂着，等 stop_looping() 淡出，别回到第一帧重来。
+			_holding_last_frame = true
+			return
 
 
 ## 停止当前循环并淡出。场景切走时调用。
@@ -166,6 +177,7 @@ func stop_looping(verify_mode := false) -> void:
 	if _loop_id.is_empty():
 		return
 	_loop_id = ""
+	_holding_last_frame = false
 	if verify_mode:
 		_playing_id = ""
 		visible = false
@@ -246,6 +258,7 @@ func get_debug_snapshot() -> Dictionary:
 	return {
 		"cutscene_playing": _playing_id,
 		"cutscene_loop_id": _loop_id,
+		"cutscene_holding_last_frame": _holding_last_frame,
 		"cutscene_played_frames": _played_frames,
 		"cutscene_cached_frames": _frame_cache.size(),
 		"cutscene_missing_frames": _last_missing_frames.size(),
