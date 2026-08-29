@@ -1,0 +1,185 @@
+extends Node
+class_name RunnerActionController
+
+enum RunnerAction {
+    NONE,
+    UP,
+    DOWN,
+}
+
+signal action_performed(action: int)
+
+@export var runner_path: NodePath = ^".."
+@export var collision_shape_path: NodePath = ^"../CollisionShape2D"
+@export var visual_path: NodePath
+@export var run_speed := 300.0
+@export var gravity := 1700.0
+@export var jump_impulse := 900.0
+@export var slide_duration := 1.05
+@export var ground_action_buffer_duration := 0.32
+@export var suspend_runner_physics := false
+@export var slide_visual_offset := Vector2(0.0, 8.0)
+@export_range(0.4, 1.0, 0.01) var slide_visual_scale_y := 0.72
+@export_range(0.5, 0.9, 0.01) var slide_collider_height_ratio := 0.56
+@export_range(0.5, 1.0, 0.01) var slide_collider_radius_ratio := 0.78
+
+var is_running := false
+var is_sliding := false
+var _slide_remaining := 0.0
+var _queued_ground_action = RunnerAction.NONE
+var _ground_action_buffer_remaining := 0.0
+var _horizontal_input := 0.0
+var _normal_shape: Shape2D
+var _slide_shape: Shape2D
+var _normal_collision_position := Vector2.ZERO
+var _slide_collision_position := Vector2.ZERO
+var _visual: Node2D
+var _normal_visual_position := Vector2.ZERO
+var _normal_visual_scale := Vector2.ONE
+
+@onready var runner: CharacterBody2D = get_node(runner_path)
+@onready var collision_shape: CollisionShape2D = get_node(collision_shape_path)
+
+
+func _ready() -> void:
+    process_physics_priority = 10
+    _cache_collision_shapes()
+    _cache_visual()
+
+
+func start_auto_run() -> void:
+    start_run(1.0)
+
+
+func start_run(initial_horizontal_input: float = 0.0) -> void:
+    is_running = true
+    _horizontal_input = clampf(initial_horizontal_input, -1.0, 1.0)
+    if suspend_runner_physics:
+        runner.set_physics_process(false)
+
+
+func stop_auto_run() -> void:
+    stop_run()
+
+
+func stop_run() -> void:
+    is_running = false
+    _horizontal_input = 0.0
+    _queued_ground_action = RunnerAction.NONE
+    _ground_action_buffer_remaining = 0.0
+    _set_slide(false)
+    runner.velocity = Vector2.ZERO
+    if suspend_runner_physics:
+        runner.set_physics_process(true)
+
+
+func configure_motion(next_run_speed: float, next_gravity: float, next_jump_impulse: float) -> void:
+    run_speed = next_run_speed
+    gravity = next_gravity
+    jump_impulse = next_jump_impulse
+
+
+func set_horizontal_input(next_horizontal_input: float) -> void:
+    _horizontal_input = clampf(next_horizontal_input, -1.0, 1.0)
+
+
+func perform_action(action: int) -> void:
+    if action != RunnerAction.UP and action != RunnerAction.DOWN:
+        return
+    if runner.is_on_floor():
+        _execute_ground_action(action)
+    else:
+        _queued_ground_action = action
+        _ground_action_buffer_remaining = ground_action_buffer_duration
+    action_performed.emit(action)
+
+
+func get_queued_ground_action() -> int:
+    return _queued_ground_action
+
+
+func debug_set_slide(enabled: bool) -> void:
+    _slide_remaining = slide_duration if enabled else 0.0
+    _set_slide(enabled)
+
+
+func _physics_process(delta: float) -> void:
+    if not is_running or get_tree().paused:
+        return
+
+    if _queued_ground_action != RunnerAction.NONE:
+        _ground_action_buffer_remaining = maxf(0.0, _ground_action_buffer_remaining - delta)
+        if is_zero_approx(_ground_action_buffer_remaining):
+            _queued_ground_action = RunnerAction.NONE
+
+    if runner.is_on_floor() and _queued_ground_action != RunnerAction.NONE:
+        var buffered_action: int = _queued_ground_action
+        _queued_ground_action = RunnerAction.NONE
+        _ground_action_buffer_remaining = 0.0
+        _execute_ground_action(buffered_action)
+    elif runner.is_on_floor() and runner.velocity.y > 0.0:
+        runner.velocity.y = 0.0
+    else:
+        runner.velocity.y = minf(runner.velocity.y + gravity * delta, 1100.0)
+    runner.velocity.x = _horizontal_input * run_speed
+
+    if is_sliding:
+        _slide_remaining = maxf(0.0, _slide_remaining - delta)
+        if is_zero_approx(_slide_remaining):
+            _set_slide(false)
+
+    runner.move_and_slide()
+
+
+func _execute_ground_action(action: int) -> void:
+    match action:
+        RunnerAction.UP:
+            if is_sliding:
+                _slide_remaining = 0.0
+                _set_slide(false)
+            runner.velocity.y = -jump_impulse
+        RunnerAction.DOWN:
+            _slide_remaining = slide_duration
+            _set_slide(true)
+
+
+func _cache_collision_shapes() -> void:
+    _normal_collision_position = collision_shape.position
+    _normal_shape = collision_shape.shape.duplicate()
+    _slide_shape = collision_shape.shape.duplicate()
+    if _normal_shape is CapsuleShape2D and _slide_shape is CapsuleShape2D:
+        var normal_capsule := _normal_shape as CapsuleShape2D
+        var slide_capsule := _slide_shape as CapsuleShape2D
+        slide_capsule.radius = normal_capsule.radius * slide_collider_radius_ratio
+        slide_capsule.height = maxf(slide_capsule.radius * 2.0, normal_capsule.height * slide_collider_height_ratio)
+        _slide_collision_position = _normal_collision_position + Vector2(0.0, (normal_capsule.height - slide_capsule.height) * 0.5)
+    elif _normal_shape is RectangleShape2D and _slide_shape is RectangleShape2D:
+        var normal_rectangle := _normal_shape as RectangleShape2D
+        var slide_rectangle := _slide_shape as RectangleShape2D
+        slide_rectangle.size.y = normal_rectangle.size.y * 0.6
+        _slide_collision_position = _normal_collision_position + Vector2(0.0, (normal_rectangle.size.y - slide_rectangle.size.y) * 0.5)
+
+
+func _cache_visual() -> void:
+    if not visual_path.is_empty():
+        _visual = get_node_or_null(visual_path) as Node2D
+    if _visual == null:
+        for child in runner.get_children():
+            if child is Sprite2D and child.visible:
+                _visual = child as Node2D
+                break
+    if _visual == null:
+        return
+    _normal_visual_position = _visual.position
+    _normal_visual_scale = _visual.scale
+
+
+func _set_slide(enabled: bool) -> void:
+    if _normal_shape == null or _slide_shape == null:
+        return
+    is_sliding = enabled
+    collision_shape.set_deferred("shape", _slide_shape if enabled else _normal_shape)
+    collision_shape.set_deferred("position", _slide_collision_position if enabled else _normal_collision_position)
+    if _visual != null:
+        _visual.position = _normal_visual_position + slide_visual_offset if enabled else _normal_visual_position
+        _visual.scale = Vector2(_normal_visual_scale.x, _normal_visual_scale.y * slide_visual_scale_y) if enabled else _normal_visual_scale

@@ -1,0 +1,184 @@
+"""All adjustable Fan Gesture Prototype parameters live in this file."""
+
+from pathlib import Path
+
+
+PROJECT_DIR = Path(__file__).resolve().parent
+MODEL_PATH = PROJECT_DIR / "hand_landmarker.task"
+RESULTS_DIR = PROJECT_DIR / "results"
+
+# Window and camera.
+WINDOW_NAME = "Fan Gesture Prototype 2"
+WINDOW_WIDTH = 1000
+WINDOW_HEIGHT = 700
+CAMERA_INDEX = 0
+CAMERA_WIDTH = 1280
+CAMERA_HEIGHT = 720
+MIRROR_CAMERA = True
+TARGET_FPS = 240
+CAMERA_TARGET_FPS = 60
+CAMERA_BUFFER_SIZE = 1
+
+# Input signal profiles. Baseline preserves direct screen mapping; Adaptive
+# separates low-latency physics control from conservative gesture recognition.
+SENSITIVITY_BASELINE = "baseline"
+SENSITIVITY_ADAPTIVE = "adaptive"
+DEFAULT_SENSITIVITY_PROFILE = SENSITIVITY_ADAPTIVE
+PHYSICS_ONE_EURO_MIN_CUTOFF = 1.0
+PHYSICS_ONE_EURO_BETA = 0.007
+PHYSICS_ONE_EURO_D_CUTOFF = 1.0
+GESTURE_ONE_EURO_MIN_CUTOFF = 0.7
+GESTURE_ONE_EURO_BETA = 0.003
+GESTURE_ONE_EURO_D_CUTOFF = 1.0
+PHYSICS_DEADZONE = 2.0
+PALM_X_GAIN_BASE = 1.35
+PALM_X_GAIN_MAX = 1.75
+PALM_Y_GAIN = 1.0
+PALM_GAIN_SPEED_LOW = 90.0
+PALM_GAIN_SPEED_HIGH = 900.0
+SIGNAL_MONITOR_INTERVAL = 1.0 / 20.0
+
+# Explainable relaxed-palm classification. A natural fan hand may keep one
+# finger bent; the thumb remains irrelevant to this prototype.
+FINGER_EXTENDED_MIN_ANGLE = 140.0
+FINGER_EXTENDED_DISTANCE_RATIO = 1.06
+OPEN_PALM_MIN_EXTENDED_FINGERS = 3
+
+# Fan state machine and horizontal motion geometry (screen pixels / seconds).
+PALM_ARM_TIME = 0.12
+PALM_ARM_MAX_DRIFT = 55.0
+FAN_START_DISTANCE = 32.0
+MIN_HORIZONTAL_AMPLITUDE = 65.0
+MIN_DIRECTION_DISTANCE = 32.0
+MAX_VERTICAL_DRIFT = 105.0
+JITTER_DEADZONE = 7.0
+DIRECTION_HYSTERESIS = 14.0
+FAN_IDLE_TIMEOUT = 1.20
+OPEN_PALM_GRACE_TIME = 0.24
+MIN_SWEEPS_FOR_SUCCESS = 2
+SMOOTHING_FACTOR = 0.55
+VELOCITY_SMOOTHING_FACTOR = 0.55
+MAX_MISSING_HAND_TIME = 0.35
+CURSOR_HOLD_TIME = 0.12
+TRAIL_LENGTH = 80
+TRAJECTORY_PREFILL_POINTS = 30
+
+# Normalization references for the explainable 0..1 fan-strength formula.
+STRENGTH_VELOCITY_REFERENCE = 700.0
+STRENGTH_AMPLITUDE_REFERENCE = 180.0
+STRENGTH_FREQUENCY_REFERENCE = 2.5
+RECENT_SWEEP_WINDOW = 2.0
+
+# Interference text: whole V2 "reality voices" begin as a dense field around
+# the later input area. One sentence is always one physical entity.
+INTERFERENCE_TEXT_ENTITY_COUNT = 72
+INTERFERENCE_RANDOM_SEED = 2608
+INTERFERENCE_CENTER_X = WINDOW_WIDTH / 2
+INTERFERENCE_CENTER_Y = WINDOW_HEIGHT * 0.62
+INTERFERENCE_INPUT_BOX_WIDTH = 340.0
+INTERFERENCE_INPUT_BOX_HEIGHT = 82.0
+INTERFERENCE_TEXT_MIN_FONT_SIZE = 24
+INTERFERENCE_TEXT_MAX_FONT_SIZE = 36
+INTERFERENCE_TEXT_OPACITY_MIN = 0.66
+INTERFERENCE_TEXT_OPACITY_MAX = 0.92
+INTERFERENCE_PHRASES = (
+    "这样不好吗",
+    "别跑这么远",
+    "恭喜你被录用了",
+    "可是我们要结婚……",
+    "留在这里不好吗？",
+    "外面情况已经这么糟糕了",
+    "别人都这么选……",
+    "为什么非得是你？",
+    "你确定这是你想要的吗？",
+    "先想清楚了再做决定",
+    "万一后悔了怎么办？",
+    "要是做错了就再也回不去了",
+    "你这么做别人会怎么看？",
+    "What if you're wrong?",
+    "Bleib doch hier.",
+    "Was, wenn du es bereust?",
+    "Perché proprio tu?",
+    "E se fosse un errore?",
+    "Cosa diranno gli altri?",
+    "Non puoi tornare indietro.",
+    "Stay where it's safe.",
+    "Don't risk everything.",
+    "Reste ici.",
+    "Et si tu regrettes ?",
+    "Que vont penser les autres ?",
+    "Quédate aquí.",
+    "¿Y si te equivocas?",
+    "No hay vuelta atrás.",
+    "Fica aqui.",
+    "E se te arrependeres?",
+    "Blijf toch hier.",
+    "Wat als je spijt krijgt?",
+    "Stanna här.",
+    "Tänk om du ångrar dig?",
+    "Zostań tutaj.",
+    "A jeśli pożałujesz?",
+)
+TEXT_MASS_BASE = 0.86
+TEXT_MASS_PER_PIXEL = 0.00085
+TEXT_MASS_MIN = 0.90
+TEXT_MASS_MAX = 1.22
+LETTER_GRAVITY = 0.0
+LETTER_FLOOR_Y = WINDOW_HEIGHT - 48.0
+LETTER_RESTITUTION = 0.28
+LETTER_SETTLE_VERTICAL_SPEED = 38.0
+LETTER_AIR_DRAG = 0.45
+LETTER_FLOOR_FRICTION = 5.0
+LETTER_PHYSICS_MAX_DT = 0.05
+HAND_FORCE_RADIUS = 125.0
+HAND_FORCE_FALLOFF_EXPONENT = 1.5
+HAND_HORIZONTAL_FORCE_GAIN = 2.6
+HAND_VERTICAL_FORCE_GAIN = 0.65
+HAND_MIN_FORCE_VELOCITY = 80.0
+HAND_FORCE_FULL_VELOCITY = 460.0
+HAND_FORCE_MAX_EFFECTIVE_SPEED = 800.0
+HAND_NEUTRAL_HALF_WIDTH = 55.0
+HAND_ACTIVE_STROKE_MIN_VELOCITY = 45.0
+PALM_VELOCITY_SMOOTHING = 0.60
+PALM_VELOCITY_MAX = 2400.0
+PHYSICS_OPEN_PALM_GRACE_TIME = 0.12
+HAND_IMPULSE_MIN_VELOCITY = 650.0
+HAND_IMPULSE_FULL_VELOCITY = 1000.0
+HAND_IMPULSE_MIN_SEGMENT_DISTANCE = 50.0
+HAND_IMPULSE_MIN_STRENGTH_RATIO = 0.15
+HAND_IMPULSE_GAIN = 0.25
+HAND_IMPULSE_LIFT_RATIO = 0.12
+INTERFERENCE_DISPERSED_MARGIN = 45.0
+
+# Presentation-level two-sided dispersion. This is intentionally separate
+# from local hand force: a valid horizontal palm motion drives the mixed
+# voices outward from the central field, while local left/right mechanics stay.
+AUTO_DISPERSION_MOTION_THRESHOLD = 420.0
+AUTO_DISPERSION_SPEED_REFERENCE = 760.0
+AUTO_DISPERSION_ACCELERATION = 1850.0
+AUTO_DISPERSION_DECAY = 1.15
+# Once a fast sweep activates presentation assist, both-side separation takes
+# priority over the hand's one-sided local push.
+AUTO_DISPERSION_LOCAL_FORCE_SCALE = 0.25
+AUTO_DISPERSION_IMPULSE_SCALE = 0.35
+
+# Pillow renders real CJK text; OpenCV Hershey fonts only cover ASCII.
+UNICODE_FONT_CANDIDATES = (
+    "C:/Windows/Fonts/NotoSansSC-VF.ttf",
+    "C:/Windows/Fonts/msyh.ttc",
+    "C:/Windows/Fonts/simsun.ttc",
+    "C:/Windows/Fonts/simhei.ttf",
+    "C:/Windows/Fonts/segoeui.ttf",
+    "C:/Windows/Fonts/arial.ttf",
+    "C:/Windows/Fonts/calibri.ttf",
+)
+
+# MediaPipe.
+NUM_HANDS = 1
+MIN_HAND_DETECTION_CONFIDENCE = 0.45
+MIN_HAND_PRESENCE_CONFIDENCE = 0.45
+MIN_HAND_TRACKING_CONFIDENCE = 0.45
+
+# Reproducible interactive test targets.
+TARGET_POSITIVE_TRIALS = 20
+TARGET_NEGATIVE_TRIALS = 20

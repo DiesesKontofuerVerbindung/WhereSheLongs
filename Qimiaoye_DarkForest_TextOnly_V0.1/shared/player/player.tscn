@@ -1,0 +1,41 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://shared/player/player.gd" id="1_player"]
+
+[sub_resource type="CapsuleShape2D" id="Capsule_player"]
+radius = 11.0
+height = 32.0
+
+[sub_resource type="CircleShape2D" id="Circle_interaction"]
+radius = 42.0
+
+[node name="Player" type="CharacterBody2D"]
+collision_layer = 1
+collision_mask = 1
+script = ExtResource("1_player")
+
+[node name="Visual" type="Polygon2D" parent="."]
+polygon = PackedVector2Array(-11, -15, 11, -15, 13, 11, 0, 18, -13, 11)
+color = Color(0.92, 0.92, 0.96, 1)
+
+[node name="FacingMark" type="Polygon2D" parent="Visual"]
+polygon = PackedVector2Array(-3, 8, 3, 8, 0, 15)
+color = Color(0.25, 0.25, 0.3, 1)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("Capsule_player")
+
+[node name="InteractionDetector" type="Area2D" parent="."]
+position = Vector2(0, 30)
+collision_layer = 0
+collision_mask = 2
+monitoring = true
+monitorable = false
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="InteractionDetector"]
+shape = SubResource("Circle_interaction")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position_smoothing_enabled = true
+position_smoothing_speed = 8.0
+enabled = true

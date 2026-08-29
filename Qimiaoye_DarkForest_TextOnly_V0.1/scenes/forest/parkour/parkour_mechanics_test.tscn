@@ -1,0 +1,84 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scenes/forest/parkour/parkour_controller.gd" id="1_controller"]
+[ext_resource type="Script" path="res://scenes/forest/parkour/parkour_motor.gd" id="2_motor"]
+[ext_resource type="Script" path="res://scenes/forest/parkour/parkour_route.gd" id="3_route"]
+[ext_resource type="PackedScene" path="res://scenes/forest/parkour/parkour_platform.tscn" id="4_platform"]
+[ext_resource type="PackedScene" path="res://shared/player/player.tscn" id="5_player"]
+[ext_resource type="Script" path="res://scenes/forest/parkour/parkour_debug.gd" id="6_debug"]
+
+[node name="ParkourMechanicsTest" type="Node2D"]
+script = ExtResource("1_controller")
+platforms_path = NodePath("Gameplay/Platforms")
+
+[node name="Background" type="ColorRect" parent="."]
+z_index = -10
+offset_right = 1920.0
+offset_bottom = 1080.0
+mouse_filter = 2
+color = Color(0.035, 0.06, 0.075, 1)
+
+[node name="Title" type="Label" parent="."]
+position = Vector2(56, 54)
+theme_override_colors/font_color = Color(0.75, 0.92, 0.88, 1)
+theme_override_font_sizes/font_size = 34
+text = "PARKOUR MECHANISM TEST — A → B → C → D"
+
+[node name="Instructions" type="Label" parent="."]
+position = Vector2(58, 104)
+theme_override_colors/font_color = Color(0.62, 0.76, 0.78, 1)
+theme_override_font_sizes/font_size = 20
+text = "A/D or arrows: Run    Space: Jump    F1: Debug    F2: Respawn    F3: Next platform"
+
+[node name="ParkourMotor" type="Node" parent="."]
+script = ExtResource("2_motor")
+
+[node name="ParkourRoute" type="Node" parent="."]
+script = ExtResource("3_route")
+profile = 1
+
+[node name="Gameplay" type="Node2D" parent="."]
+
+[node name="Platforms" type="Node2D" parent="Gameplay"]
+
+[node name="A" parent="Gameplay/Platforms" instance=ExtResource("4_platform")]
+platform_id = &"A"
+show_mechanics_visual = true
+
+[node name="B" parent="Gameplay/Platforms" instance=ExtResource("4_platform")]
+platform_id = &"B"
+show_mechanics_visual = true
+
+[node name="C" parent="Gameplay/Platforms" instance=ExtResource("4_platform")]
+platform_id = &"C"
+show_mechanics_visual = true
+
+[node name="D" parent="Gameplay/Platforms" instance=ExtResource("4_platform")]
+platform_id = &"D"
+show_mechanics_visual = true
+
+[node name="Player" parent="." instance=ExtResource("5_player")]
+z_index = 10
+floor_snap_length = 8.0
+
+[node name="DesignCamera" type="Camera2D" parent="."]
+position = Vector2(960, 540)
+zoom = Vector2(0.666667, 0.666667)
+enabled = true
+
+[node name="ParkourDebug" type="Node2D" parent="."]
+script = ExtResource("6_debug")
+
+[node name="CanvasLayer" type="CanvasLayer" parent="ParkourDebug"]
+
+[node name="PanelContainer" type="PanelContainer" parent="ParkourDebug/CanvasLayer"]
+offset_left = 18.0
+offset_top = 18.0
+offset_right = 478.0
+offset_bottom = 300.0
+
+[node name="DebugText" type="Label" parent="ParkourDebug/CanvasLayer/PanelContainer"]
+custom_minimum_size = Vector2(430, 250)
+theme_override_colors/font_color = Color(0.88, 1, 0.95, 1)
+theme_override_font_sizes/font_size = 16
+text = "Parkour Debug"

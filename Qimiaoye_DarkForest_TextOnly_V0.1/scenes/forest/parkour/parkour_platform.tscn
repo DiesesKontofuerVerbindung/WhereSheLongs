@@ -1,0 +1,35 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scenes/forest/parkour/parkour_platform.gd" id="1_platform"]
+
+[sub_resource type="RectangleShape2D" id="Rectangle_body"]
+resource_local_to_scene = true
+size = Vector2(160, 30)
+
+[sub_resource type="RectangleShape2D" id="Rectangle_sensor"]
+resource_local_to_scene = true
+size = Vector2(140, 14)
+
+[node name="ParkourPlatform" type="Node2D"]
+script = ExtResource("1_platform")
+
+[node name="Visual" type="Polygon2D" parent="."]
+visible = false
+polygon = PackedVector2Array(-80, -15, 80, -15, 80, 15, -80, 15)
+color = Color(0.18, 0.64, 0.38, 1)
+
+[node name="StaticBody2D" type="StaticBody2D" parent="."]
+collision_layer = 1
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="StaticBody2D"]
+shape = SubResource("Rectangle_body")
+
+[node name="LandingSensor" type="Area2D" parent="."]
+collision_layer = 0
+collision_mask = 1
+monitoring = true
+monitorable = false
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="LandingSensor"]
+shape = SubResource("Rectangle_sensor")
