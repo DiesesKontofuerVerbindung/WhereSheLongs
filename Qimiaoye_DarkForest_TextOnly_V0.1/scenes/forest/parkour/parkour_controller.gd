@@ -117,6 +117,8 @@ func _physics_process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
     if not active or not event is InputEventKey or not event.pressed or event.echo:
         return
+    if not OS.has_feature("editor"):
+        return
     match event.keycode:
         KEY_F1:
             if parkour_debug != null:

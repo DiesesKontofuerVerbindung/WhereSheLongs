@@ -999,7 +999,7 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		var key_event := event as InputEventKey
 		if key_event.pressed and not key_event.echo:
-			if key_event.keycode == KEY_F4:
+			if OS.has_feature("editor") and key_event.keycode == KEY_F4:
 				_toggle_dev_jump_panel()
 				get_viewport().set_input_as_handled()
 				return
@@ -1024,7 +1024,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if _dev_jump_overlay != null and _dev_jump_overlay.visible:
 		get_viewport().set_input_as_handled()
 		return
-	if key_event.keycode == KEY_F3 and key_event.pressed and not key_event.echo:
+	if OS.has_feature("editor") and key_event.keycode == KEY_F3 and key_event.pressed and not key_event.echo:
 		_diagnostic_panel.visible = not _diagnostic_panel.visible
 		_refresh_diagnostics()
 		get_viewport().set_input_as_handled()

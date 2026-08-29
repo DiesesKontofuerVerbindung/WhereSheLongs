@@ -360,7 +360,7 @@ func _input(event: InputEvent) -> void:
 	var key_event := event as InputEventKey
 	if not key_event.pressed or key_event.echo:
 		return
-	if key_event.keycode == KEY_F4:
+	if OS.has_feature("editor") and key_event.keycode == KEY_F4:
 		_toggle_dev_jump_panel()
 		get_viewport().set_input_as_handled()
 		return

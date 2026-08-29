@@ -6,7 +6,7 @@
 
 ### 直接运行测试版
 
-使用单独提供的 `Gespielt-Latest.exe`，双击即可启动。Windows SmartScreen 首次提示时，请在确认文件来源后选择“更多信息”→“仍要运行”。
+使用 `releases/windows/Gespielt-Submission.exe`，双击即可启动。该大文件通过 Git LFS 管理，克隆源码时请确保已安装 Git LFS。Windows SmartScreen 首次提示时，请在确认文件来源后选择“更多信息”→“仍要运行”。
 
 ### 从源码运行
 
@@ -49,8 +49,7 @@ xattr -dr com.apple.quarantine /Applications/Godot.app
 - 跑酷：`Space` 跳跃，`S / ↓` 下滑
 - LakeJump：按住鼠标左键、`Space` 或 `Enter` 蓄力，松开起跳
 - StarJar：把五团星光拖入瓶口
-- DOCX 开发回溯：`F4`
-- 诊断面板：`F3`
+- 提交版已关闭开发者快捷键。`F3/F4` 仅在 Godot 编辑器运行源码时可用。
 
 ## 日志
 

@@ -4,14 +4,14 @@ Godot 4.7.2 剧情游戏工程，包含婚礼前夜、奇妙夜、黑暗森林�
 
 ## 获取内容
 
-- Windows 测试版：`Gespielt-Latest.exe`（随测试包单独提供，不放入 Git 仓库）。
+- Windows 提交版：`releases/windows/Gespielt-Submission.exe`（位于仓库根目录，通过 Git LFS 管理）。
 - 完整 Godot 工程：`Qimiaoye_DarkForest_TextOnly_V0.1/`。
 - Windows Godot 4.7.2 引擎：`tools/godot/windows/Godot_v4.7.2-stable_win64.zip`。
 - macOS 不使用 Windows EXE；请按下方说明用 macOS 版 Godot 4.7.2 打开源码。
 
 ## Windows：直接玩 EXE
 
-1. 把 `Gespielt-Latest.exe` 复制到本地磁盘，预留至少 2 GB 空间。
+1. 获取仓库根目录的 `releases/windows/Gespielt-Submission.exe`，或使用桌面提交 ZIP；预留至少 2 GB 空间。通过 Git 克隆时需要先安装 Git LFS。
 2. 双击运行。第一次启动可能需要等待一段时间加载资源。
 3. 如果 Windows SmartScreen 拦截，确认文件来源后选择“更多信息”→“仍要运行”。
 4. 游戏存档和日志位于：
@@ -81,8 +81,8 @@ macOS 首次导入会重新生成平台相关缓存，耗时取决于磁盘和�
 - TextInput：键盘输入；没有摄像头时可按 `F` 使用 Fan 预览操作。
 - LakeJump：按住鼠标左键、`Space` 或 `Enter` 蓄力，松开起跳；落水后返回剧情。
 - StarJar：拖动五团星光进入瓶口。
-- DOCX 开发回溯：`F4` 打开，输入来源行；`Esc` 或再次按 `F4` 关闭。
-- 诊断面板：`F3`。正式界面默认隐藏全局 Blink 状态和跑酷状态调试覆盖层。
+- 提交版关闭 `F3/F4` 与跑酷 `F1–F6` 开发者快捷键；这些功能只在 Godot 编辑器运行源码时可用。
+- 正式界面默认隐藏全局 Blink 状态和跑酷状态调试覆盖层。
 
 ## 从源码导出 Windows 版本
 
