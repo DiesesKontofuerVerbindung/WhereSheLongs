@@ -27,6 +27,7 @@ static func build_events() -> Array[Dictionary]:
 static func _wedding_hall_events() -> Array[Dictionary]:
 	return [
 		{"type": "scene", "source": 2, "name": SCENE_WEDDING_1},
+		{"type": "audio", "source": 2, "action": "start", "channel": "bgm", "stream": "wedding_bgm_opening", "status": "开场婚礼主题 BGM 起"},
 		{"type": "line", "source": 3, "speaker": "主持人", "text": "有人说，婚礼是两个人爱情的终点。"},
 		{"type": "line", "source": 4, "speaker": "主持人", "text": "但我更愿意相信——"},
 		{"type": "line", "source": 5, "speaker": "主持人", "text": "婚礼不是终点。"},
@@ -40,9 +41,10 @@ static func _wedding_hall_events() -> Array[Dictionary]:
 		{"type": "line", "source": 13, "speaker": "主持人", "text": "就请新郎，也对他即将共度一生的人，说出自己的心里话。"},
 		{"type": "line", "source": 14, "speaker": "主持人", "text": "有请新郎——"},
 		# 原文这里就是一个空拍，新郎没有出现。停顿本身是演出内容，不能省。
-		{"type": "wait", "source": 15, "seconds": 2.5, "status": "无人应答的停顿。"},
+		{"type": "wait", "source": 15, "seconds": 2.5},
 		{"type": "line", "source": 16, "speaker": "主持人", "text": "……"},
 		{"type": "action", "source": 17, "id": "xiaoling_pull_veil", "status": "小凌一把抓下自己的头纱。"},
+		{"type": "audio", "source": 17, "action": "start", "channel": "amb", "stream": "wedding_amb_rehearsal", "status": "婚礼彩排现实环境声起"},
 		{"type": "line", "source": 17, "speaker": "小凌", "text": "他应该在忙，还没到。"},
 
 		# 3–21 仍用司仪底图（婚礼背景图1）；誓词模块后再切婚礼背景图2。
@@ -72,6 +74,7 @@ static func _wedding_hall_events() -> Array[Dictionary]:
 		},
 
 		{"type": "scene", "source": 22, "name": SCENE_WEDDING_2},
+		{"type": "audio", "source": 22, "action": "stop", "channel": "bgm", "fade": 6.0, "status": "开场婚礼主题 BGM 从22开始淡出至27"},
 		{"type": "line", "source": 22, "speaker": "旁白", "text": "彩排快结束时，小凌的未婚夫思雨终于匆匆赶到。"},
 		{"type": "line", "source": 23, "speaker": "思雨", "text": "抱歉，结束了吗？"},
 		{"type": "line", "source": 24, "speaker": "小凌", "text": "差不多。"},
@@ -124,6 +127,8 @@ static func _wedding_hall_events() -> Array[Dictionary]:
 static func _car_events() -> Array[Dictionary]:
 	return [
 		{"type": "scene", "source": 47, "name": SCENE_CAR},
+		{"type": "audio", "source": 47, "action": "stop", "channel": "amb", "status": "彩排环境声淡出"},
+		{"type": "audio", "source": 47, "action": "start", "channel": "bgm", "stream": "wedding_bgm_car", "status": "小凌车内未说出口 BGM 起"},
 		{"type": "line", "source": 48, "speaker": "旁白", "text": "天已经有些暗了。"},
 		{"type": "line", "source": 50, "speaker": "旁白", "text": "彩排结束。思雨开车，小凌坐在副驾驶的座位上。"},
 		{"type": "line", "source": 51, "speaker": "旁白", "text": "晚高峰的街边车流不断，路边的人群也在涌向不同的方向。"},
@@ -194,6 +199,8 @@ static func _car_events() -> Array[Dictionary]:
 static func _home_events() -> Array[Dictionary]:
 	return [
 		{"type": "scene", "source": 105, "name": SCENE_HOME},
+		{"type": "audio", "source": 105, "action": "stop", "channel": "bgm", "status": "车内 BGM 淡出"},
+		{"type": "audio", "source": 105, "action": "start", "channel": "bgm", "stream": "wedding_bgm_home", "status": "现实家中被安排的循环 BGM 起"},
 		{"type": "line", "source": 106, "speaker": "旁白", "text": "屋子里已经堆满了明天婚礼要用的东西。"},
 		{"type": "line", "source": 107, "speaker": "旁白", "text": "客厅角落放着几个没有拆开的纸箱。"},
 		# 群组「选中查看物品」：进入 108–109 旁白前先点看客厅回忆物。

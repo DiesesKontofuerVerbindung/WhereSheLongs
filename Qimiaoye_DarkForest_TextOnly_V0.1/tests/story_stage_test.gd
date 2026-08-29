@@ -35,26 +35,43 @@ func _ready() -> void:
 		failures.append("小凌人物尺寸低于剧情舞台基准")
 	if float(initial.get("amai_visual_scale", 0.0)) < 0.34:
 		failures.append("阿麦没有按要求再次放大")
-	# 模糊按 DOCX 156 分段：之前 小凌 0.90 / 阿麦 0，之后 小凌 0.70 / 阿麦 0.30。
-	if bool(initial.get("gaussian_blur_stage_late", true)):
-		failures.append("初始状态不应处于 156 之后的模糊分段")
-	if not is_equal_approx(float(initial.get("xiaoling_gaussian_blur_strength", -1.0)), 0.90):
-		failures.append("156 之前小凌没有应用90%高斯模糊")
+	# 模糊按 DOCX 行号分三档：stage0(开头–124) 小凌 0.98 / 阿麦 0.0，
+	# stage1(125–162) 小凌 0.75 / 阿麦 0.75，stage2(163–结尾) 小凌 0.0 / 阿麦 0.98；
+	# 阿麦进入 story 阶段会切到 amai_story_blur 预渲染序列(见 set_story_art_stage)。
+	if int(initial.get("gaussian_blur_stage", -1)) != 0:
+		failures.append("初始状态不应处于 125 之后的模糊阶段")
+	if not is_equal_approx(float(initial.get("xiaoling_gaussian_blur_strength", -1.0)), 0.98):
+		failures.append("124 之前小凌没有应用98%高斯模糊")
 	if not is_zero_approx(float(initial.get("amai_gaussian_blur_strength", -1.0))):
-		failures.append("156 之前阿麦不应有模糊")
-	stage.sync_blur_for_source(156)
-	var late_blur: Dictionary = stage.get_debug_snapshot()
-	if not bool(late_blur.get("gaussian_blur_stage_late", false)):
-		failures.append("推进到 DOCX 156 后没有切到后段模糊")
-	if not is_equal_approx(float(late_blur.get("xiaoling_gaussian_blur_strength", -1.0)), 0.70):
-		failures.append("DOCX 156 起小凌模糊没有降到 0.70")
-	if not is_equal_approx(float(late_blur.get("amai_gaussian_blur_strength", -1.0)), 0.30):
-		failures.append("DOCX 156 起阿麦模糊没有升到 0.30")
+		failures.append("124 之前阿麦不应有模糊")
+	stage.sync_blur_for_source(125)
+	var mid_blur: Dictionary = stage.get_debug_snapshot()
+	if int(mid_blur.get("gaussian_blur_stage", -1)) != 1:
+		failures.append("推进到 DOCX 125 后没有切到第二档模糊")
+	if not is_equal_approx(float(mid_blur.get("xiaoling_gaussian_blur_strength", -1.0)), 0.75):
+		failures.append("DOCX 125 起小凌模糊没有降到 0.75")
+	if not is_equal_approx(float(mid_blur.get("amai_gaussian_blur_strength", -1.0)), 0.75):
+		failures.append("DOCX 125 起阿麦模糊没有升到 0.75")
+	if int(mid_blur.get("amai_story_art_stage", -1)) != 1:
+		failures.append("DOCX 125 起阿麦没有切到 story 美术 stage2 序列")
 	if not stage.verify_contract():
-		failures.append("切到 156 后段模糊后舞台契约不成立")
+		failures.append("切到 125 中段模糊后舞台契约不成立")
+	stage.sync_blur_for_source(163)
+	var late_blur: Dictionary = stage.get_debug_snapshot()
+	if int(late_blur.get("gaussian_blur_stage", -1)) != 2:
+		failures.append("推进到 DOCX 163 后没有切到第三档模糊")
+	if not is_zero_approx(float(late_blur.get("xiaoling_gaussian_blur_strength", -1.0))):
+		failures.append("DOCX 163 起小凌模糊没有降回 0.0")
+	if not is_equal_approx(float(late_blur.get("amai_gaussian_blur_strength", -1.0)), 0.98):
+		failures.append("DOCX 163 起阿麦模糊没有升到 0.98")
+	if int(late_blur.get("amai_story_art_stage", -1)) != 2:
+		failures.append("DOCX 163 起阿麦没有切到 story 美术 stage3 序列")
 	stage.sync_blur_for_source(155)
-	if not is_equal_approx(float(stage.get_debug_snapshot().get("xiaoling_gaussian_blur_strength", -1.0)), 0.90):
-		failures.append("回到 156 之前模糊没有恢复成 0.90")
+	if int(stage.get_debug_snapshot().get("gaussian_blur_stage", -1)) != 1:
+		failures.append("回到 DOCX 155 没有回到第二档模糊")
+	stage.sync_blur_for_source(124)
+	if not is_equal_approx(float(stage.get_debug_snapshot().get("xiaoling_gaussian_blur_strength", -1.0)), 0.98):
+		failures.append("回到 124 之前模糊没有恢复成 0.98")
 	if float(initial.get("actor_ground_ratio", 0.0)) < 0.83:
 		failures.append("人物地面基准线仍然过高，视觉上会悬空")
 	var ground_y := float(initial.get("actor_ground_y", -100.0))
@@ -274,7 +291,7 @@ func _ready() -> void:
 		failures.append("离开环境背景图6后湖边世界没有关闭")
 
 	if failures.is_empty():
-		print("STORY_STAGE_PASS persistent_dialogue_stage=true continuous_long_scene=true source_size=11902x1440 waterfall_source_size=2560x1440 waterfall_appended=true waterfall_layers=back_front_particles actor_between_waterfall_layers=true waterfall_slope_up_right=true waterfall_slope_gentle=true waterfall_stop_before_fall=true dev_jump_125_restores_waterfall_approach=true scroll_right=true no_scene_hard_cut=true light_hover_walk=true mouse_exit_stop=true light_trigger=true darkness=80_percent face_to_face=true heart_glow=true heart_glow_source_y=606 heart_glow_source_offset=579 heart_glow_chest_aligned=true heart_glow_warm_yellow=true docx167_amai_faces_xiaoling=true gaussian_blur_stage_source=156 xiaoling_gaussian_blur_before_156=0.90 xiaoling_gaussian_blur_from_156=0.70 amai_gaussian_blur_before_156=0.00 amai_gaussian_blur_from_156=0.30 amai_visual_scale=0.34 amai_scripted_run_sync=true amai_run_facing_right=true scripted_steps=true amai_bounded=true animations=idle_run_start_run lake_stage=true lake_source_size=6117x1440 lake_layers=back_front_particles lake_world_exclusive=true lake_actor_between_layers=true lake_ground_ratio=0.86")
+		print("STORY_STAGE_PASS persistent_dialogue_stage=true continuous_long_scene=true source_size=11902x1440 waterfall_source_size=2560x1440 waterfall_appended=true waterfall_layers=back_front_particles actor_between_waterfall_layers=true waterfall_slope_up_right=true waterfall_slope_gentle=true waterfall_stop_before_fall=true dev_jump_125_restores_waterfall_approach=true scroll_right=true no_scene_hard_cut=true light_hover_walk=true mouse_exit_stop=true light_trigger=true darkness=80_percent face_to_face=true heart_glow=true heart_glow_source_y=606 heart_glow_source_offset=579 heart_glow_chest_aligned=true heart_glow_warm_yellow=true docx167_amai_faces_xiaoling=true gaussian_blur_stage_2_source=125 gaussian_blur_stage_3_source=163 stage0_xiaoling_amai=0.98_0.00 stage1_xiaoling_amai=0.75_0.75 stage2_xiaoling_amai=0.00_0.98 amai_story_art_sequence=true amai_visual_scale=0.34 amai_scripted_run_sync=true amai_run_facing_right=true scripted_steps=true amai_bounded=true animations=idle_run_start_run lake_stage=true lake_source_size=6117x1440 lake_layers=back_front_particles lake_world_exclusive=true lake_actor_between_layers=true lake_ground_ratio=0.86")
 		get_tree().quit(0)
 		return
 	for failure in failures:

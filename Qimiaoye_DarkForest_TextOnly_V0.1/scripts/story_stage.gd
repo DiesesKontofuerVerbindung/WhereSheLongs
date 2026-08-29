@@ -29,13 +29,16 @@ const ACTOR_GROUND_RATIO := 0.84
 const ACTOR_MARGIN := 112.0
 const XIAOLING_VISUAL_SCALE := 0.28
 const AMAI_VISUAL_SCALE := 0.34
-const XIAOLING_GAUSSIAN_BLUR_STRENGTH := 0.90
-# DOCX 156 是"因为……"那一句：从这里开始小凌看清了一点，阿麦反而开始模糊。
-# 模糊强度从此是随剧情推进的状态，不再是常量，断言必须按阶段判断。
-const GAUSSIAN_BLUR_STAGE_SOURCE := 156
-const XIAOLING_GAUSSIAN_BLUR_LATE := 0.70
+# 模糊按 DOCX 行号分三档：开头–124、125–162、163–结尾；阿麦进入 story 模式后
+# 用 amai_story_blur 预渲染透明 PNG 序列替代 shader 实时模糊（见 set_story_art_stage）。
+const GAUSSIAN_BLUR_STAGE_2_SOURCE := 125
+const GAUSSIAN_BLUR_STAGE_3_SOURCE := 163
+const XIAOLING_GAUSSIAN_BLUR_STRENGTH := 0.98
+const XIAOLING_GAUSSIAN_BLUR_MIDDLE := 0.75
+const XIAOLING_GAUSSIAN_BLUR_LATE := 0.0
 const AMAI_GAUSSIAN_BLUR_STRENGTH := 0.0
-const AMAI_GAUSSIAN_BLUR_LATE := 0.30
+const AMAI_GAUSSIAN_BLUR_MIDDLE := 0.75
+const AMAI_GAUSSIAN_BLUR_LATE := 0.98
 # 两套角色原图均以画布中心为 Sprite2D 原点；以下数值来自首帧非透明像素脚底。
 const XIAOLING_FOOT_FROM_CENTER := 558.0
 const AMAI_FOOT_FROM_CENTER := 545.0
@@ -107,7 +110,7 @@ var _manual_follow_drives_amai := false
 ## 锚定后按 _lake_root 的位移同步他的屏幕坐标，等价于把他放进湖面世界。
 var _lake_amai_anchored := false
 var _lake_amai_anchor_x := 0.0
-var _blur_stage_late := false
+var _blur_stage := 0
 var _last_continuous_transition := ""
 var _last_continuous_transition_duration := 0.0
 var _last_continuous_transition_ran_actors := false
@@ -263,21 +266,31 @@ void fragment() {
 	return blur_material
 
 
-## 模糊按 DOCX 行号分段：156 之前 小凌 0.90 / 阿麦 0，156 起 0.70 / 0.30。
+## 模糊按 DOCX 行号分三档：开头–124、125–162、163–结尾。
 func sync_blur_for_source(source: int) -> void:
-	set_blur_stage(source >= GAUSSIAN_BLUR_STAGE_SOURCE)
+	var stage := 0
+	if source >= GAUSSIAN_BLUR_STAGE_3_SOURCE:
+		stage = 2
+	elif source >= GAUSSIAN_BLUR_STAGE_2_SOURCE:
+		stage = 1
+	set_blur_stage(stage)
 
 
-func set_blur_stage(late: bool) -> void:
-	_blur_stage_late = late
+func set_blur_stage(stage: int) -> void:
+	var next_stage := clampi(stage, 0, 2)
+	if next_stage == _blur_stage:
+		return
+	_blur_stage = next_stage
+	if _amai_visual != null and _amai_visual.has_method("set_story_art_stage"):
+		_amai_visual.call("set_story_art_stage", _blur_stage)
 	_apply_blur_strength(_xiaoling_visual, expected_blur_strength(_xiaoling_visual))
 	_apply_blur_strength(_amai_visual, expected_blur_strength(_amai_visual))
 
 
 func expected_blur_strength(visual: AnimatedSprite2D) -> float:
 	if visual == _amai_visual:
-		return AMAI_GAUSSIAN_BLUR_LATE if _blur_stage_late else AMAI_GAUSSIAN_BLUR_STRENGTH
-	return XIAOLING_GAUSSIAN_BLUR_LATE if _blur_stage_late else XIAOLING_GAUSSIAN_BLUR_STRENGTH
+		return [AMAI_GAUSSIAN_BLUR_STRENGTH, AMAI_GAUSSIAN_BLUR_MIDDLE, AMAI_GAUSSIAN_BLUR_LATE][_blur_stage]
+	return [XIAOLING_GAUSSIAN_BLUR_STRENGTH, XIAOLING_GAUSSIAN_BLUR_MIDDLE, XIAOLING_GAUSSIAN_BLUR_LATE][_blur_stage]
 
 
 func _apply_blur_strength(visual: AnimatedSprite2D, strength: float) -> void:
@@ -660,9 +673,8 @@ func play_action(action_id: String, verify_mode: bool) -> void:
 			var tween := _start_actor_motion(_amai, 0.90, 355.0, verify_mode)
 			await tween.finished
 		"xiaoling_run_follow":
-			var tween := _start_actor_motion(_xiaoling, 0.59, 300.0, verify_mode)
-			await tween.finished
-			# DOCX 120 追赶过程朝右是对的；停下之后两人要面对面。
+			# DOCX 120 只收住上一拍，不再把小凌拉回阿麦左侧；121 的手动向右追赶仍独立执行。
+			_stop_actor("小凌")
 			_face_actors_toward_each_other()
 		"xiaoling_look_back", "xiaoling_look_left":
 			_set_facing(_xiaoling_visual, false)
@@ -691,12 +703,17 @@ func play_line_cue(cue: String, verify_mode: bool) -> void:
 			var target_x := minf(size.x * 0.90, _amai.position.x + size.x * 0.10)
 			_start_actor_motion_to_x(_amai, target_x, 135.0, verify_mode)
 		"both_walk_to_fork":
-			# DOCX 88 是旁白，不走 prepare_dialogue。小凌这一段是往左退回 0.68，
-			# 位移方向会把她转成朝左、背对阿麦，所以走完必须自己转回来。
+			# 两条独立 tween 的 finished 先后触发时，先完成者会提前转向，随后仍在运行的
+			# 位移或紧接的连续场景切换又把朝向改回。只在两人都完成后统一面对面。
 			var amai_tween := _start_actor_motion(_amai, 0.84, 130.0, verify_mode)
 			var xiaoling_tween := _start_actor_motion(_xiaoling, 0.68, 125.0, verify_mode)
-			amai_tween.finished.connect(_face_actors_toward_each_other)
-			xiaoling_tween.finished.connect(_face_actors_toward_each_other)
+			var pending := {"count": 2}
+			var finish_pair := func() -> void:
+				pending["count"] = int(pending["count"]) - 1
+				if int(pending["count"]) == 0:
+					_face_actors_toward_each_other()
+			amai_tween.finished.connect(finish_pair)
+			xiaoling_tween.finished.connect(finish_pair)
 		"amai_run_ahead":
 			_start_actor_motion(_amai, 0.90, 355.0, verify_mode)
 		_:
@@ -898,8 +915,8 @@ func restore_for_source(source: int, scene_name: String) -> void:
 		_set_facing(_xiaoling_visual, true)
 		_set_facing(_amai_visual, false)
 	elif source == 120:
-		# DOCX 120 小凌跑到 0.59 停下，两人面对面。
-		_set_actor_ratio(_xiaoling, 0.59)
+		# 直接回溯到 DOCX 120 时复原上一拍站位；正常流程不在此行移动小凌。
+		_set_actor_ratio(_xiaoling, 0.68)
 		_set_actor_ratio(_amai, 0.90)
 		_face_actors_toward_each_other()
 	else:
@@ -1043,9 +1060,17 @@ func verify_contract() -> bool:
 		return false
 	if not _visual_has_motions(_xiaoling_visual, {"idle": 8, "run_start": 9, "run": 9}):
 		return false
-	if not _visual_has_motions(_amai_visual, {"idle": 60, "run_start": 21, "run": 14}):
-		return false
+	# 阿麦在 story 模式(stage>0)会切到 amai_story_blur 预渲染序列(idle 151/run_start 19/run 25)，
+	# 普通模式用基础动画(idle 60/run_start 21/run 14)；契约按当前激活的序列验证。
+	if _amai_visual.has_method("get_story_art_stage") and int(_amai_visual.call("get_story_art_stage")) > 0:
+		if not _visual_has_motions(_amai_visual, {"idle": 151, "run_start": 19, "run": 25}):
+			return false
+	else:
+		if not _visual_has_motions(_amai_visual, {"idle": 60, "run_start": 21, "run": 14}):
+			return false
 	if not _amai_visual.has_method("play_scripted_run") or not _amai_visual.has_method("play_scripted_idle"):
+		return false
+	if not _amai_visual.has_method("verify_story_art_assets") or not bool(_amai_visual.call("verify_story_art_assets")):
 		return false
 	var back_final_z := _world_root.z_index + _forest_back.z_index
 	var front_final_z := _world_root.z_index + _forest_front.z_index
@@ -1059,7 +1084,7 @@ func verify_contract() -> bool:
 		return false
 	if not is_equal_approx(_xiaoling_visual.scale.x, XIAOLING_VISUAL_SCALE) or not is_equal_approx(_amai_visual.scale.x, AMAI_VISUAL_SCALE):
 		return false
-	# 模糊按 156 分段，断言比对的是"当前阶段应有的值"，不是固定常量。
+	# 模糊按 125 / 163 分三档，断言比对当前阶段值，不写死单一强度。
 	# current_blur_strength 在没有 ShaderMaterial 时返回 -1.0，等价于同时检查材质存在。
 	for blur_visual in [_xiaoling_visual, _amai_visual]:
 		if not is_equal_approx(current_blur_strength(blur_visual), expected_blur_strength(blur_visual)):
@@ -1127,8 +1152,10 @@ func get_debug_snapshot() -> Dictionary:
 		"xiaoling_visual_scale": _xiaoling_visual.scale.x if _xiaoling_visual != null else 0.0,
 		"xiaoling_gaussian_blur_strength": current_blur_strength(_xiaoling_visual),
 		"amai_gaussian_blur_strength": current_blur_strength(_amai_visual),
-		"gaussian_blur_stage_late": _blur_stage_late,
-		"gaussian_blur_stage_source": GAUSSIAN_BLUR_STAGE_SOURCE,
+		"gaussian_blur_stage": _blur_stage,
+		"gaussian_blur_stage_2_source": GAUSSIAN_BLUR_STAGE_2_SOURCE,
+		"gaussian_blur_stage_3_source": GAUSSIAN_BLUR_STAGE_3_SOURCE,
+		"amai_story_art_stage": int(_amai_visual.call("get_story_art_stage")) if _amai_visual != null and _amai_visual.has_method("get_story_art_stage") else -1,
 		"xiaoling_feet_y": _actor_feet_y(_xiaoling, _xiaoling_visual, XIAOLING_FOOT_FROM_CENTER),
 		"amai_x": _amai.position.x if _amai != null else 0.0,
 		"amai_visible": _amai.visible if _amai != null else false,

@@ -40,6 +40,14 @@ const SCENE_TEXTURE_PATHS := {
 	"家里场景": "res://assets/wedding/scene_home.png",
 }
 
+## 婚礼前段 BGM/环境声资源路径。命名用 ASCII，避免中文路径在打包/导入时的坑。
+const AUDIO_WEDDING_BGM_OPENING := "res://assets/audio/wedding_bgm_opening.ogg"
+const AUDIO_WEDDING_AMB_REHEARSAL := "res://assets/audio/wedding_amb_rehearsal.mp3"
+const AUDIO_WEDDING_BGM_CAR := "res://assets/audio/wedding_bgm_car.ogg"
+const AUDIO_WEDDING_BGM_HOME := "res://assets/audio/wedding_bgm_home.ogg"
+## 淡入淡出时长（秒）。
+const AUDIO_FADE_SECONDS := 1.2
+
 const SHAKE_SECONDS := 1.1
 const SHAKE_MAX_PIXELS := 26.0
 
@@ -76,6 +84,13 @@ var _interaction_button: Button
 var _module_host: Control
 var _narration_ui
 var _dialogue_ui
+
+## 双层音频播放器：BGM（旋律音乐）+ 环境声（现实声场）各自独立淡入淡出、循环。
+## 分开便于在重叠段（如婚礼 BGM 淡出、彩排环境声淡入）做交叉渐变。
+var _bgm_player: AudioStreamPlayer
+var _amb_player: AudioStreamPlayer
+var _bgm_volume := 0.0
+var _amb_volume := 0.0
 
 var _shake_phase := 0.0
 var _shake_intensity := 0.0
@@ -167,6 +182,20 @@ func _build_ui() -> void:
 	_dialogue_ui = DialogueUIScript.new()
 	_dialogue_ui.name = "DIALOGUE_UI"
 	add_child(_dialogue_ui)
+
+	_bgm_player = AudioStreamPlayer.new()
+	_bgm_player.name = "WeddingBGMAudio"
+	_bgm_player.bus = &"Master"
+	_bgm_player.process_mode = Node.PROCESS_MODE_ALWAYS
+	_bgm_player.volume_db = -80.0
+	add_child(_bgm_player)
+
+	_amb_player = AudioStreamPlayer.new()
+	_amb_player.name = "WeddingAmbAudio"
+	_amb_player.bus = &"Master"
+	_amb_player.process_mode = Node.PROCESS_MODE_ALWAYS
+	_amb_player.volume_db = -80.0
+	add_child(_amb_player)
 
 	_interaction_panel = PanelContainer.new()
 	_interaction_panel.name = "WeddingInteraction"
@@ -388,6 +417,9 @@ func _run_events() -> void:
 	if not _endpoint_reached:
 		_failures.append("婚礼前段没有走到终点")
 	prologue_finished.emit()
+	# 章节结束收尾音频，避免进入下一章后残留播放。
+	_audio_stop_immediate("bgm")
+	_audio_stop_immediate("amb")
 	if _verify_mode:
 		_report_verification()
 		return
@@ -430,6 +462,8 @@ func _run_event(event: Dictionary) -> void:
 			await _run_interaction(event)
 		"module":
 			await _run_module(event)
+		"audio":
+			await _apply_audio_event(event)
 		"endpoint":
 			_endpoint_reached = true
 			_scene_label.visible = true
@@ -516,10 +550,121 @@ func _run_effect(event: Dictionary) -> void:
 
 func _run_wait(event: Dictionary) -> void:
 	var seconds := float(event.get("seconds", 1.0))
-	_scene_subtitle.text = str(event.get("status", ""))
+	if event.has("status"):
+		_scene_subtitle.text = str(event["status"])
 	if _verify_mode:
 		return
 	await get_tree().create_timer(seconds).timeout
+
+
+## 处理 audio 事件。字段：
+##   action: "start" 播放（循环，淡入）；"stop" 停止（淡出）；"stop_immediate" 立即停。
+##   channel: "bgm"（旋律）或 "amb"（环境声）。缺省按资源类型自动判定。
+##   stream: 语义名映射（wedding_bgm_opening 等），或直接 res:// 路径。
+##   fade: 覆盖淡入淡出时长（秒）。
+func _apply_audio_event(event: Dictionary) -> void:
+	var action := str(event.get("action", ""))
+	var stream_key := str(event.get("stream", ""))
+	var channel := str(event.get("channel", ""))
+	var fade := float(event.get("fade", AUDIO_FADE_SECONDS))
+	# stop 类动作只按通道停，不需要 stream；start 才需要解析资源。
+	if action == "stop" or action == "stop_immediate":
+		if channel.is_empty():
+			push_warning("婚礼前段 audio 事件缺 channel：%s" % str(event))
+			return
+		if action == "stop":
+			await _audio_stop(channel, fade)
+		else:
+			_audio_stop_immediate(channel)
+		return
+	var path := _resolve_audio_path(stream_key)
+	if path.is_empty():
+		push_warning("婚礼前段 audio 事件缺 stream：%s" % str(event))
+		return
+	if channel.is_empty():
+		channel = "amb" if path.ends_with(".mp3") else "bgm"
+	match action:
+		"start":
+			await _audio_start(channel, path, fade)
+		_:
+			push_warning("婚礼前段未知 audio action：%s" % action)
+
+
+## 把语义名映射到真实资源路径。换音频时只改这里，事件表不用动。
+func _resolve_audio_path(key: String) -> String:
+	match key:
+		"wedding_bgm_opening":
+			return AUDIO_WEDDING_BGM_OPENING
+		"wedding_amb_rehearsal":
+			return AUDIO_WEDDING_AMB_REHEARSAL
+		"wedding_bgm_car":
+			return AUDIO_WEDDING_BGM_CAR
+		"wedding_bgm_home":
+			return AUDIO_WEDDING_BGM_HOME
+	return key
+
+
+func _audio_player(channel: String) -> AudioStreamPlayer:
+	return _amb_player if channel == "amb" else _bgm_player
+
+
+func _audio_start(channel: String, path: String, fade: float) -> void:
+	var player := _audio_player(channel)
+	if _verify_mode:
+		return
+	var stream: AudioStream = load(path)
+	if stream == null:
+		push_warning("婚礼前段音频加载失败：%s" % path)
+		return
+	if player.stream == stream and player.playing:
+		# 同一段已在放，不做重复淡入。
+		return
+	player.stream = stream
+	if player is AudioStreamPlayer and player.stream is AudioStreamWAV:
+		player.stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	if not player.playing:
+		player.play()
+	if channel == "amb":
+		_amb_volume = 1.0
+	else:
+		_bgm_volume = 1.0
+	await _fade_player_volume(player, channel, 1.0, fade)
+
+
+func _audio_stop(channel: String, fade: float) -> void:
+	var player := _audio_player(channel)
+	if _verify_mode:
+		return
+	if channel == "amb":
+		_amb_volume = 0.0
+	else:
+		_bgm_volume = 0.0
+	await _fade_player_volume(player, channel, 0.0, fade)
+	if player.playing:
+		player.stop()
+	player.stream = null
+
+
+func _audio_stop_immediate(channel: String) -> void:
+	var player := _audio_player(channel)
+	player.stop()
+	player.stream = null
+
+
+func _fade_player_volume(player: AudioStreamPlayer, channel: String, target_vol: float, fade: float) -> void:
+	if player == null:
+		return
+	var start_db := player.volume_db
+	var end_db := _db_for_volume(target_vol)
+	var tween := create_tween()
+	tween.tween_property(player, "volume_db", end_db, fade if _verify_mode == false else 0.0)
+	await tween.finished
+
+
+func _db_for_volume(vol: float) -> float:
+	if vol <= 0.0:
+		return -80.0
+	return linear_to_db(vol)
 
 
 func _run_interaction(event: Dictionary) -> void:
