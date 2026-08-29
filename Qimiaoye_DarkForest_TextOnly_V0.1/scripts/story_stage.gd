@@ -30,12 +30,12 @@ const ACTOR_MARGIN := 112.0
 const XIAOLING_VISUAL_SCALE := 0.28
 const AMAI_VISUAL_SCALE := 0.34
 const XIAOLING_GAUSSIAN_BLUR_STRENGTH := 0.90
-# DOCX 156 是"因为……"那一句：从这里开始小凌看清了一点，阿麦反而开始模糊。
+# DOCX 156 是"因为……"那一句：从这里开始两人的主观清晰度统一到 50%。
 # 模糊强度从此是随剧情推进的状态，不再是常量，断言必须按阶段判断。
 const GAUSSIAN_BLUR_STAGE_SOURCE := 156
-const XIAOLING_GAUSSIAN_BLUR_LATE := 0.70
+const XIAOLING_GAUSSIAN_BLUR_LATE := 0.50
 const AMAI_GAUSSIAN_BLUR_STRENGTH := 0.0
-const AMAI_GAUSSIAN_BLUR_LATE := 0.30
+const AMAI_GAUSSIAN_BLUR_LATE := 0.50
 # 两套角色原图均以画布中心为 Sprite2D 原点；以下数值来自首帧非透明像素脚底。
 const XIAOLING_FOOT_FROM_CENTER := 558.0
 const AMAI_FOOT_FROM_CENTER := 545.0
@@ -263,7 +263,7 @@ void fragment() {
 	return blur_material
 
 
-## 模糊按 DOCX 行号分段：156 之前 小凌 0.90 / 阿麦 0，156 起 0.70 / 0.30。
+## 模糊按 DOCX 行号分段：156 之前小凌 0.90 / 阿麦 0，156 起两人均为 0.50。
 func sync_blur_for_source(source: int) -> void:
 	set_blur_stage(source >= GAUSSIAN_BLUR_STAGE_SOURCE)
 

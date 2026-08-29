@@ -13,6 +13,7 @@ const DevJumpPanelScript := preload("res://scripts/dev_jump_panel.gd")
 const WeddingDataScript := preload("res://scripts/wedding_data.gd")
 const MysticNightDataScript := preload("res://scripts/mystic_night_data.gd")
 const InnerObjectsStageScript := preload("res://scripts/inner_objects_stage.gd")
+const ChapterTransitionScript := preload("res://scripts/chapter_transition.gd")
 const RUNTIME_LOG_PATH := "user://logs/runtime.log"
 const TRACE_LOG_PATH := "user://logs/trace_steps.log"
 const ENGINE_LOG_PATH := "user://logs/godot.log"
@@ -42,6 +43,7 @@ const MODULE_RENDER_TEST_CASES := [
 	[Vector2i(2560, 1080), Vector2i(1920, 1080)],
 	[Vector2i(1024, 768), Vector2i(1024, 576)],
 ]
+const GAMEPLAY_TRANSITION_MODULE_IDS := ["ForestRun", "LakeJump"]
 const EXPECTED_MODULE_BINDINGS := {
 	"ForestRun": {"source": 122, "type": "module", "scene": "res://scenes/forest/parkour/parkour_prototype.tscn", "signal": "parkour_completed"},
 	"TextInput": {"source": 157, "type": "module", "scene": "res://levels/minigames/text_input.tscn", "signal": "finished"},
@@ -1072,7 +1074,7 @@ func _run_story() -> void:
 
 func _execute_event(event: Dictionary) -> void:
 	_set_advance_hint(false)
-	# 高斯模糊按 DOCX 行号分段（156 起小凌 0.70 / 阿麦 0.30），随事件推进同步。
+	# 高斯模糊按 DOCX 行号分段（156 起小凌 / 阿麦均为 0.50），随事件推进同步。
 	var event_source := int(event.get("source", 0))
 	if event_source > 0 and _story_stage != null and _story_stage.has_method("sync_blur_for_source"):
 		_story_stage.sync_blur_for_source(event_source)
@@ -1391,6 +1393,26 @@ func _run_wait(event: Dictionary) -> void:
 		await get_tree().create_timer(seconds).timeout
 
 
+func _uses_gameplay_transition(module_id: String) -> bool:
+	return not _verify_mode and module_id in GAMEPLAY_TRANSITION_MODULE_IDS
+
+
+func _fade_gameplay_to_black(module_id: String, direction: String):
+	if not _uses_gameplay_transition(module_id):
+		return null
+	var transition = ChapterTransitionScript.create_overlay(get_tree())
+	if transition == null:
+		return null
+	await get_tree().process_frame
+	await transition.fade_to_black()
+	_log_runtime("MODULE_TRANSITION id=%s direction=%s text=%s" % [
+		module_id,
+		direction,
+		ChapterTransitionScript.LOADING_TEXT,
+	])
+	return transition
+
+
 func _run_embedded_module(event: Dictionary, is_placeholder: bool) -> void:
 	var module_id := str(event.get("id", ""))
 	var source := int(event.get("source", 0))
@@ -1428,6 +1450,7 @@ func _run_embedded_module(event: Dictionary, is_placeholder: bool) -> void:
 		await _brief_pause()
 		return
 
+	var entry_transition = await _fade_gameplay_to_black(module_id, "enter")
 	if module_instance.has_method("setup"):
 		module_instance.call("setup", event)
 	if completion_signal == "parkour_completed":
@@ -1478,6 +1501,9 @@ func _run_embedded_module(event: Dictionary, is_placeholder: bool) -> void:
 			_record_module_failure(module_id, source, "TextInput 输入、杂念聚拢、Fan 驱散与空值保护契约不完整")
 	if is_placeholder and (not module_instance.has_method("verify_contract") or not bool(module_instance.call("verify_contract"))):
 		_record_module_failure(module_id, source, "LakeJump 占位页结构不完整")
+	if entry_transition != null:
+		await entry_transition.wait_for_minimum_black(ChapterTransitionScript.GAMEPLAY_MINIMUM_BLACK_SECONDS)
+		await entry_transition.fade_from_black()
 
 	var result: Dictionary
 	if _verify_mode:
@@ -1491,6 +1517,7 @@ func _run_embedded_module(event: Dictionary, is_placeholder: bool) -> void:
 		JSON.stringify(result),
 	])
 
+	var return_transition = await _fade_gameplay_to_black(module_id, "return")
 	module_instance.queue_free()
 	await get_tree().process_frame
 	_module_host.visible = false
@@ -1505,6 +1532,9 @@ func _run_embedded_module(event: Dictionary, is_placeholder: bool) -> void:
 		# 湖边舞台说出来。跳完水立刻起溺水循环，让 195 就在水里说。
 		# 196 再调 play_looping("drowning") 会因为 id 相同直接返回，衔接无缝。
 		_start_cutscene_loop("drowning", "lake_jump_done")
+	if return_transition != null:
+		await get_tree().process_frame
+		await return_transition.fade_from_black()
 
 
 func _on_embedded_module_completed_without_result() -> void:

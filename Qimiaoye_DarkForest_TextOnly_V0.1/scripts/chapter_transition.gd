@@ -5,6 +5,7 @@ const NODE_NAME := "ChapterTransition"
 const LOADING_TEXT := "Where She Longs"
 const FADE_TO_BLACK_SECONDS := 0.72
 const MINIMUM_BLACK_SECONDS := 0.85
+const GAMEPLAY_MINIMUM_BLACK_SECONDS := 1.5
 const FADE_FROM_BLACK_SECONDS := 0.55
 
 var _ui_root: Control
@@ -12,18 +13,30 @@ var _blocker: ColorRect
 var _loading_label: Label
 var _running := false
 var _phase := 0.0
+var _black_started_msec := 0
 
 
 static func begin(tree: SceneTree, target_scene_path: String) -> void:
-	if tree == null or tree.root == null or target_scene_path.is_empty():
+	if target_scene_path.is_empty():
 		push_error("章节转场参数无效：%s" % target_scene_path)
 		return
-	if tree.root.get_node_or_null(NODE_NAME) != null:
+	var transition := create_overlay(tree)
+	if transition == null or transition._running:
 		return
+	transition.call_deferred("_run_transition", target_scene_path)
+
+
+static func create_overlay(tree: SceneTree) -> ChapterTransition:
+	if tree == null or tree.root == null:
+		push_error("转场根节点无效")
+		return null
+	var existing := tree.root.get_node_or_null(NODE_NAME) as ChapterTransition
+	if existing != null:
+		return existing
 	var transition := ChapterTransition.new()
 	transition.name = NODE_NAME
 	tree.root.add_child(transition)
-	transition.call_deferred("_run_transition", target_scene_path)
+	return transition
 
 
 func _ready() -> void:
@@ -85,19 +98,42 @@ func _input(_event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
-func _run_transition(target_scene_path: String) -> void:
+func fade_to_black() -> void:
 	_running = true
+	_phase = 0.0
+	var fade := create_tween()
+	fade.set_parallel(true)
+	fade.set_trans(Tween.TRANS_SINE)
+	fade.set_ease(Tween.EASE_IN_OUT)
+	fade.tween_property(_blocker, "modulate:a", 1.0, FADE_TO_BLACK_SECONDS)
+	fade.tween_property(_loading_label, "modulate:a", 1.0, FADE_TO_BLACK_SECONDS * 0.72).set_delay(FADE_TO_BLACK_SECONDS * 0.28)
+	await fade.finished
+	_black_started_msec = Time.get_ticks_msec()
+
+
+func wait_for_minimum_black(seconds: float) -> void:
+	var minimum_msec := int(maxf(seconds, 0.0) * 1000.0)
+	while Time.get_ticks_msec() - _black_started_msec < minimum_msec:
+		await get_tree().process_frame
+
+
+func fade_from_black() -> void:
+	var fade := create_tween()
+	fade.set_parallel(true)
+	fade.set_trans(Tween.TRANS_SINE)
+	fade.set_ease(Tween.EASE_IN_OUT)
+	fade.tween_property(_blocker, "modulate:a", 0.0, FADE_FROM_BLACK_SECONDS)
+	fade.tween_property(_loading_label, "modulate:a", 0.0, FADE_FROM_BLACK_SECONDS * 0.65)
+	await fade.finished
+	_running = false
+	queue_free()
+
+
+func _run_transition(target_scene_path: String) -> void:
 	var request_error := ResourceLoader.load_threaded_request(target_scene_path, "PackedScene")
 	var request_started := request_error == OK
-	var fade_to_black := create_tween()
-	fade_to_black.set_parallel(true)
-	fade_to_black.set_trans(Tween.TRANS_SINE)
-	fade_to_black.set_ease(Tween.EASE_IN_OUT)
-	fade_to_black.tween_property(_blocker, "modulate:a", 1.0, FADE_TO_BLACK_SECONDS)
-	fade_to_black.tween_property(_loading_label, "modulate:a", 1.0, FADE_TO_BLACK_SECONDS * 0.72).set_delay(FADE_TO_BLACK_SECONDS * 0.28)
-	await fade_to_black.finished
+	await fade_to_black()
 
-	var black_started_msec := Time.get_ticks_msec()
 	var packed_scene: PackedScene = null
 	if request_started:
 		var load_status := ResourceLoader.load_threaded_get_status(target_scene_path)
@@ -109,10 +145,7 @@ func _run_transition(target_scene_path: String) -> void:
 	else:
 		packed_scene = load(target_scene_path) as PackedScene
 
-	var minimum_msec := int(MINIMUM_BLACK_SECONDS * 1000.0)
-	while Time.get_ticks_msec() - black_started_msec < minimum_msec:
-		await get_tree().process_frame
-
+	await wait_for_minimum_black(MINIMUM_BLACK_SECONDS)
 	if packed_scene == null:
 		await _recover_from_failure("章节场景加载失败：%s（error=%d）" % [target_scene_path, request_error])
 		return
@@ -122,16 +155,7 @@ func _run_transition(target_scene_path: String) -> void:
 		return
 	await get_tree().process_frame
 	await get_tree().process_frame
-
-	var fade_from_black := create_tween()
-	fade_from_black.set_parallel(true)
-	fade_from_black.set_trans(Tween.TRANS_SINE)
-	fade_from_black.set_ease(Tween.EASE_IN_OUT)
-	fade_from_black.tween_property(_blocker, "modulate:a", 0.0, FADE_FROM_BLACK_SECONDS)
-	fade_from_black.tween_property(_loading_label, "modulate:a", 0.0, FADE_FROM_BLACK_SECONDS * 0.65)
-	await fade_from_black.finished
-	_running = false
-	queue_free()
+	await fade_from_black()
 
 
 func _recover_from_failure(issue: String) -> void:

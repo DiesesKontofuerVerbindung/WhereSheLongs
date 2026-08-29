@@ -19,6 +19,7 @@ const ChapterTransitionScript := preload("res://scripts/chapter_transition.gd")
 
 const FOREST_MAIN_SCENE := "res://main.tscn"
 const WEDDING_PROLOGUE_SCENE := "res://scenes/wedding/wedding_prologue.tscn"
+const CHAPTER3_SCENE := "res://scenes/chapter3/chapter3.tscn"
 const MYSTIC_NIGHT_SCENE := "res://scenes/mystic_night/mystic_night.tscn"
 const DEV_JUMP_CHAPTER_ID := "wedding"
 const FONT_PRIMARY_NAME := "Times New Roman"
@@ -373,8 +374,8 @@ func _run_events() -> void:
 	if _verify_mode:
 		_report_verification()
 		return
-	# 转场节点挂在 SceneTree.root，旧章节释放后仍能覆盖新章节的首帧。
-	ChapterTransitionScript.begin(get_tree(), MYSTIC_NIGHT_SCENE)
+	# 婚礼前夜结束后先进入正式婚礼；正式婚礼结局再接奇妙夜。
+	ChapterTransitionScript.begin(get_tree(), CHAPTER3_SCENE)
 
 
 func _run_event(event: Dictionary) -> void:
