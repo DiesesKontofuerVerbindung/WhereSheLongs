@@ -1465,10 +1465,14 @@ func _run_embedded_module(event: Dictionary, is_placeholder: bool) -> void:
 	_interaction_panel.visible = false
 	_endpoint_panel.visible = false
 	_sync_module_render_resolution("module_start:%s" % module_id)
+	# 横版卷轴（movement 121）切到玩法模块（module 122）时用黑屏过渡，
+	# 避免剧情舞台直接硬切成玩法造成跳变；verify 模式自动缩短到忽略不计。
+	await _fade_dark_overlay(1.0)
 	_module_host.visible = true
 	_module_viewport.add_child(module_instance)
 	await get_tree().process_frame
 	await get_tree().process_frame
+	await _fade_dark_overlay(0.0)
 
 	_log_runtime("MODULE_READY id=%s source=%d root_type=%s children=%d logical=%dx%d render=%dx%d output=%dx%d" % [
 		module_id,
@@ -1516,12 +1520,15 @@ func _run_embedded_module(event: Dictionary, is_placeholder: bool) -> void:
 
 	module_instance.queue_free()
 	await get_tree().process_frame
+	# 玩法结束返回剧情舞台时同样黑屏过渡，避免硬切。
+	await _fade_dark_overlay(1.0)
 	_module_host.visible = false
 	_module_active = false
 	_active_module_id = ""
 	_module_pointer_captured = false
 	_set_module_pointer_inside(false)
 	_status("[MODULE_RETURN] %s → 剧情继续" % module_id)
+	await _fade_dark_overlay(0.0)
 	if module_id == "LakeJump":
 		# DOCX 192 踏入湖里、193 跳水，紧接着 195 就是"在水中不断下沉"。
 		# 但场景要到 196 DROWNING_CG 才切，中间这句会配着"两人站在岸边"的
