@@ -12,6 +12,10 @@ const FRAME_ROOT := "res://assets/cutscenes"
 const FADE_SECONDS := 0.35
 ## 预读多少帧。太小会在硬盘慢时卡顿，太大就失去了流式加载的意义。
 const PREFETCH_AHEAD := 6
+## 背景填充层的模糊半径与压暗系数。压暗是必要的，
+## 不压的话背景和正片一样亮，眼睛会分不清哪块才是画面。
+const FILL_BLUR_RADIUS := 0.018
+const FILL_DIM := 0.42
 
 ## 帧数与帧率跟源视频一一对应，一帧不漏：
 ## 瀑布下 24fps/4.75s，其余三段 30fps/5.04s。
@@ -25,8 +29,11 @@ const CUTSCENES := {
 }
 
 var _frame_view: TextureRect
+var _frame_fill: TextureRect
 var _backdrop: ColorRect
 var _playing_id := ""
+var _loop_id := ""
+var _loop_starts := {}
 var _played_frames := 0
 var _last_missing_frames := PackedStringArray()
 var _frame_cache := {}
@@ -46,6 +53,21 @@ func _ready() -> void:
 	_backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_backdrop)
 
+	# 四段 CG 里两段是 4:3（1120x840、1112x834），两段是 16:9。
+	# cropdetect 确认素材本身没有可裁的黑边，4:3 就是画满整幅的 4:3，
+	# 所以黑边只能填不能裁：拿画面自身放大模糊后铺满画框当底，
+	# 原图按比例居中叠上去。不丢内容、不变形、也没有死黑块。
+	_frame_fill = TextureRect.new()
+	_frame_fill.name = "CutsceneFrameFill"
+	_frame_fill.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_frame_fill.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_frame_fill.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_frame_fill.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_frame_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_frame_fill.material = _make_fill_blur_material()
+	_frame_fill.modulate = Color(FILL_DIM, FILL_DIM, FILL_DIM, 1.0)
+	add_child(_frame_fill)
+
 	_frame_view = TextureRect.new()
 	_frame_view.name = "CutsceneFrame"
 	_frame_view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -54,6 +76,36 @@ func _ready() -> void:
 	_frame_view.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_frame_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_frame_view)
+
+
+## 背景层的模糊。半径按 UV 取，与实际渲染分辨率无关，
+## 窗口拉大拉小、以后换分辨率设置都不用重调参数。
+func _make_fill_blur_material() -> ShaderMaterial:
+	var shader := Shader.new()
+	shader.code = """
+shader_type canvas_item;
+
+uniform float blur_radius : hint_range(0.0, 0.08) = 0.018;
+
+void fragment() {
+	vec4 accum = vec4(0.0);
+	float total = 0.0;
+	for (int x = -3; x <= 3; x++) {
+		for (int y = -3; y <= 3; y++) {
+			vec2 offset = vec2(float(x), float(y)) * blur_radius / 3.0;
+			float weight = 1.0 - length(vec2(float(x), float(y))) / 5.0;
+			weight = max(weight, 0.02);
+			accum += texture(TEXTURE, UV + offset) * weight;
+			total += weight;
+		}
+	}
+	COLOR = accum / total;
+}
+"""
+	var material := ShaderMaterial.new()
+	material.shader = shader
+	material.set_shader_parameter("blur_radius", FILL_BLUR_RADIUS)
+	return material
 
 
 func has_cutscene(cutscene_id: String) -> bool:
@@ -78,51 +130,90 @@ func check_frames(cutscene_id: String) -> PackedStringArray:
 	return missing
 
 
-func play(cutscene_id: String, verify_mode := false) -> void:
+## 启动一段循环背景。**不 await 播放本身**——CG 是场景底图，
+## 对白要在它上面照常推进，等它播完再走剧情就本末倒置了：
+## 人物剧情图1 管 DOCX 138–161 共 23 行，环境背景图7 管 199–309 共 110 行，
+## 一段 5 秒的视频播一次就消失，后面上百行照样是空背景。
+##
+## 循环不做交叉淡化也不做乒乓：美术确认湖边/瀑布是特意做的首尾衔接，
+## 直接 loop 就是无缝的，任何额外处理反而破坏他们的巧思。
+func play_looping(cutscene_id: String, verify_mode := false) -> void:
+	if _loop_id == cutscene_id:
+		return
 	_last_missing_frames = check_frames(cutscene_id)
 	if not _last_missing_frames.is_empty():
 		# 缺帧不是崩溃理由：剧情必须能继续走完，缺什么留给日志和 verify 去报。
 		push_warning("CG %s 缺 %d 帧，跳过播放" % [cutscene_id, _last_missing_frames.size()])
 		return
+	_loop_id = cutscene_id
+	_loop_starts[cutscene_id] = int(_loop_starts.get(cutscene_id, 0)) + 1
 	if verify_mode:
-		# verify 只确认资源齐全，不能真的占用 5 秒和几百 MB。
+		# verify 只确认资源齐全与启停配对，不能真的挂着一个无限循环。
 		_playing_id = cutscene_id
 		_played_frames = int(CUTSCENES[cutscene_id]["frames"])
-		_playing_id = ""
 		return
-
-	var frame_count := int(CUTSCENES[cutscene_id]["frames"])
-	var fps := float(CUTSCENES[cutscene_id]["fps"])
 	_playing_id = cutscene_id
-	_played_frames = 0
 	_frame_cache.clear()
-
-	_frame_view.texture = _acquire_frame(cutscene_id, 1)
+	_set_frame_texture(_acquire_frame(cutscene_id, 1))
 	visible = true
 	await _tween_self_alpha(1.0, FADE_SECONDS)
+	while _loop_id == cutscene_id:
+		await _play_one_pass(cutscene_id)
 
+
+## 停止当前循环并淡出。场景切走时调用。
+func stop_looping(verify_mode := false) -> void:
+	if _loop_id.is_empty():
+		return
+	_loop_id = ""
+	if verify_mode:
+		_playing_id = ""
+		visible = false
+		return
+	await _tween_self_alpha(0.0, FADE_SECONDS)
+	visible = false
+	_set_frame_texture(null)
+	_frame_cache.clear()
+	_playing_id = ""
+
+
+func _play_one_pass(cutscene_id: String) -> void:
+	var frame_count := int(CUTSCENES[cutscene_id]["frames"])
+	var fps := float(CUTSCENES[cutscene_id]["fps"])
 	var frame_seconds := 1.0 / maxf(fps, 1.0)
 	var elapsed := 0.0
 	var shown_index := 0
 	while shown_index < frame_count:
+		# 循环期间场景切走了就立刻收手，别把最后一轮播完再退出。
+		if _loop_id != cutscene_id:
+			return
 		var wanted := clampi(int(elapsed / frame_seconds) + 1, 1, frame_count)
 		if wanted != shown_index:
-			# 掉帧时按时间轴跳帧，宁可丢画面也不让 CG 整体拖长。
+			# 掉帧时按时间轴跳帧，宁可丢画面也不让循环整体拖慢。
 			for skipped in range(shown_index, wanted):
 				_frame_cache.erase(skipped)
-			_frame_view.texture = _acquire_frame(cutscene_id, wanted)
+			_set_frame_texture(_acquire_frame(cutscene_id, wanted))
 			shown_index = wanted
 			_played_frames = wanted
 			_prefetch(cutscene_id, wanted, frame_count)
 		if shown_index >= frame_count:
 			break
 		elapsed += await _next_frame_delta()
-
-	await _tween_self_alpha(0.0, FADE_SECONDS)
-	visible = false
-	_frame_view.texture = null
 	_frame_cache.clear()
-	_playing_id = ""
+
+
+func is_looping(cutscene_id := "") -> bool:
+	return _loop_id == cutscene_id if not cutscene_id.is_empty() else not _loop_id.is_empty()
+
+
+func get_loop_start_count(cutscene_id: String) -> int:
+	return int(_loop_starts.get(cutscene_id, 0))
+
+
+## 正片与背景填充层永远用同一张纹理，背景层只是同一帧的放大模糊版。
+func _set_frame_texture(texture: Texture2D) -> void:
+	_frame_view.texture = texture
+	_frame_fill.texture = texture
 
 
 func _acquire_frame(cutscene_id: String, frame_index: int) -> Texture2D:
@@ -154,9 +245,13 @@ func _tween_self_alpha(target_alpha: float, duration: float) -> void:
 func get_debug_snapshot() -> Dictionary:
 	return {
 		"cutscene_playing": _playing_id,
+		"cutscene_loop_id": _loop_id,
 		"cutscene_played_frames": _played_frames,
 		"cutscene_cached_frames": _frame_cache.size(),
 		"cutscene_missing_frames": _last_missing_frames.size(),
 		"cutscene_visible": visible,
 		"cutscene_alpha": modulate.a,
+		"cutscene_fill_active": _frame_fill != null and _frame_fill.material != null,
+		"cutscene_fill_stretch_covered": _frame_fill != null and _frame_fill.stretch_mode == TextureRect.STRETCH_KEEP_ASPECT_COVERED,
+		"cutscene_view_stretch_centered": _frame_view != null and _frame_view.stretch_mode == TextureRect.STRETCH_KEEP_ASPECT_CENTERED,
 	}

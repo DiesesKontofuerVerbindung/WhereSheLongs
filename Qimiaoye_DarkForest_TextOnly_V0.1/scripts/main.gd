@@ -344,18 +344,43 @@ func _build_cutscene_player() -> void:
 	add_child(_cutscene_player)
 
 
-## CG 只在资源齐全时播放；缺帧走 warning 并让剧情继续，避免美术未就位时卡死流程。
-func _play_cutscene(cutscene_id: String) -> void:
+## CG 是占位图的替身，按场景绑定循环播放，不是播一次就走的过场。
+## 每个占位图管到下一次场景切换为止：
+##   人物剧情图1  DOCX 138–161   23 行
+##   溺水图cg     DOCX 196–199    3 行
+##   环境背景图7  DOCX 199–309  110 行  ← 这张一直缺美术，循环 CG 正好顶上
+## 人物剧情图1 进场先停在"摸心脏前"，玩家做完 WaterfallInteraction 的触摸交互
+## 才切成瀑布下，所以它的初始值是 touch_chest 而不是 waterfall_below。
+const SCENE_CUTSCENES := {
+	"人物剧情图1": "touch_chest",
+	"溺水图cg": "drowning",
+	"环境背景图7": "lake_talk",
+}
+
+
+## 场景切换时启停循环背景。缺帧走 warning 让剧情继续，不因美术未就位卡死流程。
+func _sync_scene_cutscene(scene_name: String) -> void:
+	if _cutscene_player == null:
+		return
+	var wanted := str(SCENE_CUTSCENES.get(scene_name, ""))
+	if wanted.is_empty():
+		if _cutscene_player.is_looping():
+			_log_runtime("CUTSCENE_LOOP_STOP scene=%s" % scene_name)
+			_cutscene_player.stop_looping(_verify_mode)
+		return
+	_start_cutscene_loop(wanted, scene_name)
+
+
+func _start_cutscene_loop(cutscene_id: String, reason: String) -> void:
 	if _cutscene_player == null or not _cutscene_player.has_cutscene(cutscene_id):
 		return
 	var missing: PackedStringArray = _cutscene_player.check_frames(cutscene_id)
 	if not missing.is_empty():
 		_log_runtime("CUTSCENE_SKIP id=%s missing=%d first=%s" % [cutscene_id, missing.size(), missing[0]])
 		return
-	_log_runtime("CUTSCENE_BEGIN id=%s verify=%s" % [cutscene_id, str(_verify_mode)])
 	_cutscene_plays[cutscene_id] = int(_cutscene_plays.get(cutscene_id, 0)) + 1
-	await _cutscene_player.play(cutscene_id, _verify_mode)
-	_log_runtime("CUTSCENE_END id=%s frames=%d" % [cutscene_id, int(_cutscene_player.get_debug_snapshot()["cutscene_played_frames"])])
+	_log_runtime("CUTSCENE_LOOP_START id=%s reason=%s verify=%s" % [cutscene_id, reason, str(_verify_mode)])
+	_cutscene_player.play_looping(cutscene_id, _verify_mode)
 
 
 func _build_narration_ui() -> void:
@@ -1565,9 +1590,33 @@ func _run_module_skip(event: Dictionary) -> void:
 	_status("[MODULE_SKIP] %s → %s（不打开模块页面）" % [module_id, result])
 	_log_runtime("MODULE_SKIP id=%s source=%s result=%s callback=immediate run=%d" % [module_id, event.get("source", 0), result, int(_module_run_counts[module_id])])
 	if module_id == "WaterfallInteraction":
-		# DOCX 140-141 触摸那束光，用 CG 代替原本的空跳过。
-		await _play_cutscene("touch_chest")
+		await _run_touch_chest_interaction()
 	await _brief_pause()
+
+
+## DOCX 140–141：画面停在摸心脏前（touch_chest 循环），玩家自己伸手去碰那束光，
+## 碰完才切成瀑布下的循环，一路垫到 161 的 STREAM_WALK。
+## 触摸这一下必须由玩家按，不能自动播过去——那是小凌主动伸手的瞬间。
+func _run_touch_chest_interaction() -> void:
+	_dialogue_ui.hide_dialogue()
+	_interaction_panel.visible = true
+	_interaction_prompt.text = "伸手触摸那束光"
+	_progress.value = 0
+	_light_button.visible = false
+	_action_button.text = "触摸"
+	_action_button.visible = true
+	_status("等待玩家交互：触摸阿麦心口的光")
+	if _verify_mode:
+		await _brief_pause()
+	else:
+		_awaiting_action_button = true
+		await interaction_completed
+		_awaiting_action_button = false
+	_interaction_panel.visible = false
+	_action_button.visible = false
+	_log_runtime("INTERACTION_COMPLETE id=WaterfallInteraction stage=touch_chest")
+	# 触摸完成，背景从"摸心脏前"切到瀑布下，继续垫完 142–161。
+	_start_cutscene_loop("waterfall_below", "touch_chest_done")
 
 
 func _run_action(event: Dictionary) -> void:
@@ -1687,16 +1736,15 @@ func _play_transition(event: Dictionary) -> void:
 		"WATERFALL_JUMP":
 			_vfx.set_mode("water")
 			await _tween_alpha(_dark_overlay, 0.92, duration * 0.5)
+			# DOCX 138 跳下之后落到瀑布下方。_set_scene 会按 SCENE_CUTSCENES
+			# 自动起循环背景，这里不需要再手动播一次。
 			_set_scene(target)
-			# DOCX 138 跳下之后落到瀑布下方，CG 在黑幕拉起后播，播完再露出新场景。
-			await _play_cutscene("waterfall_below")
 			await _tween_alpha(_dark_overlay, 0.0, duration * 0.5)
 			_vfx.set_mode("none")
 		"DROWNING_CG":
 			# DOCX 195 小凌下沉，196 切溺水图 CG。
 			await _tween_alpha(_dark_overlay, 1.0, duration * 0.5)
 			_set_scene(target)
-			await _play_cutscene("drowning")
 			await _tween_alpha(_dark_overlay, 0.0, duration * 0.5)
 		_:
 			await _tween_alpha(_dark_overlay, 1.0, duration * 0.5)
@@ -1714,6 +1762,7 @@ func _set_scene(scene_name: String) -> void:
 	if _story_stage != null:
 		_story_stage.set_scene(scene_name, _verify_mode)
 	_sync_scene_chrome_visibility(scene_name)
+	_sync_scene_cutscene(scene_name)
 	_log_runtime("SCENE scene=%s" % scene_name)
 	_refresh_diagnostics()
 
@@ -2184,16 +2233,29 @@ func _validate_runtime_completion() -> PackedStringArray:
 			errors.append("全流程未执行 DOCX 行：%d" % required_source)
 	if _module_active or (_module_host != null and _module_host.visible):
 		errors.append("全流程结束时模块宿主仍处于活动状态")
-	# 三段已定锚点的 CG 必须在全流程里各触发一次，否则接入等于没接。
-	for cutscene_id in ["waterfall_below", "touch_chest", "drowning"]:
+	# 四段 CG 各自绑定一张占位图，全流程里必须都被起过循环，否则接入等于没接。
+	# lake_talk 顶的是环境背景图7（DOCX 199–309，110 行），那张图一直缺美术。
+	for cutscene_id in ["touch_chest", "waterfall_below", "drowning", "lake_talk"]:
 		if int(_cutscene_plays.get(cutscene_id, 0)) < 1:
-			errors.append("全流程未触发 CG：%s" % cutscene_id)
+			errors.append("全流程未起过 CG 循环：%s" % cutscene_id)
 		if _cutscene_player != null:
 			var missing_frames: PackedStringArray = _cutscene_player.check_frames(cutscene_id)
 			if not missing_frames.is_empty():
 				errors.append("CG %s 缺 %d 帧，首个：%s" % [cutscene_id, missing_frames.size(), missing_frames[0]])
+	# 循环必须随场景切走而停，否则会一直挂在后面的场景上。
+	if _cutscene_player != null and _cutscene_player.is_looping():
+		errors.append("全流程结束时 CG 循环没有停止：%s" % str(_cutscene_player.get_debug_snapshot().get("cutscene_loop_id", "")))
 	if _cutscene_player != null and _cutscene_player.visible:
 		errors.append("全流程结束时 CG 播放器仍可见")
+	# 4:3 与 16:9 混播时不能留死黑边：背景要有模糊填充层，正片要保持比例不拉伸。
+	if _cutscene_player != null:
+		var cutscene_snapshot: Dictionary = _cutscene_player.get_debug_snapshot()
+		if not bool(cutscene_snapshot.get("cutscene_fill_active", false)):
+			errors.append("CG 背景模糊填充层缺失，4:3 素材会留死黑边")
+		if not bool(cutscene_snapshot.get("cutscene_fill_stretch_covered", false)):
+			errors.append("CG 背景填充层没有铺满画框")
+		if not bool(cutscene_snapshot.get("cutscene_view_stretch_centered", false)):
+			errors.append("CG 正片层没有保持宽高比，画面会被拉伸变形")
 	if _module_viewport != null and _module_viewport.get_child_count() != 0:
 		errors.append("全流程结束时模块实例未释放：%d" % _module_viewport.get_child_count())
 	if _narration_lines_seen < 61:
@@ -2441,10 +2503,11 @@ func _finish_verification(success: bool, issues: PackedStringArray) -> void:
 			_dialogue_ui.get_choice_layout_sample_count(),
 		]
 		message += " dialogue_reveal_speed=1.25x heart_glow_source_offset=579 lake_stage=true lake_source_size=6117x1440 lake_layers=back_front_particles"
-		message += " cutscene_waterfall_below=%d cutscene_touch_chest=%d cutscene_drowning=%d cutscene_streamed=true" % [
-			int(_cutscene_plays.get("waterfall_below", 0)),
+		message += " cutscene_touch_chest=%d cutscene_waterfall_below=%d cutscene_drowning=%d cutscene_lake_talk=%d cutscene_looped_backdrop=true cutscene_streamed=true cutscene_blur_fill=true" % [
 			int(_cutscene_plays.get("touch_chest", 0)),
+			int(_cutscene_plays.get("waterfall_below", 0)),
 			int(_cutscene_plays.get("drowning", 0)),
+			int(_cutscene_plays.get("lake_talk", 0)),
 		]
 		print(message)
 		_log_runtime(message)
