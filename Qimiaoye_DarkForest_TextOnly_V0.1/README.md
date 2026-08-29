@@ -1,61 +1,136 @@
-# 奇妙夜·黑暗森林·并行玩法整合版
+# 奇妙夜：她所向之处
 
-独立 Godot 4.7 工程。依据《黑暗森林喂给ai的_标签规范化版.docx》实现，从“环境背景图0”运行至 `[ENDPOINT]`；剧情外壳保持纯文字，独立玩法在 DOCX 指定行进入隔离的模块视口。
+Godot 4.7.2 剧情游戏工程，包含婚礼前夜、奇妙夜、黑暗森林、章节三与结局流程，以及 ForestRun、TextInput、LakeJump、StarJar 等玩法模块。
 
-## 本版边界
+## 获取内容
 
-- 剧情外壳不创建人物、Sprite、立绘或背景图片；真实玩法模块自行管理其人物、动画与图片资产。
-- 背景、CG、剧情图仅以黑底白字显示准确资源名。
-- 人物移动、朝向、控制权和状态仍由状态机执行，并写入逐步检测日志；画面只显示演出状态，不显示人物。
-- 旁白进入独立的顶部 `NARRATION_UI`：显示区域整体上移至画面顶部约 2%–20%；新旁白整句直接淡入并轻微上移，旧文字向上漂移并消散，稳定状态最多保留两条、动画期间最多三条。
-- 人物对白进入独立的底部 `DIALOGUE_UI`；DOCX 明确要求展示的人物动作也进入对白框，并以全角括号和正文区分。内部状态与触发器仍保持不可见。
-- 小凌的5处心理文字同样进入底部 `DIALOGUE_UI`，角色名显示“小凌”，正文使用全角括号标识；心理文字不进入顶部旁白队列。
-- 两套 UI 分别维护状态与输入队列；旁白消散时对白可以正常出现，不会清空整个旁白区域。
-- 顶部旁白以画面中轴为几何中心，长中文在对称宽度内强制换行；每条旁白都会记录中心误差与宽度溢出。
-- 底部对白框保持全屏下方布局：角色名与正文左对齐，正文紧邻角色名上方区域；“继续”按钮独立居中，对白保留逐字淡显，旁白则整句直接淡入。
-- 两处剧情选择共用同一个选项组件；选项按钮组以整个对白框的水平中轴为中心，不再靠左占据半边。
-- 开发者可随时按 `F4` 打开 DOCX 行回溯面板：输入来源行后重载当前灰盒，并从该行第一个事件开始；没有事件的行自动映射到下一条有事件的行。
-- 需求修改使用基线 commit `53ba079` 的来源坐标；新增内容复用原 source 数字，不重排后续行。`story_source_lock.gd` 会在启动预检中核对本轮指定行的可见事件序列。
-- DOCX 行跳转会恢复目标行之前最近的场景/转场背景；隐藏人物状态从默认值重新建立。跳转前后的运行日志与逐步检测日志连续保留，并记录请求行和实际落点。
-- 从 DOCX 第 354 行“我们以前是不是见过？”开始持续晃动屏幕；强度随剧情来源行逐级增加，到第 366 行终点达到峰值并自动复位。F4 直接跳入该区段时会按目标行恢复对应强度。
-- 文字等待推进时，画面左上角显示“按 Enter / Space 继续”；快捷键提示与按钮文案分离。
-- 全局字体优先使用 `Times New Roman`；中文缺字通过 `SimSun / 宋体` 回退，保持同类衬线字体观感。
-- DOCX 第 49–123 行使用持续存在的 `StoryStage` 丰富原对白场景，不另开玩法。画面采用美术交付的 `9342×1440` 森林长卷五层资源（后景、前景、进场黑幕、阿麦光圈、前景粒子），人物和镜头始终向右推进；内部的环境背景图1–4只作为剧情行号与卷动位置锚点，玩家画面不会显示名称或硬切换。开场右侧光源接受鼠标悬停，小凌自动向光源行走、移出即停；抵达 trigger 后光源消失、长卷遮暗约80%，阿麦在右侧出现并与小凌面对面。后续“往前走一段 / 走了几步 / 跑了起来”等技术动作直接驱动人物立绘，并始终受屏幕边界约束。
-- DOCX 第 122 行进入真实 `ForestRun`；监听原场景的 `parkour_completed`，完成三段跑酷并抵达瀑布引导后返回剧情第 123 行。
-- DOCX 第 157 行进入独立 `TextInput`；玩家补完“小凌：因为……”后的理由，空输入无法提交。开始输入后，12 条 DOCX 指定的现实杂念从屏幕四周聚向输入区；张开手掌稳定 0.12 秒并水平往返两次会把整句杂念驱散，输入框随后恢复焦点。继续输入时杂念会再回来，驱散后才能完成输入。Fan 状态机和连续 `fan_update` 契约来自 GitHub `Prototype_2_Fan`；玩家原文不会进入杂念、模块结果或运行日志。
-- DOCX 第 193 行进入真实 `LakeJump / River Jump` v0.5.7；源码来自 commit `2220f68`，玩法通过原场景 `finished(result)` 返回剧情第 195 行。
-- DOCX 第 238 行进入真实 `StarJar / Firefly Bottle`；把五团星光拖入瓶内后，由原场景 `finished(result)` 返回剧情第 240 行。
-- DOCX 第 360 行进入真实 `BlinkInteraction`；承接第 358 行“世界开始震动、双手松开”与第 359 行“两个手松开的特写”。画面从两手紧握的暖光特写开始，按住 `Space` / `Enter` / 鼠标左键闭眼，松开睁眼；完成一次完整眨眼后由 `finished(result)` 返回剧情第 362 行。模块只做闭眼遮罩与轻微局部漂移，不创建第二套全局相机抖动，也不复位主流程的渐强晃动。
-- 五个绑定均运行在独立高清 `SubViewport` 中，Forest 的摄像机与屏幕坐标不会拖动剧情 UI；F4 行回溯仍能直接抵达对应模块。
-- 模块继续使用 `1280×720` 逻辑坐标，实际渲染纹理会随输出窗口提升至 1080p、1440p 或其他 16:9 内接尺寸，并在窗口分辨率变化时同步更新；这避免把固定 720p 纹理二次放大造成模糊，也为后续 Settings 分辨率切换保留统一接口。
-- `WaterfallInteraction`、`HandInspect` 暂保留原 hook，并立即返回 continue/success。
-- 运行到黑暗森林章节终点后停止，不生成下一章。
+- Windows 测试版：`Gespielt-Latest.exe`（随测试包单独提供，不放入 Git 仓库）。
+- 完整 Godot 工程：`Qimiaoye_DarkForest_TextOnly_V0.1/`。
+- Windows Godot 4.7.2 引擎：`tools/godot/windows/Godot_v4.7.2-stable_win64.zip`。
+- macOS 不使用 Windows EXE；请按下方说明用 macOS 版 Godot 4.7.2 打开源码。
 
-## 操作
+## Windows：直接玩 EXE
 
-- 旁白/对白：使用各自区域内的“继续”，或按 `Space / Enter`。
-- 光源：把鼠标持续停留在右侧“光源交互区”。
-- 跟随/追赶：按 `D / →`；在“走/不走”段按 `A / ←` 会触发入口消失与重新陷入黑暗。
-- 跳水：点击画面上的“跳水”按钮。
-- 原对白场景人物演出：光源悬停、小凌自动行走、两人面对面、阿麦慢走/停下/跑远都发生在同一个持续剧情舞台；第 121 行仍使用原 `D / →` 追赶交互，第 122 行才进入 ForestRun。
-- ForestRun：`A / D` 或方向键移动，`Space` 跳跃，`S / ↓` 下滑；完成三段路线后自动回到剧情。
-- TextInput：开始输入后，先处理从四周聚拢的“这样不好吗 / 别跑这么远 / 恭喜你被录用了 / 可是我们要结婚……”等杂念。宿主正式契约为 `ingest_gesture("Fan")`；也可逐帧调用 `ingest_hand_sample(...)`，或接收 OpenCV 原型的 `fan_update {strength, direction, sweep_count}`。驱散后输入框恢复，可继续输入或提交；最长 120 个字符。未连接摄像头桥接时可按 `F` 或点击“预览 Fan”代替手势。
-- Firefly Bottle：按住星光拖入瓶口，共完成五次后自动回到剧情。
-- LakeJump：按住鼠标左键、`Space` 或 `Enter` 蓄力，松开后起跳；落水或点击“返回”后回到剧情。
-- BlinkInteraction：按住 `Space` / `Enter` / 鼠标左键闭眼，松开睁眼；完成一次眨眼后自动回到剧情。单独单击也会完整走完一次闭眼—睁眼。
-- 诊断面板：按 `F3` 显示/隐藏。
-- DOCX 行回溯：按 `F4`，输入行号并选择“从此行开始”；再次按 `F4` 或 `Esc` 取消。当前可解析范围为第 29–366 行，空白行会落到下一条剧情事件，超过末行会被拒绝。
+1. 把 `Gespielt-Latest.exe` 复制到本地磁盘，预留至少 2 GB 空间。
+2. 双击运行。第一次启动可能需要等待一段时间加载资源。
+3. 如果 Windows SmartScreen 拦截，确认文件来源后选择“更多信息”→“仍要运行”。
+4. 游戏存档和日志位于：
 
-## 日志
+   ```text
+   %APPDATA%\Qimiaoye_DarkForest_TextOnly_V0.1\
+   ```
 
-稳定日志目录：
+## Windows：从源码运行
 
-`%APPDATA%\Qimiaoye_DarkForest_TextOnly_V0.1\logs\`
+仓库已经附带 Windows Godot 4.7.2：
 
-- `runtime.log`：启动、选择、转场、模块载入/就绪/完成、终点与运行状态。
-- `trace_steps.log`：逐事件序号、DOCX 来源行、事件类型、场景、分支和状态快照。
-- `godot.log`：Godot 引擎日志和脚本错误。
-- `forest_amai_fixed_route.log`：ForestRun 中阿麦固定路线状态。
-- `forest_vine_echo_runtime.log`：ForestRun 藤蔓延迟模仿段逐帧状态。
+1. 解压 `tools/godot/windows/Godot_v4.7.2-stable_win64.zip`。
+2. 启动解压后的 `Godot_v4.7.2-stable_win64.exe`。
+3. 点击 **Import**，选择：
 
-日志每次正常启动会重新生成，便于复现当次故障；同一运行中的 F4 行跳转会追加分隔记录，不会抹掉跳转前的上下文。F3 面板会显示当前事件及绝对日志路径。
+   ```text
+   Qimiaoye_DarkForest_TextOnly_V0.1\project.godot
+   ```
+
+4. 打开工程后点击右上角 **Run Project**，或按 `F6/F5`。
+
+也可以在仓库根目录使用命令行：
+
+```powershell
+.\tools\godot\windows\Godot_v4.7.2-stable_win64\Godot_v4.7.2-stable_win64.exe --path .\Qimiaoye_DarkForest_TextOnly_V0.1
+```
+
+> 上述命令假设 ZIP 解压到了同名目录；如果解压位置不同，请替换引擎路径。
+
+## macOS：从源码运行
+
+Windows EXE 不能在 macOS 上直接运行。macOS 用户需要使用官方 Godot 4.7.2：
+
+1. 从 [Godot 官方下载页](https://godotengine.org/download/archive/4.7.2-stable/) 下载 macOS Standard 版 Godot 4.7.2（不需要 .NET 版）。
+2. 解压并把 `Godot.app` 移入 `/Applications`。
+3. 如果 macOS 阻止打开，在“系统设置”→“隐私与安全性”中允许；也可以在确认下载来源后执行：
+
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/Godot.app
+   ```
+
+4. 启动 Godot，点击 **Import**，选择：
+
+   ```text
+   Qimiaoye_DarkForest_TextOnly_V0.1/project.godot
+   ```
+
+5. 导入完成后点击 **Run Project**。
+
+命令行运行方式：
+
+```bash
+/Applications/Godot.app/Contents/MacOS/Godot \
+  --path /你的仓库路径/Qimiaoye_DarkForest_TextOnly_V0.1
+```
+
+macOS 首次导入会重新生成平台相关缓存，耗时取决于磁盘和机器性能。摄像头手势属于可选功能；未连接摄像头时仍可使用键盘和鼠标完成主要流程。
+
+## 基本操作
+
+- 推进旁白/对白：`Space`、`Enter` 或画面中的“继续”。
+- 移动：`A / D` 或 `← / →`。
+- ForestRun：`Space` 跳跃，`S / ↓` 下滑。
+- 光源交互：鼠标悬停在光源区域。
+- 跳水/触摸：点击剧情中的对应按钮。
+- TextInput：键盘输入；没有摄像头时可按 `F` 使用 Fan 预览操作。
+- LakeJump：按住鼠标左键、`Space` 或 `Enter` 蓄力，松开起跳；落水后返回剧情。
+- StarJar：拖动五团星光进入瓶口。
+- DOCX 开发回溯：`F4` 打开，输入来源行；`Esc` 或再次按 `F4` 关闭。
+- 诊断面板：`F3`。正式界面默认隐藏全局 Blink 状态和跑酷状态调试覆盖层。
+
+## 从源码导出 Windows 版本
+
+需要先在 Godot 编辑器中安装对应版本的 Export Templates。随后可在仓库根目录执行：
+
+```powershell
+$godot = ".\tools\godot\windows\Godot_v4.7.2-stable_win64\Godot_v4.7.2-stable_win64_console.exe"
+& $godot --headless `
+  --path ".\Qimiaoye_DarkForest_TextOnly_V0.1" `
+  --export-release "Gespielt Windows" `
+  ".\Gespielt.exe"
+```
+
+macOS 导出包需要在 macOS 版 Godot 中安装 Export Templates，并在 **Project → Export** 中新增 macOS preset；当前仓库固定提供的是 Windows export preset。
+
+## 工程结构
+
+```text
+Qimiaoye_DarkForest_TextOnly_V0.1/
+├─ project.godot              # Godot 工程入口
+├─ main.tscn                  # 黑暗森林主流程入口
+├─ scenes/                    # 开场、婚礼、奇妙夜、章节三和玩法场景
+├─ scripts/                   # 剧情数据、UI、状态机和验证逻辑
+├─ levels/                    # ForestRun、LakeJump、TextInput、StarJar 等模块
+├─ assets/                    # 图像、序列帧、字体和音频
+└─ export_presets.cfg         # Windows/Web 导出预设
+```
+
+## 日志与故障排查
+
+Windows 日志目录：
+
+```text
+%APPDATA%\Qimiaoye_DarkForest_TextOnly_V0.1\logs\
+```
+
+macOS 日志目录通常位于：
+
+```text
+~/Library/Application Support/Qimiaoye_DarkForest_TextOnly_V0.1/logs/
+```
+
+关键文件：
+
+- `godot.log`：Godot 和脚本错误。
+- `runtime.log`：剧情事件、模块进入/返回、场景切换。
+- `trace_steps.log`：DOCX 来源行和事件执行记录。
+- `forest_amai_fixed_route.log`：ForestRun 阿麦路线状态。
+- `forest_vine_echo_runtime.log`：跑酷藤蔓延迟模仿状态。
+
+如果出现黑屏或资源缺失，请先用 Godot 4.7.2 打开工程并等待资源导入完成，再运行项目。不要删除源码目录中的 `.import` 描述文件；本地生成的 `.godot/` 缓存可以在关闭 Godot 后删除并重新导入。
