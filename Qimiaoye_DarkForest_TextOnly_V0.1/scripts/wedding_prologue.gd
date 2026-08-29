@@ -15,6 +15,7 @@ const WeddingDataScript := preload("res://scripts/wedding_data.gd")
 const MysticNightDataScript := preload("res://scripts/mystic_night_data.gd")
 const StoryDataScript := preload("res://scripts/story_data.gd")
 const DevJumpPanelScript := preload("res://scripts/dev_jump_panel.gd")
+const ChapterTransitionScript := preload("res://scripts/chapter_transition.gd")
 
 const FOREST_MAIN_SCENE := "res://main.tscn"
 const WEDDING_PROLOGUE_SCENE := "res://scenes/wedding/wedding_prologue.tscn"
@@ -372,10 +373,8 @@ func _run_events() -> void:
 	if _verify_mode:
 		_report_verification()
 		return
-	# 小凌闭眼后先进入奇妙夜；project.godot 的主场景仍然是森林，现有 verify
-	# 与打包入口不受影响。
-	await get_tree().create_timer(2.0).timeout
-	get_tree().change_scene_to_file(MYSTIC_NIGHT_SCENE)
+	# 转场节点挂在 SceneTree.root，旧章节释放后仍能覆盖新章节的首帧。
+	ChapterTransitionScript.begin(get_tree(), MYSTIC_NIGHT_SCENE)
 
 
 func _run_event(event: Dictionary) -> void:
@@ -404,8 +403,8 @@ func _run_event(event: Dictionary) -> void:
 			await _run_module(event)
 		"endpoint":
 			_endpoint_reached = true
-			_scene_label.text = str(event.get("text", ""))
-			_scene_subtitle.text = "下一段：%s" % str(event.get("next", ""))
+			_scene_label.text = ""
+			_scene_subtitle.text = ""
 		_:
 			_failures.append("未知事件类型：%s" % str(event.get("type", "")))
 
@@ -562,12 +561,14 @@ func _report_verification() -> void:
 		_failures.append("回溯面板章节页缺失或顺序异常：%s" % str(_dev_jump_overlay.get_chapter_ids()))
 	elif _dev_jump_overlay.is_open():
 		_failures.append("F4 回溯面板不应默认显示")
+	if _endpoint_reached and (not _scene_label.text.is_empty() or not _scene_subtitle.text.is_empty()):
+		_failures.append("婚礼前夜 DOCX 145 终点仍显示章节提示文字")
 	if not _failures.is_empty():
 		for failure in _failures:
 			print("WEDDING_PROLOGUE_FAIL %s" % failure)
 		get_tree().quit(1)
 		return
-	print("WEDDING_PROLOGUE_PASS events=%d scenes=4 sources=%d modules=%d interactions=%d endpoint=%s narration_lines=%d dialogue_lines=%d font=Times_New_Roman cjk_fallback=SimSun text_only_stage=true advance_gated=true dev_docx_jump=true dev_jump_chapters=wedding_mystic_night_forest wedding_source_bounds=%s" % [
+	print("WEDDING_PROLOGUE_PASS events=%d scenes=4 sources=%d modules=%d interactions=%d endpoint=%s narration_lines=%d dialogue_lines=%d font=Times_New_Roman cjk_fallback=SimSun text_only_stage=true advance_gated=true endpoint_text_hidden=true chapter_loading=Where_She_Longs dev_docx_jump=true dev_jump_chapters=wedding_mystic_night_forest wedding_source_bounds=%s" % [
 		_events.size(),
 		_visited_sources.size(),
 		_visited_modules.size(),

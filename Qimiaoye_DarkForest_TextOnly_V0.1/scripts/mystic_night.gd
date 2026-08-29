@@ -11,6 +11,7 @@ const MysticNightDataScript := preload("res://scripts/mystic_night_data.gd")
 const WeddingDataScript := preload("res://scripts/wedding_data.gd")
 const StoryDataScript := preload("res://scripts/story_data.gd")
 const DevJumpPanelScript := preload("res://scripts/dev_jump_panel.gd")
+const ChapterTransitionScript := preload("res://scripts/chapter_transition.gd")
 
 const FOREST_MAIN_SCENE := "res://main.tscn"
 const WEDDING_PROLOGUE_SCENE := "res://scenes/wedding/wedding_prologue.tscn"
@@ -439,8 +440,7 @@ func _run_events() -> void:
 	if _verify_mode:
 		_report_verification()
 		return
-	await get_tree().create_timer(1.2).timeout
-	get_tree().change_scene_to_file(FOREST_MAIN_SCENE)
+	ChapterTransitionScript.begin(get_tree(), FOREST_MAIN_SCENE)
 
 
 func _run_event(event: Dictionary) -> void:
@@ -463,7 +463,7 @@ func _run_event(event: Dictionary) -> void:
 			await _run_interaction(event)
 		"endpoint":
 			_endpoint_reached = true
-			_cg_label.text = str(event.get("text", "请闭上眼睛"))
+			_cg_label.text = ""
 		_:
 			_failures.append("未知事件类型：%s" % str(event.get("type", "")))
 
@@ -791,8 +791,8 @@ func _report_verification() -> void:
 		_failures.append("重点镜头顺序异常：%s" % str(_visited_camera_shots))
 	if not _interactions_done.has("follow_girl"):
 		_failures.append("“跟上去”交互没有完成")
-	if _current_cg != "黑屏" or _cg_texture.texture != null or not _cg_label.visible or _cg_label.text != "请闭上眼睛":
-		_failures.append("奇妙夜终点没有停在黑屏闭眼引导")
+	if _current_cg != "黑屏" or _cg_texture.texture != null or not _cg_label.visible or not _cg_label.text.is_empty():
+		_failures.append("奇妙夜终点没有停在无文字黑屏")
 	if not _endpoint_reached:
 		_failures.append("奇妙夜 endpoint 未到达")
 	if not _failures.is_empty():
