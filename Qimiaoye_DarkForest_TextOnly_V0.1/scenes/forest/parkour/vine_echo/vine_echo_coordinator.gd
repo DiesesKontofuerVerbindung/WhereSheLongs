@@ -14,6 +14,7 @@ signal gate_action_locked(gate_index: int, player_action: int, xiaomai_action: i
 @export var player_runner_path: NodePath = ^"../Player/RunnerActionController"
 @export var xiaomai_runner_path: NodePath = ^"../Xiaomai/RunnerActionController"
 @export var debug_label_path: NodePath = ^"../DebugLayer/Panel/DebugText"
+@export var debug_overlay_enabled := false
 @export var start_on_ready := true
 @export var automatic_forward := false
 @export var echo_start_offset := Vector2(-18.0, 0.0)
@@ -60,6 +61,8 @@ var _trace_frame := 0
 
 func _ready() -> void:
     process_physics_priority = -10
+    if debug_label != null:
+        debug_label.get_parent().visible = debug_overlay_enabled
     _open_runtime_trace()
     _gates = _get_sorted_gates()
     for gate in _gates:
@@ -652,7 +655,7 @@ func _get_sorted_gates() -> Array[Node2D]:
 
 
 func _update_debug_label() -> void:
-    if debug_label == null:
+    if debug_label == null or not debug_overlay_enabled:
         return
     var player_current: int = _locked_player_action
     var xiaomai_echo: int = previous_player_action

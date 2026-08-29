@@ -111,14 +111,6 @@ func _ready() -> void:
 
 
 func _apply_panel_skin() -> void:
-	var module_panel := Panel.new()
-	module_panel.name = "LakeJumpPanelSkin"
-	UiPanelSkinScript.apply_fixed_rect(module_panel, UiPanelSkinScript.PANEL_RECT)
-	module_panel.add_theme_stylebox_override("panel", UiPanelSkinScript.panel_style())
-	module_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_hud.add_child(module_panel)
-	_hud.move_child(module_panel, 0)
-
 	UiPanelSkinScript.apply_fixed_rect(_charge_bar, UiPanelSkinScript.INPUT_RECT)
 	_hint.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_hint.position = Vector2(334.0, 201.0)
