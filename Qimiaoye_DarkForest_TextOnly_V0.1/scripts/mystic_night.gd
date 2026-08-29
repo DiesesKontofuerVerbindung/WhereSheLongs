@@ -2,8 +2,8 @@ extends Control
 
 ## 奇妙夜章节外壳。
 ##
-## 事件循环与森林正片完全独立，只复用旁白、对白和 F4 回溯 UI。全屏画面在
-## 正式 CG 到位前统一使用黑底白字资源槽；镜头效果只作用于该 placeholder。
+## 事件循环与森林正片完全独立，只复用旁白、对白和 F4 回溯 UI。正式 CG
+## 填满独立画面层；镜头效果只作用于 CG 根节点，不影响旁白、对白和开发面板。
 
 const NarrationUIScript := preload("res://scripts/narration_ui.gd")
 const DialogueUIScript := preload("res://scripts/dialogue_ui.gd")
@@ -29,7 +29,10 @@ const CG_NAMES := [
 	"奇妙夜鸟图",
 	"奇妙夜星星图",
 	"奇妙夜送花图",
+	"奇妙夜发光动物图",
+	"奇妙夜湿地图",
 	"奇妙夜森林轮廓图",
+	"奇妙夜别去图",
 	"奇妙夜女孩身影图",
 	"黑屏",
 ]
@@ -70,6 +73,7 @@ var _cjk_fallback_font: SystemFont
 var _root_bg: ColorRect
 var _cg_root: Control
 var _cg_backdrop: ColorRect
+var _cg_texture: TextureRect
 var _cg_label: Label
 var _back_buffer: BackBufferCopy
 var _screen_fx: ColorRect
@@ -144,6 +148,15 @@ func _build_ui() -> void:
 	_cg_backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_cg_backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_cg_root.add_child(_cg_backdrop)
+
+	_cg_texture = TextureRect.new()
+	_cg_texture.name = "MysticNightCgArt"
+	_cg_texture.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_cg_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_cg_texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_cg_texture.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_cg_texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_cg_root.add_child(_cg_texture)
 
 	_cg_label = Label.new()
 	_cg_label.name = "MysticNightCgName"
@@ -368,18 +381,18 @@ func _apply_pending_dev_jump() -> void:
 
 func _restore_dev_jump_context(target_index: int) -> void:
 	var scene_name := ""
-	var cg_name := ""
+	var cg_event: Dictionary = {}
 	for i in range(clampi(target_index, 0, _events.size())):
 		var event: Dictionary = _events[i]
 		match str(event.get("type", "")):
 			"scene":
 				scene_name = str(event.get("name", scene_name))
 			"cg":
-				cg_name = str(event.get("name", cg_name))
+				cg_event = event
 	if not scene_name.is_empty():
 		_current_scene = scene_name
-	if not cg_name.is_empty():
-		_set_cg_immediately(cg_name)
+	if not cg_event.is_empty():
+		_set_cg_immediately(cg_event)
 
 
 func _input(event: InputEvent) -> void:
@@ -441,7 +454,7 @@ func _run_event(event: Dictionary) -> void:
 		"scene":
 			_current_scene = str(event.get("name", ""))
 		"cg":
-			await _set_cg(str(event.get("name", "")))
+			await _set_cg(event)
 		"line":
 			await _show_line(event)
 		"camera":
@@ -455,35 +468,49 @@ func _run_event(event: Dictionary) -> void:
 			_failures.append("未知事件类型：%s" % str(event.get("type", "")))
 
 
-func _set_cg(cg_name: String) -> void:
+func _set_cg(cg_event: Dictionary) -> void:
+	var cg_name := str(cg_event.get("name", ""))
 	_visited_cgs.append(cg_name)
 	if _verify_mode:
-		_set_cg_immediately(cg_name)
+		_set_cg_immediately(cg_event)
 		_pending_cg_turn = false
 		_pending_final_turn = false
 		return
 	if _pending_final_turn and cg_name == "黑屏":
 		await _turn_into_darkness()
-		_set_cg_immediately(cg_name)
+		_set_cg_immediately(cg_event)
 		_pending_final_turn = false
 		return
 	if _pending_cg_turn:
-		await _turn_to_next_cg(cg_name)
+		await _turn_to_next_cg(cg_event)
 		_pending_cg_turn = false
 		return
 	var fade_out := create_tween()
 	fade_out.tween_property(_cg_root, "modulate:a", 0.0, 0.18).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	await fade_out.finished
-	_set_cg_immediately(cg_name)
+	_set_cg_immediately(cg_event)
 	_cg_root.modulate.a = 0.0
 	var fade_in := create_tween()
 	fade_in.tween_property(_cg_root, "modulate:a", 1.0, 0.25).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	await fade_in.finished
 
 
-func _set_cg_immediately(cg_name: String) -> void:
+func _set_cg_immediately(cg_event: Dictionary) -> void:
+	var cg_name := str(cg_event.get("name", ""))
+	var asset_path := str(cg_event.get("asset", ""))
 	_current_cg = cg_name
+	_cg_texture.texture = null
+	_cg_label.visible = true
 	_cg_label.text = "请闭上眼睛" if cg_name == "黑屏" else cg_name
+	if cg_name != "黑屏":
+		var texture_resource := load(asset_path) if not asset_path.is_empty() else null
+		if texture_resource is Texture2D:
+			_cg_texture.texture = texture_resource
+			_cg_label.visible = false
+		else:
+			var issue := "CG 资源无法载入：%s / %s" % [cg_name, asset_path]
+			if not _failures.has(issue):
+				_failures.append(issue)
 	_cg_root.position = Vector2.ZERO
 	_cg_root.scale = Vector2.ONE
 	_cg_root.modulate = Color.WHITE
@@ -491,14 +518,14 @@ func _set_cg_immediately(cg_name: String) -> void:
 	_set_screen_fx(0.0, 0.0)
 
 
-func _turn_to_next_cg(cg_name: String) -> void:
+func _turn_to_next_cg(cg_event: Dictionary) -> void:
 	_set_screen_fx(0.03, 0.14, Vector2(1.0, 0.0))
 	var turn_out := create_tween()
 	turn_out.set_parallel(true)
 	turn_out.tween_property(_cg_root, "position:x", -58.0, 0.22).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 	turn_out.tween_property(_cg_root, "modulate:a", 0.18, 0.22).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 	await turn_out.finished
-	_set_cg_immediately(cg_name)
+	_set_cg_immediately(cg_event)
 	_cg_root.position.x = 58.0
 	_cg_root.modulate.a = 0.18
 	_set_screen_fx(0.02, 0.10, Vector2(1.0, 0.0))
@@ -764,7 +791,7 @@ func _report_verification() -> void:
 		_failures.append("重点镜头顺序异常：%s" % str(_visited_camera_shots))
 	if not _interactions_done.has("follow_girl"):
 		_failures.append("“跟上去”交互没有完成")
-	if _current_cg != "黑屏" or _cg_label.text != "请闭上眼睛":
+	if _current_cg != "黑屏" or _cg_texture.texture != null or not _cg_label.visible or _cg_label.text != "请闭上眼睛":
 		_failures.append("奇妙夜终点没有停在黑屏闭眼引导")
 	if not _endpoint_reached:
 		_failures.append("奇妙夜 endpoint 未到达")
@@ -773,7 +800,7 @@ func _report_verification() -> void:
 			print("MYSTIC_NIGHT_FAIL %s" % failure)
 		get_tree().quit(1)
 		return
-	print("MYSTIC_NIGHT_PASS events=%d sources=%d cgs=%d camera_shots=%d interactions=%d endpoint=%s narration_lines=55 dialogue_lines=36 first_person=true audio=false placeholder=true dev_jump_chapters=wedding_mystic_night_forest source_bounds=%s" % [
+	print("MYSTIC_NIGHT_PASS events=%d sources=%d cgs=%d camera_shots=%d interactions=%d endpoint=%s narration_lines=55 dialogue_lines=36 first_person=true audio=false art=true dev_jump_chapters=wedding_mystic_night_forest source_bounds=%s" % [
 		_events.size(),
 		_visited_sources.size(),
 		_visited_cgs.size(),
@@ -799,12 +826,18 @@ func _validate_event_contract() -> void:
 		if event_type == "camera":
 			camera_ids.append(str(event.get("id", "")))
 		if event_type == "cg":
-			cg_names.append(str(event.get("name", "")))
+			var cg_name := str(event.get("name", ""))
+			var asset_path := str(event.get("asset", ""))
+			cg_names.append(cg_name)
+			if int(event.get("art_docx_paragraph", 0)) <= 0:
+				_failures.append("CG 缺少美术 DOCX 段落映射：%s" % cg_name)
+			if cg_name != "黑屏" and (asset_path.is_empty() or not ResourceLoader.exists(asset_path)):
+				_failures.append("CG 资源路径无效：%s / %s" % [cg_name, asset_path])
 		if event_type == "line" and int(event.get("source", 0)) == 63:
 			source_63_lines.append(text)
 	var expected_counts := {
 		"scene": 1,
-		"cg": 9,
+		"cg": 12,
 		"camera": 8,
 		"line": 91,
 		"interaction": 1,

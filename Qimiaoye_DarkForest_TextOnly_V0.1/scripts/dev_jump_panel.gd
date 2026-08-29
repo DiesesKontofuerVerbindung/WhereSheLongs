@@ -206,16 +206,19 @@ func refresh_preview(current_source: int) -> void:
 	var actual_source := int(resolved.get("source", 0))
 	var event: Dictionary = resolved.get("event", {})
 	var event_id := event_debug_id(event)
+	var art_docx_paragraph := int(event.get("art_docx_paragraph", 0))
+	var art_suffix := "" if art_docx_paragraph <= 0 else " · 美术 DOCX 第 %d 段" % art_docx_paragraph
 	var prefix := "" if is_host else "切到《%s》　" % str(chapter.get("title", ""))
 	if bool(resolved.get("exact", false)):
-		_feedback.text = "%s精确落点：DOCX 第 %d 行 · %s / %s" % [prefix, actual_source, event.get("type", ""), event_id]
+		_feedback.text = "%s精确落点：DOCX 第 %d 行 · %s / %s%s" % [prefix, actual_source, event.get("type", ""), event_id, art_suffix]
 	else:
-		_feedback.text = "%s第 %d 行没有事件，将从下一条：DOCX 第 %d 行 · %s / %s 开始" % [
+		_feedback.text = "%s第 %d 行没有事件，将从下一条：DOCX 第 %d 行 · %s / %s%s 开始" % [
 			prefix,
 			requested_source,
 			actual_source,
 			event.get("type", ""),
 			event_id,
+			art_suffix,
 		]
 	_jump_button.disabled = false
 

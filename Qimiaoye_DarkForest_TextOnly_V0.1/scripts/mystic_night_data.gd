@@ -3,14 +3,14 @@ class_name MysticNightData
 
 ## 《奇妙夜-世界》灰盒事件表。
 ##
-## source 使用原 DOCX 的段落序号（空段落也计数）。技术、音效与备注段不进入
-## 事件表；人物名后括号中的动作/心理提示也不作为文字事件显示。
+## source 使用灰盒开发稿的段落序号并供 F4 回溯；art_docx_paragraph 记录本次美术
+## DOCX 的实际图片段落。两份文档坐标独立，技术、音效与备注段不进入显示事件。
 
 
 static func build_events() -> Array[Dictionary]:
 	return [
 		{"type": "scene", "source": 1, "name": "奇妙夜"},
-		{"type": "cg", "source": 16, "name": "奇妙夜场景1"},
+		{"type": "cg", "source": 16, "art_docx_paragraph": 15, "name": "奇妙夜场景1", "asset": "res://assets/cutscenes/mystic_night/01_meadow.png"},
 		{"type": "camera", "source": 18, "id": "shot_01_wake", "status": "睁眼苏醒"},
 		{"type": "line", "source": 19, "speaker": "旁白", "text": "四周是一片巨大的草地。"},
 		{"type": "line", "source": 20, "speaker": "旁白", "text": "没有房子。"},
@@ -26,7 +26,7 @@ static func build_events() -> Array[Dictionary]:
 		{"type": "line", "source": 31, "speaker": "旁白", "text": "远处传来一个声音。"},
 		{"type": "line", "source": 32, "speaker": "？？？", "text": "你醒了？"},
 		{"type": "camera", "source": 34, "id": "shot_02_turn", "status": "听声回头"},
-		{"type": "cg", "source": 35, "name": "奇妙夜场景2"},
+		{"type": "cg", "source": 35, "art_docx_paragraph": 24, "name": "奇妙夜场景2", "asset": "res://assets/cutscenes/mystic_night/02_girl_on_rock.png"},
 		{"type": "line", "source": 37, "speaker": "旁白", "text": "一个短发女孩坐在不远处的大石头上。"},
 		{"type": "line", "source": 38, "speaker": "旁白", "text": "她的头发被风轻轻吹动。女孩手里拿着一根不知道从哪里捡来的长草，正漫不经心地拨弄脚边发光的小生物。"},
 		{"type": "line", "source": 39, "speaker": "旁白", "text": "她静静面对着小凌。"},
@@ -46,8 +46,8 @@ static func build_events() -> Array[Dictionary]:
 		{"type": "line", "source": 54, "speaker": "女孩", "text": "不知道。"},
 		{"type": "line", "source": 55, "speaker": "小凌", "text": "……"},
 		{"type": "line", "source": 56, "speaker": "女孩", "text": "所以才要走啊。"},
-		{"type": "interaction", "source": 58, "id": "follow_girl", "prompt": "跟上去", "status": "继续跟随女孩。"},
-		{"type": "cg", "source": 59, "name": "奇妙夜拉手图"},
+		{"type": "interaction", "source": 58, "art_docx_paragraph": 42, "id": "follow_girl", "prompt": "跟上去", "status": "继续跟随女孩。"},
+		{"type": "cg", "source": 59, "art_docx_paragraph": 43, "name": "奇妙夜拉手图", "asset": "res://assets/cutscenes/mystic_night/03_follow.jpg"},
 		{"type": "line", "source": 60, "speaker": "旁白", "text": "两个人一前一后走在草地上。"},
 		{"type": "line", "source": 61, "speaker": "旁白", "text": "风很大。"},
 		{"type": "line", "source": 62, "speaker": "旁白", "text": "发光的小生物从她们脚边飞起来，又落回草丛。"},
@@ -75,19 +75,21 @@ static func build_events() -> Array[Dictionary]:
 		{"type": "line", "source": 84, "speaker": "旁白", "text": "她低头看着脚下的草。"},
 		{"type": "line", "source": 85, "speaker": "小凌", "text": "其实……我有一点不想去。"},
 		{"type": "line", "source": 86, "speaker": "旁白", "text": "女孩没有问为什么，只是轻轻“嗯”了一声。"},
-		{"type": "cg", "source": 87, "name": "奇妙夜鸟图"},
+		{"type": "cg", "source": 87, "art_docx_paragraph": 60, "name": "奇妙夜鸟图", "asset": "res://assets/cutscenes/mystic_night/04_moon_creatures.jpg"},
 		{"type": "line", "source": 89, "speaker": "旁白", "text": "一群像鸟一样的生物从二人头顶飞过，在飞到最高处时变成一颗颗发光的星星洒落下来。"},
-		{"type": "cg", "source": 90, "name": "奇妙夜星星图"},
+		{"type": "cg", "source": 90, "art_docx_paragraph": 76, "name": "奇妙夜星星图", "asset": "res://assets/cutscenes/mystic_night/05_falling_stars.png"},
 		{"type": "line", "source": 92, "speaker": "旁白", "text": "女孩随手摘了一朵会随着人的靠近而闭合的花送给小凌。"},
-		{"type": "cg", "source": 93, "name": "奇妙夜送花图"},
+		{"type": "cg", "source": 93, "art_docx_paragraph": 78, "name": "奇妙夜送花图", "asset": "res://assets/cutscenes/mystic_night/06_flower.jpg"},
 		{"type": "line", "source": 95, "speaker": "旁白", "text": "两个人没有再谈些什么，她们只是在草原上走。"},
 		{"type": "line", "source": 96, "speaker": "旁白", "text": "有时候并肩走。有时候一个人跑到前面。"},
 		{"type": "line", "source": 97, "speaker": "旁白", "text": "有时候为了追一只突然从草丛里钻出来的发光小动物，两个人一起绕过一大片高高的草。"},
+		{"type": "cg", "source": 98, "art_docx_paragraph": 82, "name": "奇妙夜发光动物图", "asset": "res://assets/cutscenes/mystic_night/07_glowing_animal.jpg"},
 		{"type": "camera", "source": 98, "id": "shot_05_run", "status": "第一人称跑动"},
 		{"type": "line", "source": 99, "speaker": "旁白", "text": "不知道走了多久。"},
+		{"type": "cg", "source": 100, "art_docx_paragraph": 85, "name": "奇妙夜湿地图", "asset": "res://assets/cutscenes/mystic_night/08_wetland.jpg"},
 		{"type": "line", "source": 100, "speaker": "旁白", "text": "草地开始慢慢变矮，风也停了。前方的地面逐渐变得潮湿，一些陌生的植物从草丛中长出来，它们的叶片巨大，边缘泛着幽蓝色的光。"},
 		{"type": "line", "source": 101, "speaker": "旁白", "text": "小凌踩过一片落叶。"},
-		{"type": "cg", "source": 105, "name": "奇妙夜森林轮廓图"},
+		{"type": "cg", "source": 105, "art_docx_paragraph": 95, "name": "奇妙夜森林轮廓图", "asset": "res://assets/cutscenes/mystic_night/09_forest_edge.jpg"},
 		{"type": "camera", "source": 106, "id": "shot_06_forest_push", "status": "森林吸引视线"},
 		{"type": "line", "source": 107, "speaker": "旁白", "text": "远处的地平线上，出现了一片巨大的黑色轮廓。"},
 		{"type": "line", "source": 108, "speaker": "旁白", "text": "最开始像一座山，又像一片压低的乌云。"},
@@ -110,14 +112,15 @@ static func build_events() -> Array[Dictionary]:
 		{"type": "line", "source": 130, "speaker": "旁白", "text": "女孩第一次没有继续向前，身体微微绷紧，站在原地。"},
 		{"type": "line", "source": 131, "speaker": "女孩", "text": "那里和这里不一样。"},
 		{"type": "line", "source": 132, "speaker": "小凌", "text": "哪里不一样？"},
+		{"type": "cg", "source": 133, "art_docx_paragraph": 118, "name": "奇妙夜别去图", "asset": "res://assets/cutscenes/mystic_night/10_dont_go.png"},
 		{"type": "line", "source": 134, "speaker": "旁白", "text": "小凌重新看向森林，黑暗之中，似乎有什么东西一闪而过，她没有看清。"},
 		{"type": "line", "source": 136, "speaker": "旁白", "text": "但她突然很想知道——那里究竟有什么。"},
 		{"type": "line", "source": 137, "speaker": "小凌", "text": "我想去看看。"},
 		{"type": "line", "source": 138, "speaker": "旁白", "text": "女孩没有再阻止她，只是站在原地。"},
 		{"type": "line", "source": 139, "speaker": "旁白", "text": "小凌慢慢走向森林，草地在她脚下逐渐消失，取而代之的是潮湿的泥土和厚厚的落叶。身后的草原越来越亮，眼前的森林越来越黑。"},
-		{"type": "cg", "source": 142, "name": "奇妙夜女孩身影图"},
+		{"type": "cg", "source": 142, "art_docx_paragraph": 125, "name": "奇妙夜女孩身影图", "asset": "res://assets/cutscenes/mystic_night/11_last_look.png"},
 		{"type": "camera", "source": 143, "id": "shot_08_last_look", "status": "最后回望与转身"},
 		{"type": "line", "source": 144, "speaker": "旁白", "text": "女孩还站在那里。她没有说话，只是远远地朝向小凌。"},
-		{"type": "cg", "source": 146, "name": "黑屏"},
+		{"type": "cg", "source": 146, "art_docx_paragraph": 129, "name": "黑屏", "asset": ""},
 		{"type": "endpoint", "source": 146, "id": "MYSTIC_NIGHT_END", "text": "请闭上眼睛", "next": "森林正片 EYE_OPEN"},
 	]

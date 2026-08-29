@@ -13,10 +13,15 @@ const EXPECTED_CGS := [
 	"奇妙夜鸟图",
 	"奇妙夜星星图",
 	"奇妙夜送花图",
+	"奇妙夜发光动物图",
+	"奇妙夜湿地图",
 	"奇妙夜森林轮廓图",
+	"奇妙夜别去图",
 	"奇妙夜女孩身影图",
 	"黑屏",
 ]
+const EXPECTED_CG_SOURCES := [16, 35, 59, 87, 90, 93, 98, 100, 105, 133, 142, 146]
+const EXPECTED_ART_PARAGRAPHS := [15, 24, 43, 60, 76, 78, 82, 85, 95, 118, 125, 129]
 const EXPECTED_SHOTS := [
 	"shot_01_wake",
 	"shot_02_turn",
@@ -35,6 +40,8 @@ func _ready() -> void:
 	var type_counts: Dictionary = {}
 	var speaker_counts: Dictionary = {}
 	var cg_names := PackedStringArray()
+	var cg_sources := PackedInt32Array()
+	var art_paragraphs := PackedInt32Array()
 	var camera_ids := PackedStringArray()
 	var source_63_texts := PackedStringArray()
 
@@ -50,19 +57,25 @@ func _ready() -> void:
 			if int(event.get("source", 0)) == 63:
 				source_63_texts.append(text)
 		elif event_type == "cg":
-			cg_names.append(str(event.get("name", "")))
+			var cg_name := str(event.get("name", ""))
+			var asset_path := str(event.get("asset", ""))
+			cg_names.append(cg_name)
+			cg_sources.append(int(event.get("source", 0)))
+			art_paragraphs.append(int(event.get("art_docx_paragraph", 0)))
+			if cg_name != "黑屏" and (asset_path.is_empty() or not ResourceLoader.exists(asset_path)):
+				failures.append("CG 资源不存在：%s / %s" % [cg_name, asset_path])
 		elif event_type == "camera":
 			camera_ids.append(str(event.get("id", "")))
 
 	var expected_type_counts := {
 		"scene": 1,
-		"cg": 9,
+		"cg": 12,
 		"camera": 8,
 		"line": 91,
 		"interaction": 1,
 		"endpoint": 1,
 	}
-	if events.size() != 111 or type_counts != expected_type_counts:
+	if events.size() != 114 or type_counts != expected_type_counts:
 		failures.append("事件统计异常：events=%d types=%s" % [events.size(), str(type_counts)])
 	var expected_speaker_counts := {"旁白": 55, "小凌": 18, "女孩": 17, "？？？": 1}
 	if speaker_counts != expected_speaker_counts:
@@ -71,6 +84,10 @@ func _ready() -> void:
 		failures.append("DOCX 来源范围异常：%s" % DevJumpPanelScript.source_bounds(events))
 	if cg_names != PackedStringArray(EXPECTED_CGS):
 		failures.append("CG 资源槽顺序异常：%s" % str(cg_names))
+	if cg_sources != PackedInt32Array(EXPECTED_CG_SOURCES):
+		failures.append("CG F4 行号映射异常：%s" % str(cg_sources))
+	if art_paragraphs != PackedInt32Array(EXPECTED_ART_PARAGRAPHS):
+		failures.append("CG 美术 DOCX 段落映射异常：%s" % str(art_paragraphs))
 	if camera_ids != PackedStringArray(EXPECTED_SHOTS):
 		failures.append("重点镜头顺序异常：%s" % str(camera_ids))
 	if source_63_texts != PackedStringArray(["远处偶尔传来不知道什么动物的叫声。", "前面是一片很高的草坡。"]):
@@ -87,6 +104,15 @@ func _ready() -> void:
 	var gap_jump := DevJumpPanelScript.resolve_source_line(events, 17)
 	if gap_jump.is_empty() or int(gap_jump.get("source", 0)) != 18 or bool(gap_jump.get("exact", true)):
 		failures.append("动作提示段没有正确跳过：17 -> 18")
+	var interaction_jump := DevJumpPanelScript.resolve_source_line(events, 58)
+	var interaction_event: Dictionary = interaction_jump.get("event", {})
+	if str(interaction_event.get("id", "")) != "follow_girl" or int(interaction_event.get("art_docx_paragraph", 0)) != 42:
+		failures.append("F4 第 58 行与美术 DOCX 第 42 段交互映射异常")
+	for cg_source in [98, 100, 133]:
+		var cg_jump := DevJumpPanelScript.resolve_source_line(events, cg_source)
+		var cg_event: Dictionary = cg_jump.get("event", {})
+		if cg_jump.is_empty() or str(cg_event.get("type", "")) != "cg":
+			failures.append("F4 第 %d 行没有优先落到新增 CG" % cg_source)
 	var endpoint_events := events.filter(func(event: Dictionary) -> bool:
 		return str(event.get("type", "")) == "endpoint"
 	)
@@ -103,7 +129,7 @@ func _ready() -> void:
 			print("MYSTIC_NIGHT_TEST_FAIL %s" % failure)
 		get_tree().quit(1)
 		return
-	print("MYSTIC_NIGHT_TEST_PASS events=111 source_bounds=(1, 146) narration_lines=55 dialogue_lines=36 cgs=9 camera_shots=8 interactions=1 endpoint=true technical_notes_hidden=true")
+	print("MYSTIC_NIGHT_TEST_PASS events=114 source_bounds=(1, 146) narration_lines=55 dialogue_lines=36 cgs=12 camera_shots=8 interactions=1 endpoint=true art_assets=true dual_docx_mapping=true technical_notes_hidden=true")
 	get_tree().quit(0)
 
 
