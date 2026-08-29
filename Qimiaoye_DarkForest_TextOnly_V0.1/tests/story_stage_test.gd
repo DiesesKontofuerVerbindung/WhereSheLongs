@@ -223,6 +223,31 @@ func _ready() -> void:
 	var lake_feet_ratio := float(lake_snapshot.get("amai_feet_y", 0.0)) / float(stage.size.y)
 	if not is_equal_approx(lake_feet_ratio, float(lake_snapshot.get("lake_ground_ratio", 0.0))):
 		failures.append("人物脚底没有踩在湖岸滩地上")
+	# DOCX 167：阿麦走到岸边后不再自己移动，湖面卷动必须把他一起带走。
+	# 否则他会钉在屏幕上相对湖面滑行，也就是用户反馈的"跟随漂移"。
+	stage.restore_for_source(167, "环境背景图6")
+	var lake_anchor_before: Dictionary = stage.get_debug_snapshot()
+	if not bool(lake_anchor_before.get("lake_amai_anchored", false)):
+		failures.append("跳转到 167 之后阿麦没有锚定到湖面世界")
+	var amai_x_before := float(lake_anchor_before.get("lake_amai_x", 0.0))
+	var lake_offset_before := float(lake_anchor_before.get("lake_root_offset_x", 0.0))
+	for step in range(40):
+		stage.update_manual_movement(1.0, 0.05, "lake_trigger")
+	var lake_anchor_after: Dictionary = stage.get_debug_snapshot()
+	var lake_offset_after := float(lake_anchor_after.get("lake_root_offset_x", 0.0))
+	var amai_x_after := float(lake_anchor_after.get("lake_amai_x", 0.0))
+	if lake_offset_after >= lake_offset_before:
+		failures.append("lake_trigger 没有让湖面向左卷动")
+	# 相对湖面的位移必须为 0：阿麦屏幕坐标要与湖面位移等量同步。
+	var amai_drift := absf((amai_x_after - amai_x_before) - (lake_offset_after - lake_offset_before))
+	if amai_drift > 1.0:
+		failures.append("阿麦相对湖面漂移 %.1f px，没有跟住卷动" % amai_drift)
+	if amai_x_after < 0.0 or amai_x_after > stage.size.x:
+		failures.append("卷动结束后阿麦被推出画面：x=%.1f" % amai_x_after)
+	var xiaoling_ratio_after := float(lake_anchor_after.get("xiaoling_x", 0.0)) / float(stage.size.x)
+	if xiaoling_ratio_after > amai_x_after / float(stage.size.x):
+		failures.append("小凌越过了站在岸边的阿麦")
+
 	stage.set_scene("环境背景图4", true)
 	var back_to_forest: Dictionary = stage.get_debug_snapshot()
 	if bool(back_to_forest.get("lake_active", true)):

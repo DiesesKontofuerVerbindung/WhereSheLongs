@@ -59,7 +59,11 @@ const LAKE_GROUND_RATIO := 0.86
 const LAKE_XIAOLING_START_RATIO := 0.22
 const LAKE_AMAI_START_RATIO := 0.40
 const LAKE_AMAI_SHORE_RATIO := 0.72
-const LAKE_SCROLL_CEILING := 0.62
+# 阿麦锚定到湖面世界坐标后会随卷动左移，卷动量必须留住他不出画：
+# 1778px 可卷距离 × 0.225 ≈ 400px，阿麦从 0.72 落到约 0.41，仍在画面内。
+const LAKE_SCROLL_CEILING := 0.225
+# 接近距离主要交给镜头推进，小凌自己只走一小段，否则会越过站在岸边的阿麦。
+const LAKE_XIAOLING_TRIGGER_MAX_RATIO := 0.30
 const SCENE_SCROLL_RATIOS := {
 	"环境背景图1": 0.0,
 	"环境背景图2": 0.225,
@@ -93,6 +97,10 @@ var _lake_scale := 0.5
 var _lake_scroll_ratio := 0.0
 var _amai_fade_tween: Tween
 var _manual_follow_drives_amai := false
+## 阿麦不是 _lake_root 的子节点，湖面卷动时他会钉在屏幕上相对湖面滑行。
+## 锚定后按 _lake_root 的位移同步他的屏幕坐标，等价于把他放进湖面世界。
+var _lake_amai_anchored := false
+var _lake_amai_anchor_x := 0.0
 var _last_continuous_transition := ""
 var _last_continuous_transition_duration := 0.0
 var _last_continuous_transition_ran_actors := false
@@ -322,6 +330,8 @@ func _apply_lake_scroll_ratio(scroll_ratio: float) -> void:
 	var scaled_width := LAKE_SOURCE_SIZE.x * _lake_scale
 	var max_scroll := maxf(0.0, scaled_width - size.x)
 	_lake_root.position = Vector2(-max_scroll * _lake_scroll_ratio, 0.0)
+	if _lake_amai_anchored and _amai != null:
+		_amai.position.x = _lake_amai_anchor_x + _lake_root.position.x
 
 
 func _process(delta: float) -> void:
@@ -397,6 +407,7 @@ func _current_ground_ratio() -> float:
 
 func _enter_lake_scene() -> void:
 	_cancel_all_actor_tweens()
+	_lake_amai_anchored = false
 	_apply_lake_scroll_ratio(0.0)
 	_light_visible = false
 	_heart_glow_visible = false
@@ -618,6 +629,8 @@ func play_action(action_id: String, verify_mode: bool) -> void:
 			var tween := _start_actor_motion(_amai, LAKE_AMAI_SHORE_RATIO, 150.0, verify_mode)
 			await tween.finished
 			_set_facing(_amai_visual, true)
+			# 走到位之后他就不再自己移动了，从这一刻起交给湖面卷动带。
+			_anchor_amai_to_lake()
 		"amai_turn_lake":
 			_set_facing(_amai_visual, false)
 		_:
@@ -707,7 +720,7 @@ func update_manual_movement(direction: float, delta: float, movement_id: String)
 	var min_x := size.x * 0.12
 	var max_ratio := 0.78 if movement_id == "forest_run_entry" else 0.72
 	if movement_id == "lake_trigger":
-		max_ratio = 0.62
+		max_ratio = LAKE_XIAOLING_TRIGGER_MAX_RATIO
 	var max_x := size.x * max_ratio
 	_xiaoling.velocity = Vector2(direction * MANUAL_WALK_SPEED, 0.0)
 	_xiaoling.position.x = clampf(_xiaoling.position.x + _xiaoling.velocity.x * delta, min_x, max_x)
@@ -733,6 +746,13 @@ func _drive_manual_follow_amai(direction: float) -> void:
 	_manual_follow_drives_amai = true
 
 
+func _anchor_amai_to_lake() -> void:
+	if _amai == null or _lake_root == null:
+		return
+	_lake_amai_anchor_x = _amai.position.x - _lake_root.position.x
+	_lake_amai_anchored = true
+
+
 func _release_manual_follow_amai() -> void:
 	if not _manual_follow_drives_amai:
 		return
@@ -749,7 +769,7 @@ func finish_manual_movement(movement_id: String) -> void:
 	if movement_id == "forest_run_entry":
 		stop_ratio = 0.78
 	elif movement_id == "lake_trigger":
-		stop_ratio = 0.62
+		stop_ratio = LAKE_XIAOLING_TRIGGER_MAX_RATIO
 	_set_actor_ratio(_xiaoling, stop_ratio)
 	_xiaoling.velocity = Vector2.ZERO
 	hide_control_prompt()
@@ -778,6 +798,7 @@ func restore_for_source(source: int, scene_name: String) -> void:
 		_enter_lake_scene()
 		if source >= 167:
 			_set_actor_ratio(_amai, LAKE_AMAI_SHORE_RATIO)
+			_anchor_amai_to_lake()
 		if source >= 173:
 			_set_facing(_amai_visual, false)
 		queue_redraw()
@@ -1091,6 +1112,10 @@ func get_debug_snapshot() -> Dictionary:
 		),
 		"lake_scroll_ratio": _lake_scroll_ratio,
 		"lake_ground_ratio": LAKE_GROUND_RATIO,
+		"lake_amai_anchored": _lake_amai_anchored,
+		"lake_amai_x": _amai.position.x if _amai != null else 0.0,
+		"lake_scroll_ceiling": LAKE_SCROLL_CEILING,
+		"lake_root_offset_x": _lake_root.position.x if _lake_root != null else 0.0,
 		"world_width": CONTINUOUS_WORLD_SOURCE_SIZE.x * _world_scale,
 		"entry_curtain_visible": _entry_curtain.visible if _entry_curtain != null else false,
 		"particles_visible": _forest_particles.visible if _forest_particles != null else false,

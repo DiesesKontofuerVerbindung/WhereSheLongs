@@ -8,6 +8,7 @@ const StorySourceLock := preload("res://scripts/story_source_lock.gd")
 const NarrationUIScript := preload("res://scripts/narration_ui.gd")
 const DialogueUIScript := preload("res://scripts/dialogue_ui.gd")
 const StoryStageScript := preload("res://scripts/story_stage.gd")
+const CutscenePlayerScript := preload("res://scripts/cutscene_player.gd")
 const RUNTIME_LOG_PATH := "user://logs/runtime.log"
 const TRACE_LOG_PATH := "user://logs/trace_steps.log"
 const ENGINE_LOG_PATH := "user://logs/godot.log"
@@ -46,6 +47,7 @@ const ALLOWED_MODULE_IMAGE_ROOTS := [
 	"res://assets/characters/",
 	"res://assets/stones/",
 	"res://scenes/forest/parkour/",
+	"res://assets/cutscenes/",
 ]
 
 var _events: Array[Dictionary] = []
@@ -106,6 +108,8 @@ var _action_button: Button
 var _dark_overlay: ColorRect
 var _vfx: Control
 var _story_stage
+var _cutscene_player
+var _cutscene_plays: Dictionary = {}
 var _diagnostic_panel: PanelContainer
 var _diagnostic_label: Label
 var _endpoint_panel: PanelContainer
@@ -321,6 +325,7 @@ func _build_ui() -> void:
 	_build_endpoint_panel()
 	_build_advance_hint()
 	_build_module_host()
+	_build_cutscene_player()
 	_build_dev_jump_panel()
 
 
@@ -331,6 +336,26 @@ func _build_story_stage() -> void:
 	_story_stage.light_progress_changed.connect(_on_story_light_progress_changed)
 	_story_stage.light_reached.connect(_on_story_light_reached)
 	add_child(_story_stage)
+
+
+func _build_cutscene_player() -> void:
+	# 放在模块宿主之后、F4 开发面板之前：CG 要盖住舞台和对白，但不能挡住调试跳转。
+	_cutscene_player = CutscenePlayerScript.new()
+	add_child(_cutscene_player)
+
+
+## CG 只在资源齐全时播放；缺帧走 warning 并让剧情继续，避免美术未就位时卡死流程。
+func _play_cutscene(cutscene_id: String) -> void:
+	if _cutscene_player == null or not _cutscene_player.has_cutscene(cutscene_id):
+		return
+	var missing: PackedStringArray = _cutscene_player.check_frames(cutscene_id)
+	if not missing.is_empty():
+		_log_runtime("CUTSCENE_SKIP id=%s missing=%d first=%s" % [cutscene_id, missing.size(), missing[0]])
+		return
+	_log_runtime("CUTSCENE_BEGIN id=%s verify=%s" % [cutscene_id, str(_verify_mode)])
+	_cutscene_plays[cutscene_id] = int(_cutscene_plays.get(cutscene_id, 0)) + 1
+	await _cutscene_player.play(cutscene_id, _verify_mode)
+	_log_runtime("CUTSCENE_END id=%s frames=%d" % [cutscene_id, int(_cutscene_player.get_debug_snapshot()["cutscene_played_frames"])])
 
 
 func _build_narration_ui() -> void:
@@ -1539,6 +1564,9 @@ func _run_module_skip(event: Dictionary) -> void:
 	_module_run_counts[module_id] = int(_module_run_counts.get(module_id, 0)) + 1
 	_status("[MODULE_SKIP] %s → %s（不打开模块页面）" % [module_id, result])
 	_log_runtime("MODULE_SKIP id=%s source=%s result=%s callback=immediate run=%d" % [module_id, event.get("source", 0), result, int(_module_run_counts[module_id])])
+	if module_id == "WaterfallInteraction":
+		# DOCX 140-141 触摸那束光，用 CG 代替原本的空跳过。
+		await _play_cutscene("touch_chest")
 	await _brief_pause()
 
 
@@ -1660,8 +1688,16 @@ func _play_transition(event: Dictionary) -> void:
 			_vfx.set_mode("water")
 			await _tween_alpha(_dark_overlay, 0.92, duration * 0.5)
 			_set_scene(target)
+			# DOCX 138 跳下之后落到瀑布下方，CG 在黑幕拉起后播，播完再露出新场景。
+			await _play_cutscene("waterfall_below")
 			await _tween_alpha(_dark_overlay, 0.0, duration * 0.5)
 			_vfx.set_mode("none")
+		"DROWNING_CG":
+			# DOCX 195 小凌下沉，196 切溺水图 CG。
+			await _tween_alpha(_dark_overlay, 1.0, duration * 0.5)
+			_set_scene(target)
+			await _play_cutscene("drowning")
+			await _tween_alpha(_dark_overlay, 0.0, duration * 0.5)
 		_:
 			await _tween_alpha(_dark_overlay, 1.0, duration * 0.5)
 			_set_scene(target)
@@ -2148,6 +2184,16 @@ func _validate_runtime_completion() -> PackedStringArray:
 			errors.append("全流程未执行 DOCX 行：%d" % required_source)
 	if _module_active or (_module_host != null and _module_host.visible):
 		errors.append("全流程结束时模块宿主仍处于活动状态")
+	# 三段已定锚点的 CG 必须在全流程里各触发一次，否则接入等于没接。
+	for cutscene_id in ["waterfall_below", "touch_chest", "drowning"]:
+		if int(_cutscene_plays.get(cutscene_id, 0)) < 1:
+			errors.append("全流程未触发 CG：%s" % cutscene_id)
+		if _cutscene_player != null:
+			var missing_frames: PackedStringArray = _cutscene_player.check_frames(cutscene_id)
+			if not missing_frames.is_empty():
+				errors.append("CG %s 缺 %d 帧，首个：%s" % [cutscene_id, missing_frames.size(), missing_frames[0]])
+	if _cutscene_player != null and _cutscene_player.visible:
+		errors.append("全流程结束时 CG 播放器仍可见")
 	if _module_viewport != null and _module_viewport.get_child_count() != 0:
 		errors.append("全流程结束时模块实例未释放：%d" % _module_viewport.get_child_count())
 	if _narration_lines_seen < 61:
@@ -2262,7 +2308,7 @@ func _is_allowed_module_image_path(path: String) -> bool:
 func _find_forbidden_visual_nodes(node: Node) -> PackedStringArray:
 	var found := PackedStringArray()
 	for child in node.get_children():
-		if child == _module_host or child == _story_stage:
+		if child == _module_host or child == _story_stage or child == _cutscene_player:
 			continue
 		if child is Sprite2D or child is AnimatedSprite2D or child is TextureRect or child is CharacterBody2D:
 			found.append("%s (%s)" % [child.get_path(), child.get_class()])
@@ -2395,6 +2441,11 @@ func _finish_verification(success: bool, issues: PackedStringArray) -> void:
 			_dialogue_ui.get_choice_layout_sample_count(),
 		]
 		message += " dialogue_reveal_speed=1.25x heart_glow_source_offset=579 lake_stage=true lake_source_size=6117x1440 lake_layers=back_front_particles"
+		message += " cutscene_waterfall_below=%d cutscene_touch_chest=%d cutscene_drowning=%d cutscene_streamed=true" % [
+			int(_cutscene_plays.get("waterfall_below", 0)),
+			int(_cutscene_plays.get("touch_chest", 0)),
+			int(_cutscene_plays.get("drowning", 0)),
+		]
 		print(message)
 		_log_runtime(message)
 		get_tree().quit(0)
