@@ -10,6 +10,7 @@ const COLOR_TEXT := Color("252931")
 const COLOR_ACCENT := Color("555b66")
 const DIALOGUE_BOX_PATH := "res://assets/ui/dialogue/dialogue_left_reference.png"
 const DIALOGUE_BOX_REGION := Rect2(104.0, 416.0, 1072.0, 262.0)
+const DIALOGUE_TEXT_SHIFT := 96
 const TextRevealProfile := preload("res://scripts/text_reveal_profile.gd")
 
 var _speaker_panel: PanelContainer
@@ -220,7 +221,7 @@ func _build_ui() -> void:
 	margin.add_child(col)
 
 	var speaker_margin := MarginContainer.new()
-	speaker_margin.add_theme_constant_override("margin_left", 64)
+	speaker_margin.add_theme_constant_override("margin_left", 64 + DIALOGUE_TEXT_SHIFT)
 	col.add_child(speaker_margin)
 
 	_speaker_panel = PanelContainer.new()
@@ -236,6 +237,10 @@ func _build_ui() -> void:
 	_speaker_label.add_theme_color_override("font_color", COLOR_ACCENT)
 	_speaker_panel.add_child(_speaker_label)
 
+	var body_margin := MarginContainer.new()
+	body_margin.add_theme_constant_override("margin_left", DIALOGUE_TEXT_SHIFT)
+	col.add_child(body_margin)
+
 	_body_label = Label.new()
 	_body_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_body_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
@@ -244,7 +249,7 @@ func _build_ui() -> void:
 	_body_label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
 	_body_label.custom_minimum_size.y = 64
 	_body_label.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	col.add_child(_body_label)
+	body_margin.add_child(_body_label)
 
 	_choice_box = VBoxContainer.new()
 	_choice_box.add_theme_constant_override("separation", 8)
