@@ -214,6 +214,19 @@ func _play_one_pass(cutscene_id: String) -> void:
 	_frame_cache.clear()
 
 
+## 等当前这段播完一整轮。只对 loop=false 的段有意义——loop=true 永远不会停，
+## 等它就是死循环。用于 DOCX 196–199 这种两个转场之间没有对白事件的地方：
+## 不等的话溺水刚起循环就被 DROWNING_EXIT 停掉，玩家什么都看不到。
+func wait_until_pass_done(verify_mode := false) -> void:
+	if verify_mode or _loop_id.is_empty():
+		return
+	if bool(CUTSCENES[_loop_id].get("loop", true)):
+		push_warning("wait_until_pass_done 用在循环段 %s 上会一直等下去，已跳过" % _loop_id)
+		return
+	while not _loop_id.is_empty() and not _holding_last_frame:
+		await get_tree().process_frame
+
+
 func is_looping(cutscene_id := "") -> bool:
 	return _loop_id == cutscene_id if not cutscene_id.is_empty() else not _loop_id.is_empty()
 

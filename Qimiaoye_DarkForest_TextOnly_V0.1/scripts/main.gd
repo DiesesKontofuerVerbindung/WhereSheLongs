@@ -354,6 +354,13 @@ func _build_cutscene_player() -> void:
 ##   环境背景图7  DOCX 199–309  110 行  ← 这张一直缺美术，循环 CG 正好顶上
 ## 人物剧情图1 进场先停在"摸心脏前"，玩家做完 WaterfallInteraction 的触摸交互
 ## 才切成瀑布下，所以它的初始值是 touch_chest 而不是 waterfall_below。
+## 溺水沉到底之后额外留的一拍，让"闭上了眼"和"猛地睁开眼"之间有呼吸。
+const DROWNING_HOLD_SECONDS := 1.4
+## 闭眼慢、睁眼快：DOCX 195 是"闭上了眼"，201 是"猛地睁开眼"。
+## 两边用同一个时长的话，那个"猛地"就没了。
+const DROWNING_EYES_CLOSE_SECONDS := 2.2
+const DROWNING_EYES_OPEN_SECONDS := 0.35
+
 const SCENE_CUTSCENES := {
 	"人物剧情图1": "touch_chest",
 	"溺水图cg": "drowning",
@@ -376,6 +383,9 @@ func _sync_scene_cutscene(scene_name: String) -> void:
 
 func _start_cutscene_loop(cutscene_id: String, reason: String) -> void:
 	if _cutscene_player == null or not _cutscene_player.has_cutscene(cutscene_id):
+		return
+	# 同一段已经在放就别重来，也别重复计数——溺水会被跳水结束和 196 转场各触发一次。
+	if _cutscene_player.is_looping(cutscene_id):
 		return
 	var missing: PackedStringArray = _cutscene_player.check_frames(cutscene_id)
 	if not missing.is_empty():
@@ -1566,6 +1576,12 @@ func _run_embedded_module(event: Dictionary, is_placeholder: bool) -> void:
 	_module_pointer_captured = false
 	_set_module_pointer_inside(false)
 	_status("[MODULE_RETURN] %s → 剧情继续" % module_id)
+	if module_id == "LakeJump":
+		# DOCX 192 踏入湖里、193 跳水，紧接着 195 就是"在水中不断下沉"。
+		# 但场景要到 196 DROWNING_CG 才切，中间这句会配着"两人站在岸边"的
+		# 湖边舞台说出来。跳完水立刻起溺水循环，让 195 就在水里说。
+		# 196 再调 play_looping("drowning") 会因为 id 相同直接返回，衔接无缝。
+		_start_cutscene_loop("drowning", "lake_jump_done")
 
 
 func _on_embedded_module_completed_without_result() -> void:
@@ -1749,10 +1765,28 @@ func _play_transition(event: Dictionary) -> void:
 			await _tween_alpha(_dark_overlay, 0.0, duration * 0.5)
 			_vfx.set_mode("none")
 		"DROWNING_CG":
-			# DOCX 195 小凌下沉，196 切溺水图 CG。
-			await _tween_alpha(_dark_overlay, 1.0, duration * 0.5)
+			# DOCX 195 小凌下沉，196 切溺水图 CG，199 就转去环境背景图7。
+			# 这两个转场之间没有任何 line 事件，不等的话溺水刚起就被停掉，
+			# 玩家在"闭上了眼"和"猛地睁开眼"之间什么都看不见。
+			# 跳水结束时溺水循环已经起来了，这里再压黑一次画面会无谓闪一下。
+			if _cutscene_player != null and _cutscene_player.is_looping("drowning"):
+				_set_scene(target)
+			else:
+				await _tween_alpha(_dark_overlay, 1.0, duration * 0.5)
+				_set_scene(target)
+				await _tween_alpha(_dark_overlay, 0.0, duration * 0.5)
+			await _cutscene_player.wait_until_pass_done(_verify_mode)
+			# 沉到底的那一帧再留一拍，别让画面刚定住就被下一段抢走。
+			if not _verify_mode:
+				await get_tree().create_timer(DROWNING_HOLD_SECONDS).timeout
+				# 缓慢压黑 = 缓慢闭上眼，接 199 的 DROWNING_EXIT。
+				await _tween_alpha(_dark_overlay, 1.0, DROWNING_EYES_CLOSE_SECONDS)
+		"DROWNING_EXIT":
+			# 走到这里画面已经全黑（上面闭眼压下来的）。F4 直接跳 199 时黑幕
+			# 未必是全黑，先补上，否则"睁眼"会变成没有起点的一次空淡入。
+			_dark_overlay.modulate.a = 1.0
 			_set_scene(target)
-			await _tween_alpha(_dark_overlay, 0.0, duration * 0.5)
+			await _tween_alpha(_dark_overlay, 0.0, 0.012 if _verify_mode else DROWNING_EYES_OPEN_SECONDS)
 		_:
 			await _tween_alpha(_dark_overlay, 1.0, duration * 0.5)
 			_set_scene(target)
