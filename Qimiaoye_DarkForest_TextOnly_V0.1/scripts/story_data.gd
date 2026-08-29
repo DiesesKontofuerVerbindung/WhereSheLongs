@@ -273,7 +273,7 @@ static func get_events() -> Array[Dictionary]:
 		{"type": "line", "source": 290, "speaker": "旁白", "text": "女孩深深地看着小凌。"},
 		{"type": "line", "source": 290, "speaker": "女孩", "text": "因为有一些东西，我还是舍不得。"},
 		{"type": "line", "source": 291, "speaker": "旁白", "text": "小凌没有再问。"},
-		{"type": "line", "source": 292, "speaker": "旁白", "text": "她忽然想到了小仓。"},
+		{"type": "line", "source": 292, "speaker": "旁白", "text": "她忽然想到了思雨。"},
 		{"type": "line", "source": 293, "speaker": "旁白", "text": "那个总是很忙、总是把生活安排得井井有条的人。"},
 		{"type": "line", "source": 294, "speaker": "旁白", "text": "他真的不好吗？"},
 		{"type": "line", "source": 295, "speaker": "旁白", "text": "好像也没有。"},
