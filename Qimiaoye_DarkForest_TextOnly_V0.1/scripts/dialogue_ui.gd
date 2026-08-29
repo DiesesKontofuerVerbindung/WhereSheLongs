@@ -11,7 +11,7 @@ const COLOR_ACCENT := Color("555b66")
 const DIALOGUE_BOX_PATH := "res://assets/ui/dialogue/dialogue_left_reference.png"
 const DIALOGUE_BOX_REGION := Rect2(104.0, 416.0, 1072.0, 262.0)
 const DIALOGUE_TEXT_SHIFT := 96
-const DIALOGUE_BODY_TOP_SHIFT := 12
+const DIALOGUE_BODY_TOP_SHIFT := 20
 const TextRevealProfile := preload("res://scripts/text_reveal_profile.gd")
 
 var _speaker_panel: PanelContainer
