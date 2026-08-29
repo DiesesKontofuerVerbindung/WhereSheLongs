@@ -26,7 +26,7 @@
 | `SCENE_CAR` 车上背景图 | `car.png` | 车里看城市外景.png | DOCX 47 |
 | `SCENE_HOME` 家里场景 | `home.png` | 晚上在家里的客厅.png | DOCX 105 |
 
-源图来自压缩包 `森林前.zip`，解压在 `D:\gamejamshe\森林前_解压\`。
+源图来自压缩包 `森林前.zip`。已接入的 4 张在 `assets/backgrounds/wedding/`；未接入的候选素材（道具/人物/备选清单）在 `assets/backgrounds/wedding/candidates/`，随本提交一并入库。
 
 ## 2. 验证结果（文档 08 §7 两条，全图状态，均 exit 0）
 
@@ -49,10 +49,10 @@ WEDDING_ADVANCE_GATE_PASS narration_and_dialogue_gated=true enter_advances=true 
 
 **本次只做了文档 08 明确要求的"接美术"最小闭环：4 张场景底图。** 以下均未做，按需接：
 
-1. **誓词卡模块美术**（`WeddingVowSolo`，DOCX 21）：文档说"可以接卡片美术"。候选源图 `小道具白色a4纸.jpg`。
-2. **手机通知模块 UI**（`PhoneNotifications`，DOCX 32）：文档说"可以接手机 UI 美术"。候选源图 `小道具婚戒.jpg`。
-3. **角色立绘**：**当前 `dialogue_ui.gd` 只有说话人名字 Label，没有立绘位**。要做立绘必须改共用 UI（`dialogue_ui.gd`），会影响森林正片，改完两边都要跑验证。**建议下一轮再评估**。候选源图 `婚礼司仪.jpg`。
-4. **未使用的备选图**：`婚礼场景 上面有个最后1项没勾选的清单.jpg`、`婚礼场景 上面有个最后2项没勾选的清单.jpg`（清单递进态，若做誓词卡逐句勾选进度可用）。
+1. **誓词卡模块美术**（`WeddingVowSolo`，DOCX 21）：文档说"可以接卡片美术"。候选源图 `assets/backgrounds/wedding/candidates/prop_white_a4_paper.jpg`。
+2. **手机通知模块 UI**（`PhoneNotifications`，DOCX 32）：文档说"可以接手机 UI 美术"。候选源图 `assets/backgrounds/wedding/candidates/prop_wedding_rings.jpg`。
+3. **角色立绘**：**当前 `dialogue_ui.gd` 只有说话人名字 Label，没有立绘位**。要做立绘必须改共用 UI（`dialogue_ui.gd`），会影响森林正片，改完两边都要跑验证。**建议下一轮再评估**。候选源图 `assets/backgrounds/wedding/candidates/officiant.jpg`。
+4. **未使用的备选图**：`assets/backgrounds/wedding/candidates/checklist_1_unchecked.jpg`、`assets/backgrounds/wedding/candidates/checklist_2_unchecked.jpg`（清单递进态，若做誓词卡逐句勾选进度可用）。
 5. **3:2→16:9 裁切视觉效果**：本次用 `KEEP_ASPECT_COVERED`，上下各裁 ~11%。**实测手感需人工确认**（接入方本地无视觉能力，未做像素级校验）。若某张裁掉关键内容，改 `STRETCH_KEEP_ASPECT`（留边）或按场景单独偏移。
 
 ## 5. 下一位 Agent 建议开工前先读
