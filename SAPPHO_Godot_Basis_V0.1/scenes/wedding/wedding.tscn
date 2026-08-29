@@ -7,6 +7,9 @@
 [sub_resource type="RectangleShape2D" id="Rect_interaction"]
 size = Vector2(90, 70)
 
+[sub_resource type="RectangleShape2D" id="Rect_portal"]
+size = Vector2(120, 90)
+
 [node name="Wedding" type="Node2D"]
 
 [node name="Background" type="Polygon2D" parent="."]
@@ -19,24 +22,44 @@ offset_top = 30.0
 offset_right = 650.0
 offset_bottom = 95.0
 theme_override_font_sizes/font_size = 30
-text = "WEDDING — OWNER PLACEHOLDER"
+text = "WEDDING"
 
 [node name="Note" type="Label" parent="."]
 offset_left = 40.0
 offset_top = 88.0
 offset_right = 920.0
 offset_bottom = 150.0
-text = "Build Wedding here. Keep shared Player / Input / GameState / Dialogue unchanged."
+text = "靠近「客厅回忆」按 E，点击散落的物品查看回忆。"
 
 [node name="Player" parent="." instance=ExtResource("1_player")]
 position = Vector2(350, 360)
 
-[node name="WeddingMarker" type="Area2D" parent="."]
+[node name="LivingroomPortal" type="Area2D" parent="."]
 position = Vector2(620, 360)
+script = ExtResource("3_portal")
+target_scene = "res://scenes/wedding/livingroom_memories.tscn"
+
+[node name="Visual" type="Polygon2D" parent="LivingroomPortal"]
+polygon = PackedVector2Array(-55, -42, 55, -42, 55, 42, -55, 42)
+color = Color(0.55, 0.38, 0.32, 1)
+
+[node name="Label" type="Label" parent="LivingroomPortal"]
+offset_left = -70.0
+offset_top = -12.0
+offset_right = 78.0
+offset_bottom = 22.0
+text = "客厅回忆"
+horizontal_alignment = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="LivingroomPortal"]
+shape = SubResource("Rect_portal")
+
+[node name="WeddingMarker" type="Area2D" parent="."]
+position = Vector2(820, 360)
 script = ExtResource("2_interactable")
 speaker_name = "Wedding"
-interaction_text = "Wedding scene owns its local mechanics. Shared infrastructure is reused, not copied."
-look_text = "This placeholder is intentionally minimal."
+interaction_text = "这里通向搬家前的客厅回忆。"
+look_text = "靠近客厅回忆入口，按 E 进入。"
 
 [node name="Visual" type="Polygon2D" parent="WeddingMarker"]
 polygon = PackedVector2Array(-38, -34, 38, -34, 38, 34, -38, 34)
@@ -46,7 +69,7 @@ color = Color(0.73, 0.48, 0.66, 1)
 shape = SubResource("Rect_interaction")
 
 [node name="BackToTest" type="Area2D" parent="."]
-position = Vector2(980, 360)
+position = Vector2(1050, 360)
 script = ExtResource("3_portal")
 target_scene = "res://scenes/test_room/test_room.tscn"
 
