@@ -22,6 +22,9 @@ const DEV_JUMP_CHAPTER_ID := "forest"
 const WEDDING_PROLOGUE_SCENE := "res://scenes/wedding/wedding_prologue.tscn"
 const MYSTIC_NIGHT_SCENE := "res://scenes/mystic_night/mystic_night.tscn"
 const CHAPTER3_SCENE := "res://scenes/chapter3/chapter3.tscn"
+## 主观内心物件舞台的摄像头兜底超时：摄像头不可用时不让剧情永久卡住。
+## 摄像头报错时按 F 手动挥开；若既没挥手也没按 F，超过此时长就强制清场。
+const INNER_OBJECTS_TIMEOUT_SECONDS := 15.0
 
 const COLOR_BG := Color("050608")
 const COLOR_PANEL := Color("10141de8")
@@ -1328,7 +1331,21 @@ func _run_interaction(event: Dictionary) -> void:
 			_inner_objects_stage.debug_force_clear()
 			await _brief_pause()
 		else:
-			await _inner_objects_stage.objects_cleared
+			# 摄像头兜底：真手势（fanned）或按 F 都能让 objects_cleared 触发；
+			# 若都等不到，超时后强制清场，保证剧情永不卡死。
+			# GDScript lambda 不按引用捕获基础类型，用字典共享清零状态。
+			var _state := {"cleared": false}
+			var _on_cleared := func() -> void:
+				_state["cleared"] = true
+			_inner_objects_stage.objects_cleared.connect(_on_cleared, CONNECT_ONE_SHOT)
+			var _elapsed := 0.0
+			while not bool(_state["cleared"]) and _elapsed < INNER_OBJECTS_TIMEOUT_SECONDS:
+				await get_tree().create_timer(0.1).timeout
+				_elapsed += 0.1
+			if not bool(_state["cleared"]) and _inner_objects_stage.has_method("debug_force_clear"):
+				_inner_objects_stage.debug_force_clear()
+			if _inner_objects_stage.objects_cleared.is_connected(_on_cleared):
+				_inner_objects_stage.objects_cleared.disconnect(_on_cleared)
 		_log_runtime("INNER_OBJECTS_CLEARED camera_state=%s physics_frame=%s ratio=%.2f" % [
 			str(_inner_objects_stage.get_debug_snapshot().get("inner_fan_camera_state", "")),
 			str(_inner_objects_stage.get_debug_snapshot().get("inner_fan_physics_frame_seen", false)),

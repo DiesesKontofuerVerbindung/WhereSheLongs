@@ -137,6 +137,24 @@ func _process(_delta: float) -> void:
 	_drain_delayed_text_changes()
 
 
+## 手势兜底：杂念波正在阻塞（_fan_waiting）时，按 F 直接驱散，恢复输入。
+## 输入框获得焦点时字母 F 会被 LineEdit 消费，不会走到 _unhandled_input；
+## 只有玩家没在打字时按 F 才触发，避免把正文里的 f 当成驱散手势。
+func _unhandled_input(event: InputEvent) -> void:
+	if not _fan_waiting:
+		return
+	if not _interference_state in [InterferenceState.BLOCKING, InterferenceState.DISPERSING]:
+		return
+	if not event is InputEventKey:
+		return
+	var key_event := event as InputEventKey
+	if not key_event.pressed or key_event.echo:
+		return
+	if key_event.keycode == KEY_F:
+		_fan_prompt.text = "已用键盘代手势 · 驱散杂念，继续输入"
+		_complete_prototype2_physics()
+
+
 func _build_ui() -> void:
 	_ui_font = SystemFont.new()
 	_ui_font.font_names = PackedStringArray(UI_FONT_FAMILIES)
@@ -581,9 +599,9 @@ func _on_camera_status_changed(state: String, detail: String) -> void:
 			_fan_prompt.text = "物理场已重置 · 张开手掌，水平往返挥扫"
 			print("TEXT_INPUT_PROTOTYPE2_RUNTIME_RESET %s" % detail)
 		"error":
-			_fan_prompt.text = "摄像头无法启动：%s" % detail
+			_fan_prompt.text = "摄像头无法启动：%s\n按 F 直接驱散杂念，继续输入" % detail
 			_feedback.add_theme_color_override("font_color", COLOR_ERROR)
-			_feedback.text = "请关闭占用摄像头的程序后重开玩法3"
+			_feedback.text = "摄像头不可用，可按住光标后按 F 驱散杂念继续输入"
 			push_warning("TEXT_INPUT_PROTOTYPE2_RUNTIME_ERROR %s" % detail)
 
 

@@ -254,8 +254,25 @@ func _on_camera_status_changed(state: String, detail: String) -> void:
 		"reset":
 			_prompt_label.text = "物理场已重置 · 张开手掌，水平往返挥扫"
 		"error":
-			_prompt_label.text = "摄像头无法启动：%s" % detail
+			_prompt_label.text = "摄像头无法启动：%s\n按 F 直接挥开这六件物件" % detail
 			push_warning("INNER_OBJECTS_PROTOTYPE2_RUNTIME_ERROR %s" % detail)
+
+
+## 摄像头兜底：只有 ARMED 且摄像头报错时，按 F 直接用键盘/鼠标代手势挥开六件物件。
+## F4 是主场景的 DOCX 回溯面板、F3 是诊断面板、F 不冲突；SPACE/ENTER 留给对白推进。
+func _unhandled_input(event: InputEvent) -> void:
+	if _phase != Phase.ARMED:
+		return
+	if _camera_state != "error":
+		return
+	if not event is InputEventKey:
+		return
+	var key_event := event as InputEventKey
+	if not key_event.pressed or key_event.echo:
+		return
+	if key_event.keycode == KEY_F:
+		_prompt_label.text = "已用键盘代手势 · 挥开六件物件"
+		debug_force_clear()
 
 
 func _on_physics_frame(frame: Dictionary) -> void:
