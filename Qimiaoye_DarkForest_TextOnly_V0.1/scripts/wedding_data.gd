@@ -45,7 +45,7 @@ static func _wedding_hall_events() -> Array[Dictionary]:
 		{"type": "action", "source": 17, "id": "xiaoling_pull_veil", "status": "小凌一把抓下自己的头纱。"},
 		{"type": "line", "source": 17, "speaker": "小凌", "text": "他应该在忙，还没到。"},
 
-		# 3–21 用司仪底图（婚礼背景图1）；誓词/清单后再切婚礼背景图2。
+		# 3–21 仍用司仪底图（婚礼背景图1）；誓词模块后再切婚礼背景图2。
 		{"type": "line", "source": 19, "speaker": "主持人", "text": "那后面的流程还过吗？"},
 		{"type": "line", "source": 20, "speaker": "小凌", "text": "我自己来吧。"},
 
@@ -60,7 +60,7 @@ static func _wedding_hall_events() -> Array[Dictionary]:
 			"result": "success",
 		},
 
-		# checklist 插件①（hand_checkbox_gesture）：21–22 之间。
+		# 群组 checklist 插件①：誓词后打勾（21–22 之间）。
 		{
 			"type": "module",
 			"source": 21,
@@ -108,7 +108,7 @@ static func _wedding_hall_events() -> Array[Dictionary]:
 		{"type": "line", "source": 43, "speaker": "思雨", "text": "明天我会准时到的。"},
 		{"type": "line", "source": 44, "speaker": "旁白", "text": "思雨走过来，轻轻拍了一下她的肩膀。"},
 		{"type": "line", "source": 45, "speaker": "思雨", "text": "别想太多，一会儿我先送你回家。"},
-		# checklist 插件②：46–47 之间（上车前）。
+		# 群组 checklist 插件②：上车前再过一遍清单（46–47 之间）。
 		{
 			"type": "module",
 			"source": 46,
@@ -196,7 +196,7 @@ static func _home_events() -> Array[Dictionary]:
 		{"type": "scene", "source": 105, "name": SCENE_HOME},
 		{"type": "line", "source": 106, "speaker": "旁白", "text": "屋子里已经堆满了明天婚礼要用的东西。"},
 		{"type": "line", "source": 107, "speaker": "旁白", "text": "客厅角落放着几个没有拆开的纸箱。"},
-		# 选中查看物品（livingroom memories）：108–109 之前。
+		# 群组「选中查看物品」：进入 108–109 旁白前先点看客厅回忆物。
 		{
 			"type": "module",
 			"source": 107,

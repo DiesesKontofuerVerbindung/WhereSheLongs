@@ -106,7 +106,13 @@ func run(verify_mode := false) -> void:
 		_complete("verify")
 		return
 
-	_start_camera()
+	# 网页/微信环境无法拉起本机摄像头与 Python 检测，只保留点击打勾。
+	if OS.has_feature("web") or OS.has_feature("mobile"):
+		_status.text = "Checklist %s · 点击清单打勾" % _variant
+		_hint.text = "点击清单打勾（或按 Enter）"
+	else:
+		_start_camera()
+
 	while not _done:
 		if _advance_requested:
 			_advance_requested = false
