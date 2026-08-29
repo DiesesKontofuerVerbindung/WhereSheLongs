@@ -5,6 +5,7 @@ signal fan_cycle_completed(result)
 
 const FanCameraBridgeScript := preload("res://levels/minigames/fan_camera_bridge.gd")
 const UiTypographyScript := preload("res://scripts/ui_typography.gd")
+const UiPanelSkinScript := preload("res://scripts/ui_panel_skin.gd")
 
 const VIEW_SIZE := Vector2(1280.0, 720.0)
 const MAX_LENGTH := 120
@@ -17,17 +18,16 @@ const PHYSICS_CLEAR_RATIO := 1.0
 const MAX_INPUT_LATENCY_SECONDS := 3.2
 const INPUT_LATENCY_CURVE_EXPONENT := 0.55
 const AUTO_DISMISS_SECONDS := 2.0
-const INPUT_FRAME_PATH := "res://assets/ui/text_input/input_box.png"
-const SUBMIT_BUTTON_PATH := "res://assets/ui/text_input/speak_button.png"
-const INPUT_FRAME_REGION := Rect2(668.0, 304.0, 1232.0, 88.0)
-const SUBMIT_BUTTON_REGION := Rect2(1162.0, 482.0, 236.0, 98.0)
+const SOFT_FADE_IN_SECONDS := 0.48
+const SOFT_FADE_OUT_SECONDS := 0.32
+const CORE_OPACITY_FACTOR := 0.55
+const CORE_REGION_PADDING := 32.0
+const INTERFERENCE_OPACITY_LEVELS := [0.16, 0.25, 0.34, 0.46, 0.58]
 const COLOR_BG := Color("020307")
-const COLOR_PANEL := Color("070a10f8")
-const COLOR_BORDER := Color("304154")
-const COLOR_TEXT := Color("dbe4ef")
-const COLOR_MUTED := Color("748294")
-const COLOR_ACCENT := Color("8fc2e8")
-const COLOR_ERROR := Color("f0a6a6")
+const COLOR_TEXT := Color(1.0, 1.0, 1.0, 0.96)
+const COLOR_MUTED := Color(1.0, 1.0, 1.0, 0.72)
+const COLOR_ACCENT := Color(1.0, 1.0, 1.0, 0.90)
+const COLOR_ERROR := Color(1.0, 1.0, 1.0, 0.92)
 const INTERFERENCE_PHRASES := [
 	"这样不好吗",
 	"别跑这么远",
@@ -66,13 +66,6 @@ const INTERFERENCE_PHRASES := [
 	"Zostań tutaj.",
 	"A jeśli pożałujesz?",
 ]
-const INTERFERENCE_COLORS := [
-	Color("c65360"),
-	Color("527fc4"),
-	Color("955bb5"),
-	Color("bd8745"),
-	Color("4fa184"),
-]
 enum InterferenceState {
 	DORMANT,
 	BLOCKING,
@@ -110,6 +103,7 @@ var _reset_key_was_down := false
 var _displayed_input_text := ""
 var _pending_text_changes: Array[Dictionary] = []
 var _applying_delayed_text := false
+var _soft_exit_started := false
 
 
 func setup(scene_def: Dictionary) -> void:
@@ -161,76 +155,68 @@ func _build_ui() -> void:
 	title.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	title.offset_left = -420.0
 	title.offset_right = 420.0
-	title.offset_top = 72.0
-	title.offset_bottom = 122.0
+	title.offset_top = 10.0
+	title.offset_bottom = 42.0
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_color_override("font_color", COLOR_MUTED)
+	title.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.90))
 	title.add_theme_font_size_override("font_size", 24)
 	title.text = "小凌：『因为……』"
 	add_child(title)
 
 	_input_panel = PanelContainer.new()
 	_input_panel.name = "TextInputPanel"
-	_input_panel.set_anchors_preset(Control.PRESET_CENTER)
-	_input_panel.offset_left = -450.0
-	_input_panel.offset_right = 450.0
-	_input_panel.offset_top = -132.0
-	_input_panel.offset_bottom = 172.0
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = COLOR_PANEL
-	panel_style.border_color = COLOR_BORDER
-	panel_style.set_border_width_all(1)
-	panel_style.set_corner_radius_all(14)
-	panel_style.shadow_color = Color(0, 0, 0, 0.35)
-	panel_style.shadow_size = 18
-	_input_panel.add_theme_stylebox_override("panel", panel_style)
+	UiPanelSkinScript.apply_fixed_rect(_input_panel, UiPanelSkinScript.PANEL_RECT)
+	_input_panel.add_theme_stylebox_override("panel", UiPanelSkinScript.panel_style())
+	_input_panel.modulate.a = 0.0
 	add_child(_input_panel)
 
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 46)
-	margin.add_theme_constant_override("margin_right", 46)
-	margin.add_theme_constant_override("margin_top", 30)
-	margin.add_theme_constant_override("margin_bottom", 26)
-	_input_panel.add_child(margin)
-
-	var column := VBoxContainer.new()
-	column.name = "Content"
-	column.add_theme_constant_override("separation", 15)
-	margin.add_child(column)
+	var canvas := Control.new()
+	canvas.name = "Content"
+	canvas.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_input_panel.add_child(canvas)
 
 	_instruction_label = Label.new()
 	_instruction_label.name = "Prompt"
+	_instruction_label.position = Vector2(0.0, 8.0)
+	_instruction_label.size = Vector2(676.0, 42.0)
 	_instruction_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_instruction_label.add_theme_color_override("font_color", COLOR_TEXT)
+	_instruction_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_instruction_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.96))
 	_instruction_label.add_theme_font_size_override("font_size", 29)
 	_instruction_label.text = "先为自己的声音清出空间"
-	column.add_child(_instruction_label)
+	canvas.add_child(_instruction_label)
 
 	_context_note = Label.new()
 	_context_note.name = "ContextNote"
+	_context_note.position = Vector2(0.0, 50.0)
+	_context_note.size = Vector2(676.0, 28.0)
 	_context_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_context_note.add_theme_color_override("font_color", COLOR_MUTED)
+	_context_note.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_context_note.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.90))
 	_context_note.add_theme_font_size_override("font_size", 16)
 	_context_note.text = "张开手掌，水平往返挥动"
-	column.add_child(_context_note)
+	canvas.add_child(_context_note)
 
 	var input_frame := PanelContainer.new()
 	input_frame.name = "InputFrame"
+	input_frame.position = UiPanelSkinScript.INPUT_RECT.position - UiPanelSkinScript.PANEL_RECT.position
+	input_frame.size = UiPanelSkinScript.INPUT_RECT.size
 	input_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	input_frame.add_theme_stylebox_override("panel", _make_texture_style(INPUT_FRAME_PATH, INPUT_FRAME_REGION, 14.0, 14.0, 14.0, 14.0))
-	column.add_child(input_frame)
+	input_frame.add_theme_stylebox_override("panel", UiPanelSkinScript.input_style())
+	canvas.add_child(input_frame)
 
 	_input = LineEdit.new()
 	_input.name = "ReasonInput"
-	_input.custom_minimum_size = Vector2(0, 62)
+	_input.custom_minimum_size = UiPanelSkinScript.INPUT_RECT.size
 	_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_input.max_length = MAX_LENGTH
 	_input.editable = false
 	_input.placeholder_text = "在这里写下自己的想法"
 	_input.add_theme_font_size_override("font_size", 22)
-	_input.add_theme_color_override("font_color", Color("20242b"))
-	_input.add_theme_color_override("font_placeholder_color", Color("5d6470"))
-	var empty_input_style := StyleBoxEmpty.new()
+	_input.add_theme_color_override("font_color", Color.WHITE)
+	_input.add_theme_color_override("font_placeholder_color", Color(1.0, 1.0, 1.0, 0.55))
+	var empty_input_style := UiPanelSkinScript.empty_style()
 	_input.add_theme_stylebox_override("normal", empty_input_style)
 	_input.add_theme_stylebox_override("focus", empty_input_style)
 	_input.add_theme_stylebox_override("read_only", empty_input_style)
@@ -238,65 +224,49 @@ func _build_ui() -> void:
 	_input.text_submitted.connect(_on_text_submitted)
 	input_frame.add_child(_input)
 
-	var status_row := HBoxContainer.new()
-	status_row.add_theme_constant_override("separation", 12)
-	column.add_child(status_row)
-
 	_feedback = Label.new()
 	_feedback.name = "Feedback"
-	_feedback.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_feedback.position = Vector2(32.0, 154.0)
+	_feedback.size = Vector2(480.0, 28.0)
 	_feedback.add_theme_color_override("font_color", COLOR_MUTED)
 	_feedback.add_theme_font_size_override("font_size", 16)
 	_feedback.text = "张开手掌，水平往返挥扫"
-	status_row.add_child(_feedback)
+	canvas.add_child(_feedback)
 
 	_counter = Label.new()
 	_counter.name = "CharacterCounter"
+	_counter.position = Vector2(512.0, 154.0)
+	_counter.size = Vector2(132.0, 28.0)
 	_counter.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_counter.add_theme_color_override("font_color", COLOR_MUTED)
 	_counter.add_theme_font_size_override("font_size", 16)
 	_counter.text = "0 / %d" % MAX_LENGTH
-	status_row.add_child(_counter)
-
-	var button_center := CenterContainer.new()
-	button_center.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	column.add_child(button_center)
+	canvas.add_child(_counter)
 
 	var button_frame := PanelContainer.new()
 	button_frame.name = "SubmitButtonFrame"
-	button_frame.custom_minimum_size = Vector2(210, 50)
+	button_frame.position = UiPanelSkinScript.BUTTON_RECT.position - UiPanelSkinScript.PANEL_RECT.position
+	button_frame.size = UiPanelSkinScript.BUTTON_RECT.size
 	button_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	button_frame.add_theme_stylebox_override("panel", _make_texture_style(SUBMIT_BUTTON_PATH, SUBMIT_BUTTON_REGION, 12.0, 12.0, 12.0, 12.0))
-	button_center.add_child(button_frame)
+	button_frame.add_theme_stylebox_override("panel", UiPanelSkinScript.button_style())
+	canvas.add_child(button_frame)
 
 	_submit_button = Button.new()
 	_submit_button.name = "SubmitButton"
-	_submit_button.custom_minimum_size = Vector2(210, 50)
+	_submit_button.custom_minimum_size = UiPanelSkinScript.BUTTON_RECT.size
 	_submit_button.disabled = true
-	_submit_button.add_theme_color_override("font_color", COLOR_TEXT)
-	_submit_button.add_theme_color_override("font_hover_color", COLOR_ACCENT)
-	_submit_button.add_theme_font_size_override("font_size", 22)
+	_submit_button.add_theme_color_override("font_color", Color.WHITE)
+	_submit_button.add_theme_color_override("font_hover_color", Color.WHITE)
+	_submit_button.add_theme_font_size_override("font_size", 16)
 	_submit_button.text = ""
-	var empty_button_style := StyleBoxEmpty.new()
+	var empty_button_style := UiPanelSkinScript.empty_style()
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		_submit_button.add_theme_stylebox_override(state, empty_button_style)
 	_submit_button.pressed.connect(_on_submit_pressed)
 	button_frame.add_child(_submit_button)
 
 	_build_interference_layer()
-
-
-func _make_texture_style(path: String, region: Rect2, left: float, top: float, right: float, bottom: float) -> StyleBoxTexture:
-	var atlas := AtlasTexture.new()
-	atlas.atlas = load(path) as Texture2D
-	atlas.region = region
-	var style := StyleBoxTexture.new()
-	style.texture = atlas
-	style.texture_margin_left = left
-	style.texture_margin_top = top
-	style.texture_margin_right = right
-	style.texture_margin_bottom = bottom
-	return style
+	call_deferred("_play_soft_entry")
 
 
 func _build_interference_layer() -> void:
@@ -306,15 +276,17 @@ func _build_interference_layer() -> void:
 	_interference_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_interference_layer.z_index = 20
 	_interference_layer.visible = false
+	_interference_layer.modulate.a = 0.0
 	add_child(_interference_layer)
 
 	for index in range(INTERFERENCE_ENTITY_COUNT):
 		var phrase := Label.new()
 		phrase.name = "InterferencePhrase%02d" % (index + 1)
 		phrase.text = INTERFERENCE_PHRASES[index % INTERFERENCE_PHRASES.size()]
-		phrase.add_theme_color_override("font_color", INTERFERENCE_COLORS[index % INTERFERENCE_COLORS.size()])
+		phrase.add_theme_color_override("font_color", Color.WHITE)
 		phrase.add_theme_font_size_override("font_size", 24 + (index * 7) % 12)
 		phrase.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		phrase.set_meta("base_opacity", _base_interference_opacity(index))
 		phrase.modulate.a = 0.0
 		_interference_layer.add_child(phrase)
 		_interference_labels.append(phrase)
@@ -330,6 +302,48 @@ func _build_interference_layer() -> void:
 	_fan_prompt.add_theme_color_override("font_color", COLOR_TEXT)
 	_fan_prompt.add_theme_font_size_override("font_size", 21)
 	_interference_layer.add_child(_fan_prompt)
+
+
+func _base_interference_opacity(index: int) -> float:
+	var bucket := (index * 7 + 3) % 20
+	if bucket < 6:
+		return INTERFERENCE_OPACITY_LEVELS[0]
+	if bucket < 11:
+		return INTERFERENCE_OPACITY_LEVELS[1]
+	if bucket < 15:
+		return INTERFERENCE_OPACITY_LEVELS[2]
+	if bucket < 18:
+		return INTERFERENCE_OPACITY_LEVELS[3]
+	return INTERFERENCE_OPACITY_LEVELS[4]
+
+
+func _interference_alpha(phrase: Label, source_opacity: float) -> float:
+	var base_opacity := float(phrase.get_meta("base_opacity", INTERFERENCE_OPACITY_LEVELS[0]))
+	var center := phrase.position + phrase.size * 0.5
+	var core_factor := CORE_OPACITY_FACTOR if UiPanelSkinScript.PANEL_RECT.grow(CORE_REGION_PADDING).has_point(center) else 1.0
+	return clampf(source_opacity, 0.0, 1.0) * base_opacity * core_factor
+
+
+func _play_soft_entry() -> void:
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.set_trans(Tween.TRANS_SINE)
+	tween.set_ease(Tween.EASE_OUT)
+	tween.tween_property(_input_panel, "modulate:a", 1.0, SOFT_FADE_IN_SECONDS)
+	tween.tween_property(_interference_layer, "modulate:a", 1.0, SOFT_FADE_IN_SECONDS)
+
+
+func _play_soft_exit() -> void:
+	if _soft_exit_started:
+		return
+	_soft_exit_started = true
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.set_trans(Tween.TRANS_SINE)
+	tween.set_ease(Tween.EASE_IN)
+	tween.tween_property(_input_panel, "modulate:a", 0.0, SOFT_FADE_OUT_SECONDS)
+	tween.tween_property(_interference_layer, "modulate:a", 0.0, SOFT_FADE_OUT_SECONDS)
+	await tween.finished
 
 
 func _focus_input() -> void:
@@ -491,6 +505,7 @@ func _auto_dismiss_after_delay() -> void:
 	_input.editable = false
 	_submit_button.disabled = true
 	_pending_character_count = 0
+	await _play_soft_exit()
 	_emit_finished_result()
 
 
@@ -511,7 +526,7 @@ func _show_initial_interference_field() -> void:
 		phrase.position = PROTOTYPE_FIELD_OFFSET + field_center - phrase.size * 0.5
 		phrase.rotation = 0.0
 		phrase.scale = Vector2.ONE
-		phrase.modulate.a = 0.82
+		phrase.modulate.a = _interference_alpha(phrase, 1.0)
 
 
 func reset_interaction() -> bool:
@@ -576,13 +591,7 @@ func _apply_prototype_entities(entities: Array) -> void:
 		var phrase := _interference_labels[index]
 		phrase.text = str(entity.get("text", phrase.text))
 		phrase.add_theme_font_size_override("font_size", int(entity.get("font_size", 32)))
-		var color_value: Variant = entity.get("color", [])
-		if color_value is Array and color_value.size() >= 3:
-			phrase.add_theme_color_override("font_color", Color8(
-				int(color_value[0]),
-				int(color_value[1]),
-				int(color_value[2])
-			))
+		phrase.add_theme_color_override("font_color", Color.WHITE)
 		phrase.reset_size()
 		var center := PROTOTYPE_FIELD_OFFSET + Vector2(
 			float(entity.get("x", PROTOTYPE_FIELD_SIZE.x * 0.5)),
@@ -593,7 +602,7 @@ func _apply_prototype_entities(entities: Array) -> void:
 		phrase.scale = Vector2.ONE
 		var dispersed := bool(entity.get("dispersed", false))
 		phrase.visible = not dispersed
-		phrase.modulate.a = 0.0 if dispersed else clampf(float(entity.get("opacity", 1.0)), 0.0, 1.0)
+		phrase.modulate.a = 0.0 if dispersed else _interference_alpha(phrase, float(entity.get("opacity", 1.0)))
 
 
 func _update_prototype_prompt(frame: Dictionary, metrics: Dictionary) -> void:
@@ -687,6 +696,7 @@ func _resume_input_after_fan() -> void:
 
 func _finish_submission_after_pause() -> void:
 	await get_tree().create_timer(0.24).timeout
+	await _play_soft_exit()
 	_emit_finished_result()
 
 
@@ -711,6 +721,24 @@ func _emit_finished_result() -> void:
 	})
 
 
+func _has_interference_visual_contract() -> bool:
+	if INTERFERENCE_OPACITY_LEVELS != [0.16, 0.25, 0.34, 0.46, 0.58]:
+		return false
+	for phrase in _interference_labels:
+		if phrase.get_theme_color("font_color") != Color.WHITE:
+			return false
+		var base_opacity := float(phrase.get_meta("base_opacity", -1.0))
+		if not INTERFERENCE_OPACITY_LEVELS.any(func(level: float) -> bool: return is_equal_approx(level, base_opacity)):
+			return false
+		if base_opacity > 0.58:
+			return false
+	return (
+		_input.get_theme_color("font_color") == Color.WHITE
+		and is_equal_approx(_input.get_theme_color("font_placeholder_color").a, 0.55)
+		and is_equal_approx(CORE_OPACITY_FACTOR, 0.55)
+	)
+
+
 func verify_contract() -> bool:
 	var phrase_counts: Dictionary = {}
 	for phrase in _interference_labels:
@@ -731,7 +759,10 @@ func verify_contract() -> bool:
 		and _interference_labels.size() == INTERFERENCE_ENTITY_COUNT
 		and phrase_counts.size() == INTERFERENCE_PHRASES.size()
 		and COLOR_BG.get_luminance() < 0.02
-		and COLOR_PANEL.get_luminance() < 0.04
+		and ResourceLoader.exists(UiPanelSkinScript.PANEL_TEXTURE_PATH)
+		and ResourceLoader.exists(UiPanelSkinScript.INPUT_TEXTURE_PATH)
+		and ResourceLoader.exists(UiPanelSkinScript.BUTTON_TEXTURE_PATH)
+		and _has_interference_visual_contract()
 		and _input.max_length == MAX_LENGTH
 		and _input.editable
 		and _submit_button.disabled
@@ -829,6 +860,13 @@ func get_interference_phrases() -> PackedStringArray:
 	for phrase in _interference_labels:
 		phrases.append(phrase.text)
 	return phrases
+
+
+func get_interference_base_opacities() -> PackedFloat32Array:
+	var values := PackedFloat32Array()
+	for phrase in _interference_labels:
+		values.append(float(phrase.get_meta("base_opacity", 0.0)))
+	return values
 
 
 func get_ui_font_families() -> PackedStringArray:

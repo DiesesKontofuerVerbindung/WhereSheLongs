@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://8646erdx87af"
-path="res://.godot/imported/speak_button.png-a1dd807a32ba030f3275664bae0b180f.ctex"
+uid="uid://lbahterf066r"
+path="res://.godot/imported/panel.png-78267df430f98eb89245817649a03aa8.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/text_input/speak_button.png"
-dest_files=["res://.godot/imported/speak_button.png-a1dd807a32ba030f3275664bae0b180f.ctex"]
+source_file="res://assets/ui/panel/panel.png"
+dest_files=["res://.godot/imported/panel.png-78267df430f98eb89245817649a03aa8.ctex"]
 
 [params]
 

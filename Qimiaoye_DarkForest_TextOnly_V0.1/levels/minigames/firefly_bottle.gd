@@ -5,6 +5,7 @@ signal finished(result)
 const VIEW_SIZE := Vector2(1280.0, 720.0)
 const FIREFLY_COUNT := 5
 const HAND_BOTTLE_PATH := "res://assets/scene/hand_bottle_lowpoly.jpg"
+const UiPanelSkinScript := preload("res://scripts/ui_panel_skin.gd")
 
 ## Texture UV of jar center / interior (relative to the hand-bottle image).
 const JAR_CENTER_NORM := Vector2(0.30, 0.46)
@@ -41,7 +42,16 @@ func _ready() -> void:
 	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
 	backdrop.color = Color(0, 0, 0)
 	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	backdrop.z_index = -100
 	add_child(backdrop)
+
+	var module_panel := Panel.new()
+	module_panel.name = "StarJarPanelSkin"
+	UiPanelSkinScript.apply_fixed_rect(module_panel, UiPanelSkinScript.PANEL_RECT)
+	module_panel.add_theme_stylebox_override("panel", UiPanelSkinScript.panel_style())
+	module_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	module_panel.z_index = -20
+	add_child(module_panel)
 
 	_hand_tex = load(HAND_BOTTLE_PATH)
 	if _hand_tex == null:

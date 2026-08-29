@@ -536,6 +536,15 @@ func prepare_dialogue(speaker: String) -> void:
 	_face_actors_toward_each_other()
 
 
+func get_speaker_side(speaker: String) -> String:
+	if not visible or size.x <= 1.0:
+		return ""
+	var actor := _xiaoling if speaker == "小凌" else _amai if speaker == "阿麦" else null
+	if actor == null or not is_instance_valid(actor) or not actor.visible:
+		return ""
+	return "right" if actor.position.x > size.x * 0.5 else "left"
+
+
 func _face_actors_toward_each_other() -> void:
 	if _xiaoling == null or _amai == null or not _xiaoling.visible or not _amai.visible:
 		return

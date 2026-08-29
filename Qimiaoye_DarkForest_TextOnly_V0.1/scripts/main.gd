@@ -15,6 +15,7 @@ const MysticNightDataScript := preload("res://scripts/mystic_night_data.gd")
 const InnerObjectsStageScript := preload("res://scripts/inner_objects_stage.gd")
 const ChapterTransitionScript := preload("res://scripts/chapter_transition.gd")
 const UiTypographyScript := preload("res://scripts/ui_typography.gd")
+const UiPanelSkinScript := preload("res://scripts/ui_panel_skin.gd")
 const RUNTIME_LOG_PATH := "user://logs/runtime.log"
 const TRACE_LOG_PATH := "user://logs/trace_steps.log"
 const ENGINE_LOG_PATH := "user://logs/godot.log"
@@ -575,61 +576,62 @@ func _build_dialogue_ui() -> void:
 
 func _build_interaction_panel() -> void:
 	_interaction_panel = PanelContainer.new()
-	_interaction_panel.set_anchors_preset(Control.PRESET_CENTER)
-	_interaction_panel.offset_left = -300
-	_interaction_panel.offset_right = 300
-	_interaction_panel.offset_top = -100
-	_interaction_panel.offset_bottom = 100
+	UiPanelSkinScript.apply_fixed_rect(_interaction_panel, UiPanelSkinScript.PANEL_RECT)
 	_interaction_panel.visible = false
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color("0d1119f2")
-	style.border_color = Color("8fd3ffb0")
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(10)
-	_interaction_panel.add_theme_stylebox_override("panel", style)
+	_interaction_panel.add_theme_stylebox_override("panel", UiPanelSkinScript.panel_style())
 	add_child(_interaction_panel)
 
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 22)
-	margin.add_theme_constant_override("margin_right", 22)
-	margin.add_theme_constant_override("margin_top", 18)
-	margin.add_theme_constant_override("margin_bottom", 18)
-	_interaction_panel.add_child(margin)
-
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 12)
-	margin.add_child(col)
+	var canvas := Control.new()
+	canvas.name = "InteractionPanelContent"
+	canvas.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_interaction_panel.add_child(canvas)
 
 	_interaction_prompt = Label.new()
+	_interaction_prompt.position = Vector2(32.0, 76.0)
+	_interaction_prompt.size = Vector2(612.0, 62.0)
 	_interaction_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_interaction_prompt.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_interaction_prompt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_interaction_prompt.add_theme_font_size_override("font_size", 20)
-	col.add_child(_interaction_prompt)
+	_interaction_prompt.add_theme_color_override("font_color", Color("666666"))
+	canvas.add_child(_interaction_prompt)
 
 	_progress = ProgressBar.new()
+	_progress.position = Vector2(32.0, 145.0)
+	_progress.size = Vector2(612.0, 28.0)
 	_progress.min_value = 0
 	_progress.max_value = 100
 	_progress.value = 0
 	_progress.show_percentage = true
-	_progress.custom_minimum_size.y = 28
-	col.add_child(_progress)
+	canvas.add_child(_progress)
 
 	_light_button = Button.new()
+	_light_button.position = UiPanelSkinScript.BUTTON_RECT.position - UiPanelSkinScript.PANEL_RECT.position
+	_light_button.size = UiPanelSkinScript.BUTTON_RECT.size
 	_light_button.text = "光源交互区\n持续悬停"
-	_light_button.custom_minimum_size = Vector2(210, 70)
+	_light_button.custom_minimum_size = UiPanelSkinScript.BUTTON_RECT.size
 	_light_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_light_button.add_theme_font_size_override("font_size", 12)
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		_light_button.add_theme_stylebox_override(state, UiPanelSkinScript.button_style())
 	_light_button.mouse_entered.connect(_on_light_mouse_entered)
 	_light_button.mouse_exited.connect(_on_light_mouse_exited)
 	_light_button.visible = false
-	col.add_child(_light_button)
+	canvas.add_child(_light_button)
 
 	_action_button = Button.new()
+	_action_button.position = UiPanelSkinScript.BUTTON_RECT.position - UiPanelSkinScript.PANEL_RECT.position
+	_action_button.size = UiPanelSkinScript.BUTTON_RECT.size
 	_action_button.text = "执行"
-	_action_button.custom_minimum_size = Vector2(260, 52)
+	_action_button.custom_minimum_size = UiPanelSkinScript.BUTTON_RECT.size
 	_action_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_action_button.add_theme_font_size_override("font_size", 16)
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		_action_button.add_theme_stylebox_override(state, UiPanelSkinScript.button_style())
 	_action_button.pressed.connect(_on_action_button_pressed)
 	_action_button.visible = false
-	col.add_child(_action_button)
+	canvas.add_child(_action_button)
 
 
 func _build_diagnostic_panel() -> void:
@@ -1261,6 +1263,10 @@ func _show_line(event: Dictionary) -> void:
 		_narration_ui.begin_fade_for_dialogue(_verify_mode)
 		if _story_stage != null and _story_stage.has_method("prepare_dialogue"):
 			_story_stage.prepare_dialogue(speaker)
+		var speaker_side := ""
+		if _story_stage != null and _story_stage.has_method("get_speaker_side"):
+			speaker_side = str(_story_stage.get_speaker_side(speaker))
+		_dialogue_ui.set_speaker_side(speaker_side)
 		await _dialogue_ui.present_line(display_speaker, display_text, _verify_mode)
 		_dialogue_lines_seen += 1
 		if is_psychology:

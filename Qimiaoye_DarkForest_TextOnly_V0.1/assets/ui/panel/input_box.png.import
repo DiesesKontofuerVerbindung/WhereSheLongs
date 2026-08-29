@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://d0mwsjsjrcrts"
-path="res://.godot/imported/dialogue_left_reference.png-1a5f57ac8ef67588ac08fc51225c681f.ctex"
+uid="uid://c81u822wjgcax"
+path="res://.godot/imported/input_box.png-617a96a1e427721dc1e96d0f9d6cfa14.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/dialogue/dialogue_left_reference.png"
-dest_files=["res://.godot/imported/dialogue_left_reference.png-1a5f57ac8ef67588ac08fc51225c681f.ctex"]
+source_file="res://assets/ui/panel/input_box.png"
+dest_files=["res://.godot/imported/input_box.png-617a96a1e427721dc1e96d0f9d6cfa14.ctex"]
 
 [params]
 

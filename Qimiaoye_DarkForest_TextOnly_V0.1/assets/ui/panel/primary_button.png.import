@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c81u822wjgcax"
-path="res://.godot/imported/input_box.png-04f21f4d450b7f129e95cbabae6e3aa8.ctex"
+uid="uid://8646erdx87af"
+path="res://.godot/imported/primary_button.png-2a30ab542bb8120da819fa743bf8d313.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/text_input/input_box.png"
-dest_files=["res://.godot/imported/input_box.png-04f21f4d450b7f129e95cbabae6e3aa8.ctex"]
+source_file="res://assets/ui/panel/primary_button.png"
+dest_files=["res://.godot/imported/primary_button.png-2a30ab542bb8120da819fa743bf8d313.ctex"]
 
 [params]
 

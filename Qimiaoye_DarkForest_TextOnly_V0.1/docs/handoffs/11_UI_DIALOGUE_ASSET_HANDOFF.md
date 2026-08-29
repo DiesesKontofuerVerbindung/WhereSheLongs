@@ -1,116 +1,81 @@
-# 交接｜全局 UI 与对话框素材接入
+# 交接｜固定定位 UI 图层与通用模块面板
 
-## 0. 目标
+## 0. 结论
 
-把共享素材目录中的对话框、姓名牌、输入框和按钮完整接入项目 UI，并保持当前已经修好的布局：
+`Szene/ui` 交付的是整幅画布定位图层，不是九宫格素材。只裁 alpha 元素矩形并按 1280×720 设计坐标原尺寸摆放；不要设置 `texture_margin_*`，不要随文本或窗口自适应拉伸。
 
-- 姓名文字在左上姓名牌中自动居中，不受“阿麦 / 女孩 / 玩家选择”等字数影响。
-- 正文左对齐，水平右移 96 个逻辑像素、向下偏移 20 个逻辑像素。
-- 两项选择必须同时可见，例如“走 / 不走”“想 / 不想”。
-- 按钮仍居中。
+不同电脑只按共享目录名和图片名找素材，不依赖本机盘符。
 
-本交接不写本机盘符。不同电脑只需找到同名共享目录 `Szene/ui/对话框` 和 `Szene/ui/其他`；这些目录及图片在各开发机上都有。
-
-## 1. 必须使用的图片
+## 1. 正式素材
 
 ### `Szene/ui/对话框`
 
-| 图片名 | 用途 | 项目内建议名称 |
+| 源文件 | 项目路径 | 用途 |
 |---|---|---|
-| `对话框.png` | 对话框底板、9-slice 原始素材 | `assets/ui/dialogue/dialogue_box.png` |
-| `姓名显示处.png` | 独立姓名牌素材 | `assets/ui/dialogue/name_plate.png` |
-| `姓名在左对话框.png` | 左侧姓名牌完整对话框；当前对白 UI 使用此图 | `assets/ui/dialogue/dialogue_left_reference.png` |
-| `姓名在右对话框.png` | 右侧姓名牌完整对话框，保留供后续左右切换 | `assets/ui/dialogue/dialogue_right_reference.png` |
+| `对话框.png` | `assets/ui/dialogue/dialogue_box.png` | 固定对白底板 |
+| `姓名显示处.png` | `assets/ui/dialogue/name_plate.png` | 可左右移动的姓名牌 |
 
-**不要导入：**`示意图1.png`、`示意图2.png`。
+不要导入：`姓名在左对话框.png`、`姓名在右对话框.png`、`示意图1.png`、`示意图2.png`。
 
 ### `Szene/ui/其他`
 
-| 图片名 | 用途 | 项目内建议名称 |
+| 源文件 | 项目路径 | 用途 |
 |---|---|---|
-| `输入框.png` | TextInput 输入框 9-slice | `assets/ui/text_input/input_box.png` |
-| `说出来按钮.png` | TextInput 确认按钮 | `assets/ui/text_input/speak_button.png` |
-| `底图.png` | TextInput 界面底图 | `assets/ui/text_input/background.png` |
-| `完整.png` | TextInput 完整构图参考 | `assets/ui/text_input/complete_reference.png` |
+| `底图.png` | `assets/ui/panel/panel.png` | 通用玩家模块底板 |
+| `输入框.png` | `assets/ui/panel/input_box.png` | 文本输入框图层 |
+| `说出来按钮.png` | `assets/ui/panel/primary_button.png` | 通用主按钮图层 |
 
-**不要导入：**`示意图.png`。
+不要导入：`完整.png`、`示意图.png`。
 
-复制素材，不要移动、重命名或修改共享目录中的源文件。每次复制到 `res://` 后立刻运行一次 Godot `--import`。
+每次向 `res://` 复制或移动素材后立即运行 Godot `--import`。共享目录中的源文件只能复制，不能移动或修改。
 
-## 2. 当前代码锚点
+## 2. 固定矩形（1280×720 设计空间）
 
-### 对话框：`scripts/dialogue_ui.gd`
+| 图层 | 目标矩形 | 源图 Atlas 区域 |
+|---|---|---|
+| 对话框 | `Rect2(110, 458, 1060, 218)` | 同目标矩形 |
+| 左姓名牌 | `Rect2(198, 422, 166, 82)` | `Rect2(198, 422, 166, 82)` |
+| 右姓名牌 | `Rect2(920, 422, 166, 82)` | 与左姓名牌使用同一 Atlas，只改目标 x |
+| 通用面板 | `Rect2(302, 46, 676, 274)` | 同目标矩形 |
+| 输入框 | `Rect2(334, 152, 616, 44)` | 原图为 2560×1440，裁 `Rect2(668, 304, 1232, 88)` |
+| 主按钮 | `Rect2(581, 241, 118, 49)` | 原图为 2560×1440，裁 `Rect2(1162, 482, 236, 98)` |
 
-当前实现使用：
+统一几何与 Atlas 构造集中在 `scripts/ui_panel_skin.gd`。
 
-- `PanelContainer + StyleBoxTexture + AtlasTexture`，没有新增 `TextureRect`。
-- 底图：`dialogue_left_reference.png`。
-- Atlas 区域：`Rect2(104, 416, 1072, 262)`。
-- 9-slice 纹理边距：左 `76`、上 `96`、右 `76`、下 `62`。
-- `content_margin_*` 必须显式为 `0`；否则内容会额外下移 96 px，第二个选择按钮会被挤出画面。
-- 对话框范围：`offset_top = -328`、`offset_bottom = -28`。
-- 姓名牌内容区：左边距 `64`、宽 `191`、姓名 `HORIZONTAL_ALIGNMENT_CENTER`。
-- 正文：左边距 `96`、上边距 `20`、正文保持左对齐。
+## 3. 接入位置
 
-不要再用固定文字宽度手动“看起来居中”；姓名 Label 必须在姓名牌内容区内自动居中。
+- `scripts/dialogue_ui.gd`：正式对话框 + 独立姓名牌；姓名文字在姓名牌内自动居中。
+- `scripts/story_stage.gd` + `scripts/main.gd`：根据当前说话人的演员 x 与舞台中线决定姓名牌 left/right；取不到演员位置时退化为 left，不能按名字硬编码。
+- `scripts/main.gd::_build_interaction_panel()`：森林 DOCX 136 跳水、光源等玩家交互使用通用底板和主按钮。
+- `levels/minigames/text_input.gd`：DOCX 157 使用通用底板、输入框、主按钮。
+- `levels/river_jump.gd` / `river_jump.tscn`：DOCX 193 LakeJump HUD 使用通用底板和按钮。
+- `levels/minigames/firefly_bottle.gd`：DOCX 238 StarJar 使用通用底板。
 
-### TextInput：`levels/minigames/text_input.gd`
+不要修改 `scripts/main.gd::_diagnostic_panel` 或 `scripts/dev_jump_panel.gd` 的 F4 开发者 UI。
 
-当前实现使用 `PanelContainer + StyleBoxTexture` 包住实际控件：
+## 4. TextInput 漂浮杂念视觉
 
-- 输入框 Atlas 区域：`Rect2(668, 304, 1232, 88)`。
-- “说出来”按钮 Atlas 区域：`Rect2(1162, 482, 236, 98)`。
-- `LineEdit` / `Button` 自身使用透明 `StyleBoxEmpty`，素材由外层 Panel 绘制。
+- 所有漂浮文字强制 `#FFFFFF`，忽略 Python 帧传来的彩色值。
+- 基础透明度只能来自 `0.16 / 0.25 / 0.34 / 0.46 / 0.58`；低档位占多数，最高档只占少量。
+- 最终透明度继续乘现有物理帧 opacity，保留运动与消散；进入通用面板核心区时额外乘 `0.55`。
+- 玩家输入文字为白色 alpha 1；placeholder 白色 alpha 0.55；核心引导 alpha 0.9–1。
+- 不加彩色描边、霓虹、发光、渐变或黑幕。面板和杂念层只做自身 alpha 的柔和淡入淡出。
 
-### 图片白名单：`scripts/main.gd`
+## 5. 硬约束
 
-`ALLOWED_MODULE_IMAGE_ROOTS` 必须包含：
+- main 子树禁止新增 `TextureRect` / `Sprite2D` / `AnimatedSprite2D` / `CharacterBody2D`。玩家 UI 底板用 `Panel` / `PanelContainer + StyleBoxTexture`。
+- `scripts/main.gd` 的图片白名单必须保留 `res://assets/ui/`。
+- 不改摄像头、输入、提交、跳跃、拖拽、事件表或验证语义。
+- 不要 `git add .` / `git add -A`；不要提交既有 `.import` 行尾噪声、`project.godot`、`tools/`、`tmp/`。
 
-```gdscript
-"res://assets/ui/",
+## 6. 最小验证
+
+```powershell
+& $g --headless --path $p --import
+& $g --headless --path $p --resolution 1280x720 res://scenes/wedding/wedding_prologue.tscn -- --verify
+& $g --headless --path $p --resolution 1280x720 res://main.tscn -- --verify
 ```
 
-否则完整流程会报“未授权图片资产”。
+必须出现 `WEDDING_PROLOGUE_PASS` 和 `FULL_FLOW_PASS`，并保留：
 
-## 3. 禁止事项
-
-`scripts/main.gd` 的 `_find_forbidden_visual_nodes()` 会扫描 main 整棵子树。`dialogue_ui` 是 main 的直接子节点，因此：
-
-- **禁止**在 `dialogue_ui` / `narration_ui` 下增加 `TextureRect`、`Sprite2D`、`AnimatedSprite2D` 或 `CharacterBody2D`。
-- 对话框与姓名牌必须继续使用 `Panel/PanelContainer + StyleBoxTexture` 9-slice。
-- 不要把 `示意图*.png` 当成正式资产。
-- 不要删除 SimSun 末端 fallback；天王星像素体仍缺“窸”“窣”。
-- 不要修改森林跑酷模块来解决 UI 问题。
-
-## 4. 验收标准
-
-实际运行至少检查：
-
-1. 普通对白：“阿麦”“女孩”等姓名位于白色姓名牌内并水平居中。
-2. 长姓名：“玩家选择”等仍自动居中，不越出姓名牌。
-3. 正文不再贴住左侧装饰，且位于叶片装饰下方。
-4. DOCX 83：“走”“不走”两个按钮同时可见。
-5. DOCX 181：“想”“不想”两个按钮同时可见。
-6. 继续按钮保持居中。
-7. 完整验证保留：`dialogue_left_aligned=true`、`dialogue_body_top=true`、`continue_button_centered=true`、`choices_centered=true`。
-
-## 5. 当前基线与 Git 边界
-
-当前远端基线：
-
-```text
-8d20824 fix(ui): lower dialogue body text further
-```
-
-该基线之前已包含：
-
-- `07b27ae`：奇妙夜 2/5/10 视频覆盖 37–60、89–94、105–133。
-- `601b4a9`：正文水平右移。
-- `4260ae7`：姓名牌自动居中。
-- `7b723c0`、`8d20824`：正文最终向下偏移 20。
-
-提交时只暂存实际代码和正式 UI 素材：
-
-- 不要 `git add .` / `git add -A`。
-- 不要提交既有 `.import` 行尾噪声、`project.godot` 行尾变化、`tools/`、`tmp/` 或截图日志。
-- 不要 amend、rebase、reset；新建 commit 后正常 push。
+`dialogue_left_aligned=true` `dialogue_body_top=true` `continue_button_centered=true` `choices_centered=true` `narration_centered=true`。
