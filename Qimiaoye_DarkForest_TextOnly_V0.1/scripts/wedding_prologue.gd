@@ -486,7 +486,8 @@ func _run_effect(event: Dictionary) -> void:
 
 func _run_wait(event: Dictionary) -> void:
 	var seconds := float(event.get("seconds", 1.0))
-	_scene_subtitle.text = str(event.get("status", ""))
+	if event.has("status"):
+		_scene_subtitle.text = str(event["status"])
 	if _verify_mode:
 		return
 	await get_tree().create_timer(seconds).timeout

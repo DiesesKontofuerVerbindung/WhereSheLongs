@@ -67,6 +67,7 @@ var _visited_cgs: PackedStringArray = []
 var _visited_camera_shots: PackedStringArray = []
 var _interactions_done: Dictionary = {}
 var _failures: PackedStringArray = []
+var _psychology_lines_seen := 0
 
 var _pending_dev_jump: Dictionary = {}
 var _dev_jump_active := false
@@ -641,6 +642,9 @@ func _show_line(event: Dictionary) -> void:
 		_stop_forest_push()
 	var speaker := str(event.get("speaker", ""))
 	var text := str(event.get("text", ""))
+	var is_psychology := _is_psychology_event(event)
+	var display_speaker := "小凌" if is_psychology else speaker
+	var display_text := _format_psychology_text(speaker, text) if is_psychology else text
 	if speaker == "旁白":
 		_dialogue_ui.hide_dialogue()
 		await _narration_ui.present(text, _verify_mode)
@@ -654,7 +658,9 @@ func _show_line(event: Dictionary) -> void:
 		_narration_ui.set_advance_waiting(false)
 	else:
 		_narration_ui.begin_fade_for_dialogue(_verify_mode)
-		await _dialogue_ui.present_line(speaker, text, _verify_mode)
+		await _dialogue_ui.present_line(display_speaker, display_text, _verify_mode)
+		if is_psychology:
+			_psychology_lines_seen += 1
 		if _verify_mode:
 			return
 		_active_line_channel = "DIALOGUE"
@@ -664,6 +670,24 @@ func _show_line(event: Dictionary) -> void:
 		_set_advance_hint(false)
 		_dialogue_ui.set_advance_waiting(false)
 	_active_line_channel = ""
+
+
+func _is_psychology_event(event: Dictionary) -> bool:
+	return str(event.get("speaker", "")).begins_with("心理")
+
+
+func _format_psychology_text(speaker: String, text: String) -> String:
+	var cue := ""
+	var cue_start := speaker.find("（")
+	var cue_end := speaker.find("）", cue_start + 1)
+	if cue_start >= 0 and cue_end > cue_start:
+		cue = speaker.substr(cue_start + 1, cue_end - cue_start - 1).strip_edges()
+	var thought := text.strip_edges()
+	if not cue.is_empty() and not thought.is_empty():
+		return "（%s：%s）" % [cue, thought]
+	if not cue.is_empty():
+		return "（%s）" % cue
+	return "（%s）" % thought
 
 
 func _set_advance_hint(enabled: bool) -> void:
@@ -879,10 +903,12 @@ func _report_verification() -> void:
 	else:
 		if _narration_ui.name != "NARRATION_UI" or _dialogue_ui.name != "DIALOGUE_UI":
 			_failures.append("旁白与对白 UI 命名异常")
-		if _narration_ui.get_layout_sample_count() != 60:
+		if _narration_ui.get_layout_sample_count() != 56:
 			_failures.append("旁白显示数量异常：%d" % _narration_ui.get_layout_sample_count())
-		if _dialogue_ui.get_presented_line_count() != 46:
+		if _dialogue_ui.get_presented_line_count() != 50:
 			_failures.append("人物对白显示数量异常：%d" % _dialogue_ui.get_presented_line_count())
+		if _psychology_lines_seen != 4:
+			_failures.append("心理括号行显示数量异常：%d" % _psychology_lines_seen)
 	if _dev_jump_overlay == null or not _dev_jump_overlay.verify_contract():
 		_failures.append("F4 回溯面板不完整（婚礼前夜 / 奇妙夜 / 森林三页缺失或行号范围为空）")
 	elif _dev_jump_overlay.get_chapter_ids() != PackedStringArray(["wedding", DEV_JUMP_CHAPTER_ID, "forest"]):
@@ -904,7 +930,7 @@ func _report_verification() -> void:
 			print("MYSTIC_NIGHT_FAIL %s" % failure)
 		get_tree().quit(1)
 		return
-	print("MYSTIC_NIGHT_PASS events=%d sources=%d cgs=%d camera_shots=%d interactions=%d endpoint=%s narration_lines=60 dialogue_lines=46 first_person=true videos=3 stage_directions=10 audio=false art=true dev_jump_chapters=wedding_mystic_night_forest source_bounds=%s" % [
+	print("MYSTIC_NIGHT_PASS events=%d sources=%d cgs=%d camera_shots=%d interactions=%d endpoint=%s narration_lines=56 dialogue_lines=50 psychology_lines=4 psychology_parentheses=true first_person=true videos=3 stage_directions=10 audio=false art=true dev_jump_chapters=wedding_mystic_night_forest source_bounds=%s" % [
 		_events.size(),
 		_visited_sources.size(),
 		_visited_cgs.size(),
@@ -923,14 +949,23 @@ func _validate_event_contract() -> void:
 	var art_scene_indices := PackedInt32Array()
 	var source_63_lines := PackedStringArray()
 	var stage_direction_count := 0
+	var psychology_count := 0
+	var psychology_sources := PackedInt32Array()
 	var video_count := 0
 	for event in _events:
 		var event_type := str(event.get("type", ""))
 		type_counts[event_type] = int(type_counts.get(event_type, 0)) + 1
 		var text := str(event.get("text", ""))
 		var is_stage_direction := bool(event.get("stage_direction", false))
-		if ("（" in text or "）" in text) and not is_stage_direction:
+		var is_psychology := _is_psychology_event(event)
+		if ("（" in text or "）" in text) and not is_stage_direction and not is_psychology:
 			_failures.append("未标记的括号演出提示进入显示文字：%s" % text)
+		if is_psychology:
+			psychology_count += 1
+			psychology_sources.append(int(event.get("source", 0)))
+			var formatted_psychology := _format_psychology_text(str(event.get("speaker", "")), text)
+			if not formatted_psychology.begins_with("（") or not formatted_psychology.ends_with("）"):
+				_failures.append("心理文字未使用全角括号：%s" % event.get("source", 0))
 		if is_stage_direction:
 			stage_direction_count += 1
 			if event_type != "line" or str(event.get("speaker", "")) == "旁白":
@@ -974,6 +1009,8 @@ func _validate_event_contract() -> void:
 		_failures.append("场景 2/5/10 视频数量异常：%d" % video_count)
 	if stage_direction_count != 10:
 		_failures.append("动作对白数量异常：%d" % stage_direction_count)
+	if psychology_count != 4 or psychology_sources != PackedInt32Array([81, 83, 124, 136]):
+		_failures.append("心理括号行映射异常：count=%d sources=%s" % [psychology_count, str(psychology_sources)])
 	if source_63_lines != PackedStringArray(["远处偶尔传来不知道什么动物的叫声。", "前面是一片很高的草坡。"]):
 		_failures.append("DOCX 第 63 段没有拆成两条旁白")
 	_validate_split_line(39, "旁白", "她静静面对着小凌。")

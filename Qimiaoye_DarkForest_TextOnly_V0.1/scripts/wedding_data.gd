@@ -40,7 +40,7 @@ static func _wedding_hall_events() -> Array[Dictionary]:
 		{"type": "line", "source": 13, "speaker": "主持人", "text": "就请新郎，也对他即将共度一生的人，说出自己的心里话。"},
 		{"type": "line", "source": 14, "speaker": "主持人", "text": "有请新郎——"},
 		# 原文这里就是一个空拍，新郎没有出现。停顿本身是演出内容，不能省。
-		{"type": "wait", "source": 15, "seconds": 2.5, "status": "无人应答的停顿。"},
+		{"type": "wait", "source": 15, "seconds": 2.5},
 		{"type": "line", "source": 16, "speaker": "主持人", "text": "……"},
 		{"type": "action", "source": 17, "id": "xiaoling_pull_veil", "status": "小凌一把抓下自己的头纱。"},
 		{"type": "line", "source": 17, "speaker": "小凌", "text": "他应该在忙，还没到。"},

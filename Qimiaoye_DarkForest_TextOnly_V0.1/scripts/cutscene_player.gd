@@ -30,6 +30,7 @@ const FILL_DIM := 0.42
 ## 而且下沉倒放会变成上浮，乒乓也不能用。停在沉到底的那一帧才对，
 ## 节奏交给玩家读完那几行再按继续。
 const CUTSCENES := {
+	"waterfall_catch": {"frames": 151, "fps": 30.0, "loop": false},
 	"waterfall_below": {"frames": 151, "fps": 30.0, "loop": true},
 	"lake_talk": {"frames": 151, "fps": 30.0, "loop": true},
 	"drowning": {"frames": 78, "fps": 20.0, "loop": false},
@@ -191,6 +192,7 @@ func play_looping(cutscene_id: String, verify_mode := false) -> void:
 		# 缺帧不是崩溃理由：剧情必须能继续走完，缺什么留给日志和 verify 去报。
 		push_warning("CG %s 缺 %d 帧，跳过播放" % [cutscene_id, _last_missing_frames.size()])
 		return
+	var replacing_existing := not _loop_id.is_empty()
 	_loop_id = cutscene_id
 	_holding_last_frame = false
 	_loop_starts[cutscene_id] = int(_loop_starts.get(cutscene_id, 0)) + 1
@@ -199,6 +201,10 @@ func play_looping(cutscene_id: String, verify_mode := false) -> void:
 		_playing_id = cutscene_id
 		_played_frames = int(CUTSCENES[cutscene_id]["frames"])
 		return
+	if replacing_existing:
+		await _tween_self_alpha(0.0, FADE_SECONDS)
+		if _loop_id != cutscene_id:
+			return
 	_playing_id = cutscene_id
 	_frame_cache.clear()
 	_set_frame_texture(_acquire_frame(cutscene_id, 1))
