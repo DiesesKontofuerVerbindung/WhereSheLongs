@@ -8,7 +8,7 @@ class_name WeddingData
 ##
 ## 婚礼段目前没有任何美术素材（Szene 与微信下载目录里只有森林、湖边、河流、
 ## 阿麦角色动画），所以场景一律走纯文字舞台占位，等背景图到位再替换。
-## 结尾小凌闭眼，正好接森林正片的 EYE_OPEN。
+## 结尾小凌闭眼，先接奇妙夜，再由奇妙夜黑屏进入森林正片 EYE_OPEN。
 
 const SCENE_WEDDING_1 := "婚礼背景图1"
 const SCENE_WEDDING_2 := "婚礼背景图2"
@@ -213,6 +213,6 @@ static func _home_events() -> Array[Dictionary]:
 		{"type": "effect", "source": 143, "id": "world_shake", "intensity": 1.0, "status": "世界开始不断地晃动。"},
 		{"type": "line", "source": 144, "speaker": "妈妈", "text": "这个年纪的人，不能总是什么都不知道。"},
 		{"type": "line", "source": 145, "speaker": "旁白", "text": "小凌觉得头晕目眩，瘫倒在沙发上，闭上眼睛。"},
-		# 闭眼是婚礼段的终点，也是森林正片 EYE_OPEN 的起点。
-		{"type": "endpoint", "source": 145, "id": "WEDDING_PROLOGUE_END", "text": "小凌闭上了眼睛。", "next": "森林正片 EYE_OPEN"},
+		# 闭眼是婚礼段的终点，下一章先进入奇妙夜。
+		{"type": "endpoint", "source": 145, "id": "WEDDING_PROLOGUE_END", "text": "小凌闭上了眼睛。", "next": "奇妙夜"},
 	]
