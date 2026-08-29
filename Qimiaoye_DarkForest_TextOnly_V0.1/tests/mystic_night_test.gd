@@ -21,7 +21,8 @@ const EXPECTED_CGS := [
 	"奇妙夜女孩身影图",
 	"黑屏",
 ]
-const EXPECTED_CG_SOURCES := [16, 37, 59, 71, 89, 93, 96, 96, 96, 105, 133, 138, 146]
+const EXPECTED_CG_SOURCES := [16, 37, 61, 71, 89, 95, 96, 96, 96, 105, 134, 138, 146]
+const EXPECTED_VIDEO_RANGES := [Vector2i(37, 60), Vector2i(89, 94), Vector2i(105, 133)]
 const EXPECTED_ART_SCENES := [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 0]
 const EXPECTED_SHOTS := [
 	"shot_01_wake",
@@ -70,6 +71,7 @@ func _ready() -> void:
 	var source_96_narration := PackedStringArray()
 	var source_96_cgs := PackedStringArray()
 	var video_count := 0
+	var video_ranges: Array[Vector2i] = []
 	var stage_direction_count := 0
 
 	for event in events:
@@ -79,8 +81,9 @@ func _ready() -> void:
 			var speaker := str(event.get("speaker", ""))
 			var text := str(event.get("text", ""))
 			var is_stage_direction := bool(event.get("stage_direction", false))
+			var is_psychology := speaker.begins_with("心理")
 			speaker_counts[speaker] = int(speaker_counts.get(speaker, 0)) + 1
-			if ("（" in text or "）" in text) and not is_stage_direction:
+			if ("（" in text or "）" in text) and not is_stage_direction and not is_psychology:
 				failures.append("未标记的括号演出提示进入显示文字：%s" % text)
 			if is_stage_direction:
 				stage_direction_count += 1
@@ -99,6 +102,7 @@ func _ready() -> void:
 				failures.append("CG 资源不存在：%s / %s" % [cg_name, asset_path])
 			if not video_path.is_empty():
 				video_count += 1
+				video_ranges.append(Vector2i(int(event.get("source", 0)), int(event.get("video_end_source", 0))))
 				if not ResourceLoader.exists(video_path):
 					failures.append("CG 视频不存在：%s / %s" % [cg_name, video_path])
 			if int(event.get("source", 0)) == 96:
@@ -116,13 +120,15 @@ func _ready() -> void:
 	}
 	if events.size() != 131 or type_counts != expected_type_counts:
 		failures.append("事件统计异常：events=%d types=%s" % [events.size(), str(type_counts)])
-	var expected_speaker_counts := {"旁白": 60, "小凌": 24, "女孩": 21, "？？？": 1}
+	var expected_speaker_counts := {"旁白": 56, "小凌": 24, "女孩": 21, "？？？": 1, "心理": 4}
 	if speaker_counts != expected_speaker_counts:
 		failures.append("显示台词统计异常：%s" % str(speaker_counts))
 	if stage_direction_count != 10:
 		failures.append("动作对白数量异常：%d" % stage_direction_count)
 	if video_count != 3:
 		failures.append("场景 2/5/10 视频数量异常：%d" % video_count)
+	if video_ranges != EXPECTED_VIDEO_RANGES:
+		failures.append("场景 2/5/10 视频区间异常：%s" % str(video_ranges))
 	if DevJumpPanelScript.source_bounds(events) != Vector2i(1, 146):
 		failures.append("DOCX 来源范围异常：%s" % DevJumpPanelScript.source_bounds(events))
 	if cg_names != PackedStringArray(EXPECTED_CGS):
@@ -154,7 +160,7 @@ func _ready() -> void:
 	var interaction_events := _events_for_source(events, 58)
 	if interaction_jump.is_empty() or interaction_events.size() != 2 or str(interaction_events[1].get("id", "")) != "follow_girl":
 		failures.append("F4 第 58 行没有按动作对白→跟随交互排列")
-	for cg_source in [37, 71, 89, 96, 105, 133, 138]:
+	for cg_source in [37, 61, 71, 89, 95, 96, 105, 134, 138]:
 		var source_events := _events_for_source(events, cg_source)
 		if not source_events.any(func(event: Dictionary) -> bool: return str(event.get("type", "")) == "cg"):
 			failures.append("F4 第 %d 行没有映射到新 CG" % cg_source)
@@ -174,7 +180,7 @@ func _ready() -> void:
 			print("MYSTIC_NIGHT_TEST_FAIL %s" % failure)
 		get_tree().quit(1)
 		return
-	print("MYSTIC_NIGHT_TEST_PASS events=131 source_bounds=(1,146) narration_lines=60 dialogue_lines=46 stage_directions=10 cgs=13 videos=3 camera_shots=9 interactions=1 endpoint=true art_scenes=1_to_12 source96=7_to_8_to_9")
+	print("MYSTIC_NIGHT_TEST_PASS events=131 source_bounds=(1,146) narration_lines=56 dialogue_lines=50 stage_directions=10 cgs=13 videos=3 video_ranges=37_60,89_94,105_133 camera_shots=9 interactions=1 endpoint=true art_scenes=1_to_12 source96=7_to_8_to_9")
 	get_tree().quit(0)
 
 

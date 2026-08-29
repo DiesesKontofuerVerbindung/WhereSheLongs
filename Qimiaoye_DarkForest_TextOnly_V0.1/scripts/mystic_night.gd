@@ -83,6 +83,7 @@ var _cg_root: Control
 var _cg_backdrop: ColorRect
 var _cg_texture: TextureRect
 var _video_player: VideoStreamPlayer
+var _active_video_end_source := 0
 var _cg_label: Label
 var _back_buffer: BackBufferCopy
 var _screen_fx: ColorRect
@@ -164,6 +165,7 @@ func _build_ui() -> void:
 	_video_player.name = "MysticNightCgVideo"
 	_video_player.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_video_player.expand = true
+	_video_player.loop = true
 	_video_player.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_video_player.visible = false
 	_cg_root.add_child(_video_player)
@@ -402,7 +404,8 @@ func _restore_dev_jump_context(target_index: int) -> void:
 	if not scene_name.is_empty():
 		_current_scene = scene_name
 	if not cg_event.is_empty():
-		_set_cg_immediately(cg_event)
+		if _verify_mode or str(cg_event.get("video_asset", "")).is_empty() or not _start_cg_video(cg_event):
+			_set_cg_immediately(cg_event)
 
 
 func _input(event: InputEvent) -> void:
@@ -515,29 +518,38 @@ func _set_cg(cg_event: Dictionary) -> void:
 
 
 func _play_cg_video(cg_event: Dictionary, transition_style: String) -> void:
+	if not _start_cg_video(cg_event):
+		await _dissolve_to_cg(cg_event, transition_style == "down_dissolve")
+		return
+	if transition_style in ["dissolve", "down_dissolve"]:
+		var overlay := _make_transition_overlay()
+		if overlay != null:
+			await _animate_overlay_dissolve(overlay, transition_style == "down_dissolve")
+
+
+func _start_cg_video(cg_event: Dictionary) -> bool:
 	var video_path := str(cg_event.get("video_asset", ""))
 	var stream_resource := load(video_path) if not video_path.is_empty() else null
 	if not stream_resource is VideoStream:
 		var issue := "CG 视频无法载入：%s / %s" % [cg_event.get("name", ""), video_path]
 		if not _failures.has(issue):
 			_failures.append(issue)
-		await _dissolve_to_cg(cg_event, transition_style == "down_dissolve")
-		return
+		return false
 	_stop_camera_motion()
 	_cg_root.position = Vector2.ZERO
 	_cg_root.scale = Vector2.ONE
 	_cg_root.modulate = Color.WHITE
 	_dark_cover.modulate.a = 0.0
 	_set_screen_fx(0.0, 0.0)
+	_current_cg = str(cg_event.get("name", ""))
+	_active_video_end_source = int(cg_event.get("video_end_source", 0))
+	_cg_label.text = ""
+	_cg_label.visible = false
+	_video_player.stop()
 	_video_player.stream = stream_resource
 	_video_player.visible = true
 	_video_player.play()
-	if transition_style in ["dissolve", "down_dissolve"]:
-		var overlay := _make_transition_overlay()
-		if overlay != null:
-			await _animate_overlay_dissolve(overlay, transition_style == "down_dissolve")
-	await _video_player.finished
-	_set_cg_immediately(cg_event)
+	return true
 
 
 func _dissolve_to_cg(cg_event: Dictionary, move_down: bool) -> void:
@@ -583,6 +595,7 @@ func _set_cg_immediately(cg_event: Dictionary) -> void:
 		_video_player.stop()
 		_video_player.visible = false
 		_video_player.stream = null
+	_active_video_end_source = 0
 	var cg_name := str(cg_event.get("name", ""))
 	var asset_path := str(cg_event.get("asset", ""))
 	_current_cg = cg_name
@@ -952,6 +965,7 @@ func _validate_event_contract() -> void:
 	var psychology_count := 0
 	var psychology_sources := PackedInt32Array()
 	var video_count := 0
+	var video_ranges: Array[Vector2i] = []
 	for event in _events:
 		var event_type := str(event.get("type", ""))
 		type_counts[event_type] = int(type_counts.get(event_type, 0)) + 1
@@ -983,6 +997,7 @@ func _validate_event_contract() -> void:
 					_failures.append("CG 资源路径无效：%s / %s" % [cg_name, asset_path])
 			if not video_path.is_empty():
 				video_count += 1
+				video_ranges.append(Vector2i(int(event.get("source", 0)), int(event.get("video_end_source", 0))))
 				if not ResourceLoader.exists(video_path):
 					_failures.append("CG 视频路径无效：%s / %s" % [cg_name, video_path])
 		if event_type == "line" and int(event.get("source", 0)) == 63:
@@ -1007,6 +1022,8 @@ func _validate_event_contract() -> void:
 		_failures.append("重点镜头数据表顺序异常：%s" % str(camera_ids))
 	if video_count != 3:
 		_failures.append("场景 2/5/10 视频数量异常：%d" % video_count)
+	if video_ranges != [Vector2i(37, 60), Vector2i(89, 94), Vector2i(105, 133)]:
+		_failures.append("场景 2/5/10 视频区间异常：%s" % str(video_ranges))
 	if stage_direction_count != 10:
 		_failures.append("动作对白数量异常：%d" % stage_direction_count)
 	if psychology_count != 4 or psychology_sources != PackedInt32Array([81, 83, 124, 136]):
@@ -1053,6 +1070,8 @@ func get_debug_snapshot() -> Dictionary:
 		"mystic_night_events": _events.size(),
 		"mystic_night_scene": _current_scene,
 		"mystic_night_cg": _current_cg,
+		"mystic_night_video_playing": _video_player != null and _video_player.is_playing(),
+		"mystic_night_video_end_source": _active_video_end_source,
 		"mystic_night_endpoint": _endpoint_reached,
 		"mystic_night_sources": _visited_sources.size(),
 		"mystic_night_camera_shots": _visited_camera_shots.size(),

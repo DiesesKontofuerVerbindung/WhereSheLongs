@@ -203,7 +203,7 @@ func _build_ui() -> void:
 	set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	offset_left = 72
 	offset_right = -72
-	offset_top = -290
+	offset_top = -328
 	offset_bottom = -28
 	var panel_style := _make_texture_style(DIALOGUE_BOX_PATH, DIALOGUE_BOX_REGION, 76.0, 96.0, 76.0, 62.0)
 	add_theme_stylebox_override("panel", panel_style)
@@ -277,6 +277,10 @@ func _make_texture_style(path: String, region: Rect2, left: float, top: float, r
 	style.texture_margin_top = top
 	style.texture_margin_right = right
 	style.texture_margin_bottom = bottom
+	style.content_margin_left = 0.0
+	style.content_margin_top = 0.0
+	style.content_margin_right = 0.0
+	style.content_margin_bottom = 0.0
 	return style
 
 
