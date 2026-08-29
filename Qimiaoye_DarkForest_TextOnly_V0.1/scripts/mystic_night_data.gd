@@ -10,6 +10,7 @@ class_name MysticNightData
 static func build_events() -> Array[Dictionary]:
 	return [
 		{"type": "scene", "source": 1, "name": "奇妙夜"},
+		{"type": "audio", "source": 1, "action": "start", "channel": "bgm", "stream": "mystic_night_bgm_grassland_breath", "status": "草原自由呼吸 BGM 起"},
 		{"type": "cg", "source": 16, "art_docx_paragraph": 15, "name": "奇妙夜场景1", "asset": "res://assets/cutscenes/mystic_night/01_meadow.png"},
 		{"type": "camera", "source": 18, "id": "shot_01_wake", "status": "睁眼苏醒"},
 		{"type": "line", "source": 19, "speaker": "旁白", "text": "四周是一片巨大的草地。"},
@@ -51,6 +52,7 @@ static func build_events() -> Array[Dictionary]:
 		{"type": "line", "source": 60, "speaker": "旁白", "text": "两个人一前一后走在草地上。"},
 		{"type": "line", "source": 61, "speaker": "旁白", "text": "风很大。"},
 		{"type": "line", "source": 62, "speaker": "旁白", "text": "发光的小生物从她们脚边飞起来，又落回草丛。"},
+		{"type": "audio", "source": 63, "action": "start", "channel": "bgm", "stream": "mystic_night_bgm_walk_chase", "status": "草原行走与追逐 BGM 起"},
 		{"type": "line", "source": 63, "speaker": "旁白", "text": "远处偶尔传来不知道什么动物的叫声。"},
 		{"type": "line", "source": 63, "speaker": "旁白", "text": "前面是一片很高的草坡。"},
 		{"type": "line", "source": 64, "speaker": "女孩", "text": "你刚才在哭吗？"},
@@ -86,6 +88,7 @@ static func build_events() -> Array[Dictionary]:
 		{"type": "cg", "source": 98, "art_docx_paragraph": 82, "name": "奇妙夜发光动物图", "asset": "res://assets/cutscenes/mystic_night/07_glowing_animal.jpg"},
 		{"type": "camera", "source": 98, "id": "shot_05_run", "status": "第一人称跑动"},
 		{"type": "line", "source": 99, "speaker": "旁白", "text": "不知道走了多久。"},
+		{"type": "audio", "source": 99, "action": "start", "channel": "bgm", "stream": "mystic_night_bgm_dark_forest", "status": "进入黑暗森林 BGM 起"},
 		{"type": "cg", "source": 100, "art_docx_paragraph": 85, "name": "奇妙夜湿地图", "asset": "res://assets/cutscenes/mystic_night/08_wetland.jpg"},
 		{"type": "line", "source": 100, "speaker": "旁白", "text": "草地开始慢慢变矮，风也停了。前方的地面逐渐变得潮湿，一些陌生的植物从草丛中长出来，它们的叶片巨大，边缘泛着幽蓝色的光。"},
 		{"type": "line", "source": 101, "speaker": "旁白", "text": "小凌踩过一片落叶。"},

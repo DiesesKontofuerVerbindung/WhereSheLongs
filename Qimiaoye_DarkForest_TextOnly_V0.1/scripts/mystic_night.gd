@@ -26,6 +26,12 @@ const COLOR_BG := Color(0.0, 0.0, 0.0, 1.0)
 const COLOR_TEXT := Color(0.96, 0.97, 1.0, 1.0)
 const COLOR_MUTED := Color(0.62, 0.66, 0.74, 1.0)
 
+## 奇妙夜章节 BGM（对应 DOCX 三段：草原自由呼吸 / 草原行走与追逐 / 进入黑暗森林）。
+const AUDIO_MYSTIC_NIGHT_BGM_GRASSLAND_BREATH := "res://assets/audio/mystic_night_bgm_grassland_breath.ogg"
+const AUDIO_MYSTIC_NIGHT_BGM_WALK_CHASE := "res://assets/audio/mystic_night_bgm_walk_chase.ogg"
+const AUDIO_MYSTIC_NIGHT_BGM_DARK_FOREST := "res://assets/audio/mystic_night_bgm_dark_forest.ogg"
+const AUDIO_FADE_SECONDS := 1.2
+
 const CG_NAMES := [
 	"奇妙夜场景1",
 	"奇妙夜场景2",
@@ -101,6 +107,8 @@ var _pending_cg_turn := false
 var _pending_final_turn := false
 var _active_camera_tween: Tween
 var _forest_push_tween: Tween
+var _bgm_player: AudioStreamPlayer
+var _bgm_volume := 0.0
 
 
 func _ready() -> void:
@@ -291,6 +299,13 @@ void fragment() {
 	_dev_jump_overlay.jump_requested.connect(_on_dev_jump_requested)
 	call_deferred("_update_cg_pivot")
 
+	_bgm_player = AudioStreamPlayer.new()
+	_bgm_player.name = "MysticNightBGMAudio"
+	_bgm_player.bus = &"Master"
+	_bgm_player.process_mode = Node.PROCESS_MODE_ALWAYS
+	_bgm_player.volume_db = -80.0
+	add_child(_bgm_player)
+
 
 func _update_cg_pivot() -> void:
 	if _cg_root != null:
@@ -442,6 +457,10 @@ func _run_events() -> void:
 	if not _endpoint_reached:
 		_failures.append("奇妙夜没有走到终点")
 	prologue_finished.emit()
+	# 章节结束收尾音频，避免进入森林正片后残留播放。
+	if _bgm_player != null and _bgm_player.playing:
+		_bgm_player.stop()
+		_bgm_player.stream = null
 	if _verify_mode:
 		_report_verification()
 		return
@@ -467,6 +486,8 @@ func _run_event(event: Dictionary) -> void:
 			await _run_camera(event)
 		"interaction":
 			await _run_interaction(event)
+		"audio":
+			await _apply_audio_event(event)
 		"endpoint":
 			_endpoint_reached = true
 			_cg_label.text = str(event.get("text", "请闭上眼睛"))
@@ -797,6 +818,97 @@ func _on_interaction_pressed() -> void:
 	_interaction_panel.visible = false
 
 
+## 处理 audio 事件。字段：
+##   action: "start" 播放（循环，淡入）；"stop" 停止（淡出）；"stop_immediate" 立即停。
+##   channel: "bgm"。缺省按 bgm 处理。
+##   stream: 语义名映射（mystic_night_bgm_* 等），或直接 res:// 路径。
+##   fade: 覆盖淡入淡出时长（秒）。
+func _apply_audio_event(event: Dictionary) -> void:
+	var action := str(event.get("action", ""))
+	var stream_key := str(event.get("stream", ""))
+	var fade := float(event.get("fade", AUDIO_FADE_SECONDS))
+	if action == "stop" or action == "stop_immediate":
+		if action == "stop":
+			await _audio_stop(fade)
+		else:
+			_audio_stop_immediate()
+		return
+	var path := _resolve_audio_path(stream_key)
+	if path.is_empty():
+		push_warning("奇妙夜 audio 事件缺 stream：%s" % str(event))
+		return
+	match action:
+		"start":
+			await _audio_start(path, fade)
+		_:
+			push_warning("奇妙夜未知 audio action：%s" % action)
+
+
+## 把语义名映射到真实资源路径。换音频时只改这里，事件表不用动。
+func _resolve_audio_path(key: String) -> String:
+	match key:
+		"mystic_night_bgm_grassland_breath":
+			return AUDIO_MYSTIC_NIGHT_BGM_GRASSLAND_BREATH
+		"mystic_night_bgm_walk_chase":
+			return AUDIO_MYSTIC_NIGHT_BGM_WALK_CHASE
+		"mystic_night_bgm_dark_forest":
+			return AUDIO_MYSTIC_NIGHT_BGM_DARK_FOREST
+	return key
+
+
+func _audio_start(path: String, fade: float) -> void:
+	var player := _bgm_player
+	if _verify_mode or player == null:
+		return
+	var stream: AudioStream = load(path)
+	if stream == null:
+		push_warning("奇妙夜 BGM 加载失败：%s" % path)
+		return
+	if player.stream == stream and player.playing:
+		return
+	player.stream = stream
+	if not player.playing:
+		player.play()
+	_bgm_volume = 1.0
+	await _fade_bgm_volume(1.0, fade)
+
+
+func _audio_stop(fade: float) -> void:
+	var player := _bgm_player
+	if _verify_mode or player == null:
+		return
+	_bgm_volume = 0.0
+	await _fade_bgm_volume(0.0, fade)
+	if player.playing:
+		player.stop()
+	player.stream = null
+
+
+func _audio_stop_immediate() -> void:
+	var player := _bgm_player
+	if player == null:
+		return
+	player.stop()
+	player.stream = null
+
+
+func _fade_bgm_volume(target_vol: float, fade: float) -> void:
+	var player := _bgm_player
+	if player == null:
+		return
+	var start_db := player.volume_db
+	var end_db := _db_for_volume(target_vol)
+	var tween := create_tween()
+	tween.tween_property(player, "volume_db", end_db, fade if _verify_mode == false else 0.0)
+	await tween.finished
+
+
+func _db_for_volume(vol: float) -> float:
+	if vol <= 0.0:
+		return -80.0
+	return linear_to_db(vol)
+
+
 func _report_verification() -> void:
 	_validate_event_contract()
 	if _narration_ui == null or _dialogue_ui == null:
@@ -831,7 +943,7 @@ func _report_verification() -> void:
 			print("MYSTIC_NIGHT_FAIL %s" % failure)
 		get_tree().quit(1)
 		return
-	print("MYSTIC_NIGHT_PASS events=%d sources=%d cgs=%d camera_shots=%d interactions=%d endpoint=%s narration_lines=51 dialogue_lines=40 psychology_lines=4 psychology_parentheses=true first_person=true audio=false art=true dev_jump_chapters=wedding_mystic_night_forest_chapter3 source_bounds=%s" % [
+	print("MYSTIC_NIGHT_PASS events=%d sources=%d cgs=%d camera_shots=%d interactions=%d endpoint=%s narration_lines=51 dialogue_lines=40 psychology_lines=4 psychology_parentheses=true first_person=true audio=true art=true dev_jump_chapters=wedding_mystic_night_forest_chapter3 source_bounds=%s" % [
 		_events.size(),
 		_visited_sources.size(),
 		_visited_cgs.size(),
@@ -882,6 +994,7 @@ func _validate_event_contract() -> void:
 		"line": 91,
 		"interaction": 1,
 		"endpoint": 1,
+		"audio": 3,
 	}
 	if type_counts != expected_counts:
 		_failures.append("事件类型统计异常：%s" % str(type_counts))

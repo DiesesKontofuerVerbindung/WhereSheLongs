@@ -74,8 +74,9 @@ func _ready() -> void:
 		"line": 91,
 		"interaction": 1,
 		"endpoint": 1,
+		"audio": 3,
 	}
-	if events.size() != 114 or type_counts != expected_type_counts:
+	if events.size() != 117 or type_counts != expected_type_counts:
 		failures.append("事件统计异常：events=%d types=%s" % [events.size(), str(type_counts)])
 	var expected_speaker_counts := {"旁白": 51, "小凌": 18, "女孩": 17, "？？？": 1, "心理": 4}
 	if speaker_counts != expected_speaker_counts:
@@ -129,7 +130,7 @@ func _ready() -> void:
 			print("MYSTIC_NIGHT_TEST_FAIL %s" % failure)
 		get_tree().quit(1)
 		return
-	print("MYSTIC_NIGHT_TEST_PASS events=114 source_bounds=(1, 146) narration_lines=55 dialogue_lines=36 cgs=12 camera_shots=8 interactions=1 endpoint=true art_assets=true dual_docx_mapping=true technical_notes_hidden=true")
+	print("MYSTIC_NIGHT_TEST_PASS events=117 source_bounds=(1, 146) narration_lines=55 dialogue_lines=36 cgs=12 camera_shots=8 interactions=1 endpoint=true art_assets=true dual_docx_mapping=true technical_notes_hidden=true audio_segments=3")
 	get_tree().quit(0)
 
 
