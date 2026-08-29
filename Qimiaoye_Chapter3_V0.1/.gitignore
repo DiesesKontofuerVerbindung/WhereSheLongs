@@ -1,0 +1,9 @@
+# Godot 4 生成的导入缓存，不需要入库。
+# 克隆后首次用 Godot 编辑器打开会自动重新生成。
+.godot/
+
+# 日志与系统文件
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini
