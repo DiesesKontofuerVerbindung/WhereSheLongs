@@ -30,6 +30,9 @@ const COLOR_MUTED := Color(0.62, 0.60, 0.66, 1.0)
 const SHAKE_SECONDS := 1.1
 const SHAKE_MAX_PIXELS := 26.0
 
+## 底图比舞台外扩一圈，震动（最大 26px）时不会露出边缘。
+const SCENE_TEXTURE_OVERSCAN := 64.0
+
 signal prologue_finished
 
 var _events: Array[Dictionary] = []
@@ -53,6 +56,7 @@ var _primary_font: SystemFont
 var _cjk_fallback_font: SystemFont
 var _root_bg: ColorRect
 var _stage_root: Control
+var _scene_texture: TextureRect
 var _scene_label: Label
 var _scene_subtitle: Label
 var _advance_hint: Label
@@ -61,6 +65,14 @@ var _interaction_button: Button
 var _module_host: Control
 var _narration_ui
 var _dialogue_ui
+
+## 场景名 -> 底图路径。图没到位时保留文字占位回退（见 _set_scene）。
+var _scene_texture_paths := {
+	WeddingDataScript.SCENE_WEDDING_1: "res://assets/backgrounds/wedding/candidates/officiant.jpg",
+	WeddingDataScript.SCENE_WEDDING_2: "res://assets/backgrounds/wedding/wedding_2.jpg",
+	WeddingDataScript.SCENE_CAR: "res://assets/backgrounds/wedding/car.png",
+	WeddingDataScript.SCENE_HOME: "res://assets/backgrounds/wedding/home.png",
+}
 
 var _shake_phase := 0.0
 var _shake_intensity := 0.0
@@ -113,6 +125,20 @@ func _build_ui() -> void:
 	_stage_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_stage_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_stage_root)
+
+	# 美术底图插在舞台层、两个占位 Label 之下；震动跟着舞台走。
+	_scene_texture = TextureRect.new()
+	_scene_texture.name = "WeddingSceneTexture"
+	_scene_texture.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_scene_texture.offset_left = -SCENE_TEXTURE_OVERSCAN
+	_scene_texture.offset_top = -SCENE_TEXTURE_OVERSCAN
+	_scene_texture.offset_right = SCENE_TEXTURE_OVERSCAN
+	_scene_texture.offset_bottom = SCENE_TEXTURE_OVERSCAN
+	_scene_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_scene_texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_scene_texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_scene_texture.visible = false
+	_stage_root.add_child(_scene_texture)
 
 	_scene_label = Label.new()
 	_scene_label.set_anchors_preset(Control.PRESET_CENTER)
@@ -386,8 +412,20 @@ func _run_event(event: Dictionary) -> void:
 
 func _set_scene(scene_name: String) -> void:
 	_current_scene = scene_name
-	_scene_label.text = scene_name
-	_scene_subtitle.text = "婚礼前段 · 美术未到位，纯文字舞台占位"
+	var texture_path := str(_scene_texture_paths.get(scene_name, ""))
+	var texture: Texture2D = null
+	if not texture_path.is_empty() and ResourceLoader.exists(texture_path):
+		texture = load(texture_path)
+	if texture != null:
+		_scene_texture.texture = texture
+		_scene_texture.visible = true
+		_scene_label.text = ""
+		_scene_subtitle.text = ""
+	else:
+		# 素材没到位（或导入缓存损坏导致加载失败）的场景保留文字占位回退，不让缺图变成黑屏。
+		_scene_texture.visible = false
+		_scene_label.text = scene_name
+		_scene_subtitle.text = "婚礼前段 · 美术未到位，纯文字舞台占位"
 
 
 func _show_line(event: Dictionary) -> void:
@@ -402,6 +440,7 @@ func _show_line(event: Dictionary) -> void:
 		await _narration_ui.present(text, _verify_mode)
 		if _verify_mode:
 			return
+		await _drain_advance_input()
 		_active_line_channel = "NARRATION"
 		_narration_ui.set_advance_waiting(true)
 		_set_advance_hint(true)
@@ -413,6 +452,7 @@ func _show_line(event: Dictionary) -> void:
 		await _dialogue_ui.present_line(speaker, text, _verify_mode)
 		if _verify_mode:
 			return
+		await _drain_advance_input()
 		_active_line_channel = "DIALOGUE"
 		_dialogue_ui.set_advance_waiting(true)
 		_set_advance_hint(true)
@@ -481,6 +521,8 @@ func _run_module(event: Dictionary) -> void:
 		_failures.append("婚礼模块场景无法加载：%s" % scene_path)
 		return
 	var instance := packed.instantiate()
+	if instance.has_method("setup"):
+		instance.call("setup", str(event.get("checklist_variant", "")))
 	_module_host.add_child(instance)
 	_module_host.visible = true
 	# 用协程而不是信号：verify 模式下模块可能在 _ready 里就跑完了，
@@ -492,6 +534,19 @@ func _run_module(event: Dictionary) -> void:
 	_module_host.visible = false
 	if is_instance_valid(instance):
 		instance.queue_free()
+	if not _verify_mode:
+		await _drain_advance_input()
+
+
+func _drain_advance_input() -> void:
+	_active_line_channel = ""
+	if _narration_ui != null:
+		_narration_ui.set_advance_waiting(false)
+	if _dialogue_ui != null:
+		_dialogue_ui.set_advance_waiting(false)
+	_set_advance_hint(false)
+	for _i in range(8):
+		await get_tree().process_frame
 
 
 func _brief_pause() -> void:

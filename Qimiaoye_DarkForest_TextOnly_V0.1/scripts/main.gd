@@ -57,6 +57,8 @@ const ALLOWED_MODULE_IMAGE_ROOTS := [
 	"res://scenes/forest/parkour/",
 	"res://assets/cutscenes/",
 	"res://assets/inner_objects/",
+	"res://assets/wedding/",
+	"res://addons/hand_checkbox_gesture/assets/",
 ]
 
 var _events: Array[Dictionary] = []

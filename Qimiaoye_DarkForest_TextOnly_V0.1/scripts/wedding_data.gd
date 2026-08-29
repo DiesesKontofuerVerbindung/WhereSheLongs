@@ -45,7 +45,7 @@ static func _wedding_hall_events() -> Array[Dictionary]:
 		{"type": "action", "source": 17, "id": "xiaoling_pull_veil", "status": "小凌一把抓下自己的头纱。"},
 		{"type": "line", "source": 17, "speaker": "小凌", "text": "他应该在忙，还没到。"},
 
-		{"type": "scene", "source": 18, "name": SCENE_WEDDING_2},
+		# 3–21 用司仪底图（婚礼背景图1）；誓词/清单后再切婚礼背景图2。
 		{"type": "line", "source": 19, "speaker": "主持人", "text": "那后面的流程还过吗？"},
 		{"type": "line", "source": 20, "speaker": "小凌", "text": "我自己来吧。"},
 
@@ -60,6 +60,18 @@ static func _wedding_hall_events() -> Array[Dictionary]:
 			"result": "success",
 		},
 
+		# checklist 插件①（hand_checkbox_gesture）：21–22 之间。
+		{
+			"type": "module",
+			"source": 21,
+			"id": "WeddingChecklist1",
+			"scene": "res://scenes/wedding/modules/wedding_checklist.tscn",
+			"checklist_variant": "1",
+			"completion_signal": "finished",
+			"result": "success",
+		},
+
+		{"type": "scene", "source": 22, "name": SCENE_WEDDING_2},
 		{"type": "line", "source": 22, "speaker": "旁白", "text": "彩排快结束时，小凌的未婚夫思雨终于匆匆赶到。"},
 		{"type": "line", "source": 23, "speaker": "思雨", "text": "抱歉，结束了吗？"},
 		{"type": "line", "source": 24, "speaker": "小凌", "text": "差不多。"},
@@ -96,6 +108,16 @@ static func _wedding_hall_events() -> Array[Dictionary]:
 		{"type": "line", "source": 43, "speaker": "思雨", "text": "明天我会准时到的。"},
 		{"type": "line", "source": 44, "speaker": "旁白", "text": "思雨走过来，轻轻拍了一下她的肩膀。"},
 		{"type": "line", "source": 45, "speaker": "思雨", "text": "别想太多，一会儿我先送你回家。"},
+		# checklist 插件②：46–47 之间（上车前）。
+		{
+			"type": "module",
+			"source": 46,
+			"id": "WeddingChecklist2",
+			"scene": "res://scenes/wedding/modules/wedding_checklist.tscn",
+			"checklist_variant": "2",
+			"completion_signal": "finished",
+			"result": "success",
+		},
 	]
 
 
@@ -174,6 +196,15 @@ static func _home_events() -> Array[Dictionary]:
 		{"type": "scene", "source": 105, "name": SCENE_HOME},
 		{"type": "line", "source": 106, "speaker": "旁白", "text": "屋子里已经堆满了明天婚礼要用的东西。"},
 		{"type": "line", "source": 107, "speaker": "旁白", "text": "客厅角落放着几个没有拆开的纸箱。"},
+		# 选中查看物品（livingroom memories）：108–109 之前。
+		{
+			"type": "module",
+			"source": 107,
+			"id": "WeddingLivingroomInspect",
+			"scene": "res://scenes/wedding/modules/wedding_livingroom_inspect.tscn",
+			"completion_signal": "finished",
+			"result": "success",
+		},
 		{"type": "line", "source": 108, "speaker": "旁白", "text": "桌子上摆着请柬、婚礼流程册、宾客名单，还有一束明天要带去酒店的花。"},
 		{"type": "line", "source": 109, "speaker": "旁白", "text": "小凌一个人坐到沙发上，盯着柜子发呆。"},
 		{"type": "line", "source": 110, "speaker": "旁白", "text": "小凌的妈妈从卧室出来。"},
