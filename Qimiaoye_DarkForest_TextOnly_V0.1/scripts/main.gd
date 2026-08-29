@@ -601,7 +601,7 @@ func _build_interaction_panel() -> void:
 	_interaction_panel = PanelContainer.new()
 	UiPanelSkinScript.apply_fixed_rect(_interaction_panel, UiPanelSkinScript.PANEL_RECT)
 	_interaction_panel.visible = false
-	_interaction_panel.add_theme_stylebox_override("panel", UiPanelSkinScript.panel_style())
+	_interaction_panel.add_theme_stylebox_override("panel", UiPanelSkinScript.empty_style())
 	add_child(_interaction_panel)
 
 	var canvas := Control.new()
@@ -618,6 +618,7 @@ func _build_interaction_panel() -> void:
 	_interaction_prompt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_interaction_prompt.add_theme_font_size_override("font_size", 20)
 	_interaction_prompt.add_theme_color_override("font_color", Color("666666"))
+	_interaction_prompt.visible = false
 	canvas.add_child(_interaction_prompt)
 
 	_progress = ProgressBar.new()
@@ -627,6 +628,7 @@ func _build_interaction_panel() -> void:
 	_progress.max_value = 100
 	_progress.value = 0
 	_progress.show_percentage = true
+	_progress.visible = false
 	canvas.add_child(_progress)
 
 	_light_button = Button.new()
@@ -1617,7 +1619,9 @@ func _run_interaction(event: Dictionary) -> void:
 
 	_interaction_panel.visible = true
 	_interaction_prompt.text = str(event.get("prompt", ""))
+	_interaction_prompt.visible = false
 	_progress.value = 0
+	_progress.visible = false
 	_light_button.visible = false
 	_action_button.visible = false
 	if interaction_id == "jump_button":
@@ -1870,7 +1874,9 @@ func _run_touch_chest_interaction() -> void:
 	_dialogue_ui.hide_dialogue()
 	_interaction_panel.visible = true
 	_interaction_prompt.text = "伸手触摸那束光"
+	_interaction_prompt.visible = false
 	_progress.value = 0
+	_progress.visible = false
 	_light_button.visible = false
 	_action_button.text = "触摸"
 	_action_button.visible = true
@@ -2274,6 +2280,7 @@ func _show_fatal(text: String) -> void:
 	_narration_ui.begin_fade_for_dialogue(true)
 	_interaction_panel.visible = true
 	_interaction_prompt.text = "运行错误\n%s" % text
+	_interaction_prompt.visible = true
 	_progress.visible = false
 	_light_button.visible = false
 	_action_button.visible = false

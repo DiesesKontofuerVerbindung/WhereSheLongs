@@ -276,7 +276,7 @@ func _build_ui() -> void:
 	_submit_button.add_theme_color_override("font_color", Color.WHITE)
 	_submit_button.add_theme_color_override("font_hover_color", Color.WHITE)
 	_submit_button.add_theme_font_size_override("font_size", 16)
-	_submit_button.text = ""
+	_submit_button.text = "说出来"
 	var empty_button_style := UiPanelSkinScript.empty_style()
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		_submit_button.add_theme_stylebox_override(state, empty_button_style)

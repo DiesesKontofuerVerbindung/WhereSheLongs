@@ -69,7 +69,6 @@ static func _main_events() -> Array[Dictionary]:
 		{"type": "scene", "source": 944, "name": "静谧走廊", "label": "静谧走廊", "subtitle": "image#2 · 静谧走廊"},
 
 		{"type": "line", "source": 947, "speaker": "旁白", "text": "走廊尽头有一道很长的光，光下面站着一个人。是思雨。"},
-		{"type": "line", "source": 947, "speaker": "旁白", "text": "走廊尽头有一道很长的光，光下面站着一个人。是思雨。"},
 		{"type": "line", "source": 948, "speaker": "旁白", "text": "他正低头看手机。"},
 		{"type": "line", "source": 949, "speaker": "旁白", "text": "周围的人不断经过。"},
 		{"type": "line", "source": 950, "speaker": "旁白", "text": "他却没有注意到小凌。"},
