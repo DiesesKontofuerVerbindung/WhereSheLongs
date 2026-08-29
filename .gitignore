@@ -7,5 +7,9 @@ export.cfg
 .DS_Store
 Thumbs.db
 
+# Python runtime caches
+__pycache__/
+*.py[cod]
+
 # Godot 3 compatibility (if older tooling creates it)
 .import/

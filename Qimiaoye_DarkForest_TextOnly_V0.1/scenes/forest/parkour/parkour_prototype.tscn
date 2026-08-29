@@ -183,8 +183,8 @@ shape = SubResource("Rect_ground")
 [node name="VineRunFloor" type="StaticBody2D" parent="Gameplay/Segment02_Vines"]
 position = Vector2(2880, 650)
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="Gameplay/Segment02_Vines/VineRunFloor"]
-shape = SubResource("Rect_ground")
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="Gameplay/Segment02_Vines/VineRunFloor"]
+polygon = PackedVector2Array(-960, -50, -440, -50, -350, -10, -155, -10, -65, -50, 960, -50, 960, 50, -960, 50)
 
 [node name="Title" type="Label" parent="Gameplay/Segment02_Vines"]
 visible = false
@@ -223,7 +223,7 @@ root_id = &"Root02"
 root_size = Vector2(322, 316)
 collision_size = Vector2(132, 22)
 collision_x = -21.0
-collision_y = -40.0
+collision_y = 0.0
 visual_variant = 1
 visual_enabled = false
 
@@ -796,6 +796,8 @@ visible = false
 script = ExtResource("17_runner")
 visual_path = NodePath("../XiaolingSprite")
 suspend_runner_physics = true
+slide_visual_offset = Vector2(0, 22)
+slide_visual_scale_y = 0.72
 
 [node name="AmaiPlaceholder" type="CharacterBody2D" parent="."]
 z_index = 9
@@ -846,6 +848,8 @@ text = "阿麦 Echo"
 [node name="RunnerActionController" type="Node" parent="AmaiEcho"]
 script = ExtResource("17_runner")
 visual_path = NodePath("../AmaiSprite")
+slide_visual_offset = Vector2(0, 22)
+slide_visual_scale_y = 0.72
 
 [node name="DesignCamera" type="Camera2D" parent="."]
 position = Vector2(960, 540)
@@ -864,7 +868,7 @@ debug_label_path = NodePath("../VineEchoDebug/Panel/DebugText")
 start_on_ready = false
 automatic_forward = false
 echo_waits_at_gates = true
-echo_fixed_route = PackedVector2Array(2070, 584, 2122, 584, 2538, 584, 2946, 584, 3371, 584, 3820, 584)
+echo_fixed_route = PackedVector2Array(2070, 584, 2122, 584, 2538, 624, 2946, 584, 3371, 584, 3820, 584)
 
 [node name="VineEchoDebug" type="CanvasLayer" parent="."]
 layer = 10

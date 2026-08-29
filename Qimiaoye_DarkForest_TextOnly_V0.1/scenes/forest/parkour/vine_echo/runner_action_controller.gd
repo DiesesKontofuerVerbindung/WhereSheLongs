@@ -134,6 +134,9 @@ func _physics_process(delta: float) -> void:
 func _execute_ground_action(action: int) -> void:
     match action:
         RunnerAction.UP:
+            if is_sliding:
+                _slide_remaining = 0.0
+                _set_slide(false)
             runner.velocity.y = -jump_impulse
         RunnerAction.DOWN:
             _slide_remaining = slide_duration
