@@ -68,7 +68,7 @@ var _dialogue_ui
 
 ## 场景名 -> 底图路径。图没到位时保留文字占位回退（见 _set_scene）。
 var _scene_texture_paths := {
-	WeddingDataScript.SCENE_WEDDING_1: "res://assets/backgrounds/wedding/wedding_1.png",
+	WeddingDataScript.SCENE_WEDDING_1: "res://assets/backgrounds/wedding/candidates/officiant.jpg",
 	WeddingDataScript.SCENE_WEDDING_2: "res://assets/backgrounds/wedding/wedding_2.jpg",
 	WeddingDataScript.SCENE_CAR: "res://assets/backgrounds/wedding/car.png",
 	WeddingDataScript.SCENE_HOME: "res://assets/backgrounds/wedding/home.png",
@@ -440,6 +440,7 @@ func _show_line(event: Dictionary) -> void:
 		await _narration_ui.present(text, _verify_mode)
 		if _verify_mode:
 			return
+		await _drain_advance_input()
 		_active_line_channel = "NARRATION"
 		_narration_ui.set_advance_waiting(true)
 		_set_advance_hint(true)
@@ -451,6 +452,7 @@ func _show_line(event: Dictionary) -> void:
 		await _dialogue_ui.present_line(speaker, text, _verify_mode)
 		if _verify_mode:
 			return
+		await _drain_advance_input()
 		_active_line_channel = "DIALOGUE"
 		_dialogue_ui.set_advance_waiting(true)
 		_set_advance_hint(true)
@@ -519,6 +521,8 @@ func _run_module(event: Dictionary) -> void:
 		_failures.append("婚礼模块场景无法加载：%s" % scene_path)
 		return
 	var instance := packed.instantiate()
+	if instance.has_method("setup"):
+		instance.call("setup", str(event.get("checklist_variant", "")))
 	_module_host.add_child(instance)
 	_module_host.visible = true
 	# 用协程而不是信号：verify 模式下模块可能在 _ready 里就跑完了，
@@ -530,6 +534,19 @@ func _run_module(event: Dictionary) -> void:
 	_module_host.visible = false
 	if is_instance_valid(instance):
 		instance.queue_free()
+	if not _verify_mode:
+		await _drain_advance_input()
+
+
+func _drain_advance_input() -> void:
+	_active_line_channel = ""
+	if _narration_ui != null:
+		_narration_ui.set_advance_waiting(false)
+	if _dialogue_ui != null:
+		_dialogue_ui.set_advance_waiting(false)
+	_set_advance_hint(false)
+	for _i in range(8):
+		await get_tree().process_frame
 
 
 func _brief_pause() -> void:
