@@ -9,12 +9,15 @@ const NarrationUIScript := preload("res://scripts/narration_ui.gd")
 const DialogueUIScript := preload("res://scripts/dialogue_ui.gd")
 const MysticNightDataScript := preload("res://scripts/mystic_night_data.gd")
 const WeddingDataScript := preload("res://scripts/wedding_data.gd")
+const Chapter3DataScript := preload("res://scripts/chapter3_data.gd")
 const StoryDataScript := preload("res://scripts/story_data.gd")
 const DevJumpPanelScript := preload("res://scripts/dev_jump_panel.gd")
 const ChapterTransitionScript := preload("res://scripts/chapter_transition.gd")
+const UiTypographyScript := preload("res://scripts/ui_typography.gd")
 
 const FOREST_MAIN_SCENE := "res://main.tscn"
 const WEDDING_PROLOGUE_SCENE := "res://scenes/wedding/wedding_prologue.tscn"
+const CHAPTER3_SCENE := "res://scenes/chapter3/chapter3.tscn"
 const MYSTIC_NIGHT_SCENE := "res://scenes/mystic_night/mystic_night.tscn"
 const DEV_JUMP_CHAPTER_ID := "mystic_night"
 const FONT_PRIMARY_NAME := "Times New Roman"
@@ -71,6 +74,7 @@ var _dev_jump_requested_source := 0
 var _dev_jump_actual_source := 0
 var _dev_jump_overlay
 
+var _typography: UiTypographyScript
 var _primary_font: SystemFont
 var _cjk_fallback_font: SystemFont
 var _root_bg: ColorRect
@@ -116,18 +120,11 @@ func _ready() -> void:
 
 
 func _configure_typography() -> void:
-	_cjk_fallback_font = SystemFont.new()
-	_cjk_fallback_font.font_names = PackedStringArray(["SimSun", "NSimSun", "宋体", "新宋体"])
-	_cjk_fallback_font.allow_system_fallback = false
+	_typography = UiTypographyScript.new()
+	_cjk_fallback_font = _typography.cjk_fallback
+	_primary_font = _typography.body
 
-	_primary_font = SystemFont.new()
-	_primary_font.font_names = PackedStringArray([FONT_PRIMARY_NAME])
-	_primary_font.allow_system_fallback = false
-	var fallback_chain: Array[Font] = [_cjk_fallback_font]
-	_primary_font.fallbacks = fallback_chain
-
-	var app_theme := Theme.new()
-	app_theme.default_font = _primary_font
+	var app_theme := _typography.theme
 	app_theme.default_font_size = 18
 	theme = app_theme
 

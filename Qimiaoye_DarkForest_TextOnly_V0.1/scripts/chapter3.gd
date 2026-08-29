@@ -12,6 +12,7 @@ const Chapter3StageScript := preload("res://scenes/chapter3/chapter3_stage.gd")
 const MysticNightDataScript := preload("res://scripts/mystic_night_data.gd")
 const DevJumpPanelScript := preload("res://scripts/dev_jump_panel.gd")
 const ChapterTransitionScript := preload("res://scripts/chapter_transition.gd")
+const UiTypographyScript := preload("res://scripts/ui_typography.gd")
 
 const CHAPTER_ID := "chapter3"
 const CHAPTER_SCENE := "res://scenes/chapter3/chapter3.tscn"
@@ -48,6 +49,7 @@ var _narration_ui
 var _dialogue_ui
 var _advance_hint: Label
 
+var _typography: UiTypographyScript
 var _primary_font: SystemFont
 var _cjk_fallback_font: SystemFont
 
@@ -88,17 +90,11 @@ func _parse_choice_arg() -> String:
 
 
 func _configure_typography() -> void:
-    _cjk_fallback_font = SystemFont.new()
-    _cjk_fallback_font.font_names = PackedStringArray(["SimSun", "NSimSun", "宋体", "新宋体"])
-    _cjk_fallback_font.allow_system_fallback = false
+    _typography = UiTypographyScript.new()
+    _cjk_fallback_font = _typography.cjk_fallback
+    _primary_font = _typography.body
 
-    _primary_font = SystemFont.new()
-    _primary_font.font_names = PackedStringArray([FONT_PRIMARY_NAME])
-    _primary_font.allow_system_fallback = false
-    _primary_font.fallbacks = [_cjk_fallback_font]
-
-    var app_theme := Theme.new()
-    app_theme.default_font = _primary_font
+    var app_theme := _typography.theme
     app_theme.default_font_size = 18
     theme = app_theme
 

@@ -1,6 +1,8 @@
 extends CanvasLayer
 class_name ChapterTransition
 
+const UiTypographyScript := preload("res://scripts/ui_typography.gd")
+
 const NODE_NAME := "ChapterTransition"
 const LOADING_TEXT := "Where She Longs"
 const FADE_TO_BLACK_SECONDS := 0.72
@@ -76,10 +78,7 @@ func _build_ui() -> void:
 	_loading_label.add_theme_color_override("font_color", Color(0.91, 0.92, 0.94, 1.0))
 	_loading_label.add_theme_constant_override("outline_size", 6)
 	_loading_label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.72))
-	var title_font := SystemFont.new()
-	title_font.font_names = PackedStringArray(["Times New Roman", "Georgia"])
-	title_font.allow_system_fallback = true
-	_loading_label.add_theme_font_override("font", title_font)
+	_loading_label.add_theme_font_override("font", UiTypographyScript.new().display)
 	_loading_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_loading_label.modulate.a = 0.0
 	_loading_label.z_index = 1

@@ -14,6 +14,7 @@ const WeddingDataScript := preload("res://scripts/wedding_data.gd")
 const MysticNightDataScript := preload("res://scripts/mystic_night_data.gd")
 const InnerObjectsStageScript := preload("res://scripts/inner_objects_stage.gd")
 const ChapterTransitionScript := preload("res://scripts/chapter_transition.gd")
+const UiTypographyScript := preload("res://scripts/ui_typography.gd")
 const RUNTIME_LOG_PATH := "user://logs/runtime.log"
 const TRACE_LOG_PATH := "user://logs/trace_steps.log"
 const ENGINE_LOG_PATH := "user://logs/godot.log"
@@ -61,6 +62,7 @@ const ALLOWED_MODULE_IMAGE_ROOTS := [
 	"res://assets/inner_objects/",
 	"res://assets/wedding/",
 	"res://addons/hand_checkbox_gesture/assets/",
+	"res://assets/opening/",
 ]
 
 var _events: Array[Dictionary] = []
@@ -136,6 +138,7 @@ var _module_output_size := Vector2i.ZERO
 var _module_render_size := MODULE_VIEW_SIZE
 var _module_pointer_inside := false
 var _module_pointer_captured := false
+var _typography: UiTypographyScript
 var _primary_font: SystemFont
 var _cjk_fallback_font: SystemFont
 
@@ -240,18 +243,11 @@ func _ready() -> void:
 
 
 func _configure_typography() -> void:
-	_cjk_fallback_font = SystemFont.new()
-	_cjk_fallback_font.font_names = PackedStringArray(["SimSun", "NSimSun", "宋体", "新宋体"])
-	_cjk_fallback_font.allow_system_fallback = false
+	_typography = UiTypographyScript.new()
+	_cjk_fallback_font = _typography.cjk_fallback
+	_primary_font = _typography.body
 
-	_primary_font = SystemFont.new()
-	_primary_font.font_names = PackedStringArray([FONT_PRIMARY_NAME])
-	_primary_font.allow_system_fallback = false
-	var fallback_chain: Array[Font] = [_cjk_fallback_font]
-	_primary_font.fallbacks = fallback_chain
-
-	var app_theme := Theme.new()
-	app_theme.default_font = _primary_font
+	var app_theme := _typography.theme
 	app_theme.default_font_size = 18
 	theme = app_theme
 
@@ -268,7 +264,8 @@ func _build_ui() -> void:
 	_scene_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_scene_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_scene_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_scene_label.add_theme_font_size_override("font_size", 46)
+	_scene_label.add_theme_font_override("font", _typography.ui)
+	_scene_label.add_theme_font_size_override("font_size", 44)
 	_scene_label.add_theme_color_override("font_color", Color(0.88, 0.91, 0.95, 0.82))
 	_scene_label.text = "环境背景图0"
 	_scene_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
