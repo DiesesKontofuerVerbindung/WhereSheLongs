@@ -347,7 +347,7 @@ static func get_events() -> Array[Dictionary]:
 		{"type": "line", "source": 357, "speaker": "旁白", "text": "女孩没有回答。"},
 		{"type": "line", "source": 358, "speaker": "旁白", "text": "不稳定的世界开始震动，小凌被晃得松开了女孩的手。"},
 		{"type": "scene", "source": 359, "name": "剧情图-两个手松开的特写"},
-		{"type": "module", "source": 360, "id": "BlinkInteraction", "scene": "res://modules/blink_interaction/blink_interaction.tscn", "completion_signal": "finished"},
+		# 交付流程关闭眨眼门控：source 359 后直接继续到 362。
 		{"type": "line", "source": 362, "speaker": "小凌（很着急地）", "text": "什么时候？在哪儿见过？"},
 		{"type": "line", "source": 363, "speaker": "旁白", "text": "女孩没有回答。"},
 		{"type": "effect", "source": 364, "id": "world_shake", "status": "整个世界持续摇晃；动作状态失稳，小凌伸手但未抓住女孩。"},
@@ -382,5 +382,4 @@ static func required_module_hooks() -> PackedStringArray:
 		"LakeJump",
 		"StarJar",
 		"HandInspect",
-		"BlinkInteraction",
 	])

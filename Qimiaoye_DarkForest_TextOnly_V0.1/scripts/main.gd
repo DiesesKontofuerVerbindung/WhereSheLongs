@@ -58,7 +58,6 @@ const EXPECTED_MODULE_BINDINGS := {
 	"TextInput": {"source": 157, "type": "module", "scene": "res://levels/minigames/text_input.tscn", "signal": "finished"},
 	"LakeJump": {"source": 193, "type": "module", "scene": "res://levels/river_jump.tscn", "signal": "finished"},
 	"StarJar": {"source": 238, "type": "module", "scene": "res://levels/minigames/firefly_bottle.tscn", "signal": "finished"},
-	"BlinkInteraction": {"source": 360, "type": "module", "scene": "res://modules/blink_interaction/blink_interaction.tscn", "signal": "finished"},
 }
 const ALLOWED_MODULE_IMAGE_ROOTS := [
 	"res://assets/scene/",
@@ -130,6 +129,7 @@ var _interaction_prompt: Label
 var _progress: ProgressBar
 var _light_button: Button
 var _action_button: Button
+var _endpoint_button: Button
 var _dark_overlay: ColorRect
 var _vfx: Control
 var _story_stage
@@ -632,6 +632,24 @@ func _build_interaction_panel() -> void:
 	_action_button.pressed.connect(_on_action_button_pressed)
 	_action_button.visible = false
 	canvas.add_child(_action_button)
+
+	_endpoint_button = Button.new()
+	_endpoint_button.name = "EndpointContinueButton"
+	_endpoint_button.position = UiPanelSkinScript.BUTTON_RECT.position - UiPanelSkinScript.PANEL_RECT.position
+	_endpoint_button.size = UiPanelSkinScript.BUTTON_RECT.size
+	_endpoint_button.text = "继续"
+	_endpoint_button.custom_minimum_size = UiPanelSkinScript.BUTTON_RECT.size
+	_endpoint_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_endpoint_button.add_theme_font_override("font", _typography.ui)
+	_endpoint_button.add_theme_font_size_override("font_size", 22)
+	_endpoint_button.add_theme_color_override("font_color", Color.WHITE)
+	_endpoint_button.add_theme_color_override("font_hover_color", Color.WHITE)
+	_endpoint_button.add_theme_color_override("font_pressed_color", Color.WHITE)
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		_endpoint_button.add_theme_stylebox_override(state, UiPanelSkinScript.button_style())
+	_endpoint_button.pressed.connect(_on_endpoint_continue_pressed)
+	_endpoint_button.visible = false
+	canvas.add_child(_endpoint_button)
 
 
 func _build_diagnostic_panel() -> void:
@@ -1599,10 +1617,6 @@ func _run_embedded_module(event: Dictionary, is_placeholder: bool) -> void:
 		_record_module_failure(module_id, source, "LakeJump 根节点必须是 Node2D")
 	if module_id == "StarJar" and not module_instance is Control:
 		_record_module_failure(module_id, source, "StarJar 根节点必须是 Control")
-	if module_id == "BlinkInteraction" and not module_instance is Control:
-		_record_module_failure(module_id, source, "BlinkInteraction 根节点必须是 Control")
-	elif module_id == "BlinkInteraction" and (not module_instance.has_method("verify_contract") or not bool(module_instance.call("verify_contract"))):
-		_record_module_failure(module_id, source, "BlinkInteraction 遮罩、闭眼节奏或单次完成契约不完整")
 	if module_id == "TextInput":
 		if not module_instance is Control:
 			_record_module_failure(module_id, source, "TextInput 根节点必须是 Control")
@@ -2093,6 +2107,7 @@ func _show_fatal(text: String) -> void:
 	_progress.visible = false
 	_light_button.visible = false
 	_action_button.visible = false
+	_endpoint_button.visible = false
 	_status(text)
 
 
@@ -2136,7 +2151,31 @@ func _complete_story() -> void:
 		else:
 			for issue in runtime_errors:
 				_log_runtime("COMPLETE_ERROR %s" % issue)
-		ChapterTransitionScript.begin(get_tree(), CHAPTER3_SCENE)
+		_show_endpoint_continue()
+
+
+func _show_endpoint_continue() -> void:
+	_interaction_panel.visible = true
+	_interaction_prompt.text = "黑暗森林章节在此结束
+
+即将进入 章节三 · 典礼上的选择…"
+	_progress.visible = false
+	_light_button.visible = false
+	_action_button.visible = false
+	_endpoint_button.visible = true
+	_endpoint_button.disabled = false
+	_endpoint_button.grab_focus()
+	_status("章节结束，等待玩家点击继续")
+	_log_runtime("ENDPOINT_CONTINUE_READY target=%s" % CHAPTER3_SCENE)
+
+
+func _on_endpoint_continue_pressed() -> void:
+	if _endpoint_button == null or _endpoint_button.disabled:
+		return
+	_endpoint_button.disabled = true
+	_interaction_panel.visible = false
+	_log_runtime("ENDPOINT_CONTINUE_PRESSED target=%s" % CHAPTER3_SCENE)
+	ChapterTransitionScript.begin(get_tree(), CHAPTER3_SCENE)
 
 
 func _validate_module_render_contract() -> PackedStringArray:
@@ -2333,6 +2372,14 @@ func _validate_contract() -> PackedStringArray:
 		errors.append("交互提示未按画面中轴居中")
 	if _light_button.size_flags_horizontal != Control.SIZE_SHRINK_CENTER or _action_button.size_flags_horizontal != Control.SIZE_SHRINK_CENTER:
 		errors.append("交互按钮未按画面中轴居中")
+	if _endpoint_button == null:
+		errors.append("DOCX 366 缺少正常流程继续按钮")
+	elif _endpoint_button.visible:
+		errors.append("DOCX 366 继续按钮不应在启动时显示")
+	elif not _endpoint_button.pressed.is_connected(_on_endpoint_continue_pressed):
+		errors.append("DOCX 366 继续按钮未绑定章节转场")
+	if not ResourceLoader.exists(CHAPTER3_SCENE, "PackedScene"):
+		errors.append("DOCX 366 目标章节场景不存在：%s" % CHAPTER3_SCENE)
 	if theme == null or theme.default_font != _primary_font:
 		errors.append("全局字体未绑定天王星像素体")
 	if _typography == null or not _typography.body_uses_project_font():
@@ -2363,7 +2410,7 @@ func _validate_runtime_completion() -> PackedStringArray:
 			errors.append("全流程未经过模块 hook：%s" % module_id)
 		elif int(_module_run_counts.get(module_id, 0)) != 1:
 			errors.append("全流程模块 %s 执行次数异常：%d/1" % [module_id, int(_module_run_counts.get(module_id, 0))])
-	for required_source in [54, 122, 157, 193, 238, 308, 360, 366]:
+	for required_source in [54, 122, 157, 193, 238, 308, 366]:
 		if not _visited_sources.has(required_source):
 			errors.append("全流程未执行 DOCX 行：%d" % required_source)
 	if _module_active or (_module_host != null and _module_host.visible):
