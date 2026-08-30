@@ -1,4 +1,4 @@
-# 奇妙夜：她所向之处
+# Where She Longs
 
 本仓库包含完整 Godot 4.7.2 游戏源码。主工程位于 [`Qimiaoye_DarkForest_TextOnly_V0.1/`](Qimiaoye_DarkForest_TextOnly_V0.1/)，详细操作、导出、日志与故障排查请阅读[工程 README](Qimiaoye_DarkForest_TextOnly_V0.1/README.md)。
 
@@ -6,7 +6,7 @@
 
 ### 直接运行测试版
 
-使用 `releases/windows/Gespielt-Submission.exe`，双击即可启动。该大文件通过 Git LFS 管理，克隆源码时请确保已安装 Git LFS。Windows SmartScreen 首次提示时，请在确认文件来源后选择“更多信息”→“仍要运行”。
+使用 `releases/windows/Where She Longs.exe`，双击即可启动。该大文件通过 Git LFS 管理，克隆源码时请确保已安装 Git LFS。Windows SmartScreen 首次提示时，请在确认文件来源后选择“更多信息”→“仍要运行”。
 
 ### 从源码运行
 

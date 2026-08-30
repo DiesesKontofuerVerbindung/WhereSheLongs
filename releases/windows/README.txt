@@ -1,8 +1,8 @@
-奇妙夜：她所向之处 — Windows 提交版
+Where She Longs — Windows 提交版
 
 运行方式
 1. 解压整个 ZIP。
-2. 双击 Gespielt-Submission.exe。
+2. 双击 Where She Longs.exe。
 3. 如果 Windows SmartScreen 提示，请在确认文件来源后选择“更多信息”→“仍要运行”。
 4. 第一次启动可能需要等待资源加载，请勿连续重复启动。
 

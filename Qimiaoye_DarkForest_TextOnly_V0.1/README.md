@@ -1,17 +1,17 @@
-# 奇妙夜：她所向之处
+# Where She Longs
 
 Godot 4.7.2 剧情游戏工程，包含婚礼前夜、奇妙夜、黑暗森林、章节三与结局流程，以及 ForestRun、TextInput、LakeJump、StarJar 等玩法模块。
 
 ## 获取内容
 
-- Windows 提交版：`releases/windows/Gespielt-Submission.exe`（位于仓库根目录，通过 Git LFS 管理）。
+- Windows 提交版：`releases/windows/Where She Longs.exe`（位于仓库根目录，通过 Git LFS 管理）。
 - 完整 Godot 工程：`Qimiaoye_DarkForest_TextOnly_V0.1/`。
 - Windows Godot 4.7.2 引擎：`tools/godot/windows/Godot_v4.7.2-stable_win64.zip`。
 - macOS 不使用 Windows EXE；请按下方说明用 macOS 版 Godot 4.7.2 打开源码。
 
 ## Windows：直接玩 EXE
 
-1. 获取仓库根目录的 `releases/windows/Gespielt-Submission.exe`，或使用桌面提交 ZIP；预留至少 2 GB 空间。通过 Git 克隆时需要先安装 Git LFS。
+1. 获取仓库根目录的 `releases/windows/Where She Longs.exe`，或使用桌面提交 ZIP；预留至少 2 GB 空间。通过 Git 克隆时需要先安装 Git LFS。
 2. 双击运行。第一次启动可能需要等待一段时间加载资源。
 3. 如果 Windows SmartScreen 拦截，确认文件来源后选择“更多信息”→“仍要运行”。
 4. 游戏存档和日志位于：
@@ -93,7 +93,7 @@ $godot = ".\tools\godot\windows\Godot_v4.7.2-stable_win64\Godot_v4.7.2-stable_wi
 & $godot --headless `
   --path ".\Qimiaoye_DarkForest_TextOnly_V0.1" `
   --export-release "Gespielt Windows" `
-  ".\Gespielt.exe"
+  ".\Where She Longs.exe"
 ```
 
 macOS 导出包需要在 macOS 版 Godot 中安装 Export Templates，并在 **Project → Export** 中新增 macOS preset；当前仓库固定提供的是 Windows export preset。
