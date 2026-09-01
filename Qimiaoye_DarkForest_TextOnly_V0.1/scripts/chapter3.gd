@@ -16,6 +16,7 @@ const UiTypographyScript := preload("res://scripts/ui_typography.gd")
 
 const CHAPTER_ID := "chapter3"
 const CHAPTER_SCENE := "res://scenes/chapter3/chapter3.tscn"
+const OPENING_SCENE := "res://scenes/opening/opening.tscn"
 const MYSTIC_NIGHT_SCENE := "res://scenes/mystic_night/mystic_night.tscn"
 const FONT_PRIMARY_NAME := "Uranus Pixel"
 const FONT_CJK_FALLBACK_NAME := "SimSun"
@@ -339,7 +340,8 @@ func _run_events() -> void:
     if _integrated:
         # 集成模式下由宿主接管后续流程，不能切换宿主场景。
         return
-    ChapterTransitionScript.begin(get_tree(), MYSTIC_NIGHT_SCENE)
+    # 最终婚礼 Demo 完成后回到开始游戏界面，结束本轮主流程。
+    ChapterTransitionScript.begin(get_tree(), OPENING_SCENE)
 
 
 func _run_event(event: Dictionary) -> void:
