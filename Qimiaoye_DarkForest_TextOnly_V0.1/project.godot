@@ -94,3 +94,7 @@ pause={
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/default_filters/use_nearest_mipmap_filter=false
+; macOS universal / arm64 导出强制要求：Godot 在 has_valid_project_configuration
+; 里检查这个项目设置，关着就直接拒绝导出。Windows preset 仍只带 s3tc_bptc，
+; 打开它不会改变 Windows 包的内容。
+textures/vram_compression/import_etc2_astc=true
