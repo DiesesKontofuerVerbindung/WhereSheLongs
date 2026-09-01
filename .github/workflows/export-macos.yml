@@ -80,7 +80,7 @@ jobs:
             "$GODOT_BIN" --headless --path "$PROJECT_DIR" "$scene" \
               > "tmp/codex_logs/pretest_$tag.log" 2>&1 || code=$?
             if [ "$code" -ne 0 ] || ! grep -q "$marker" "tmp/codex_logs/pretest_$tag.log"; then
-              echo "::error::$tag 失败（exit=$code，缺 $marker）"
+              echo "::error::${tag} 失败（exit=${code}，缺 ${marker}）"
               tail -40 "tmp/codex_logs/pretest_$tag.log"
               exit 1
             fi

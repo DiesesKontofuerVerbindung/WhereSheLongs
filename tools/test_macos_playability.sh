@@ -131,7 +131,7 @@ if [ -x "$EXE" ]; then
 	run_with_timeout 300 "$LOG_DIR/macos_app_opening_verify.log" "$EXE" --headless -- --verify
 	APP_CODE=$?
 	if [ "$APP_CODE" -ne 0 ]; then
-		fail "打包 App 启动失败（exit=$APP_CODE，见 $LOG_DIR/macos_app_opening_verify.log）"
+		fail "打包 App 启动失败（exit=${APP_CODE}，见 ${LOG_DIR}/macos_app_opening_verify.log）"
 	fi
 	grep -q "OPENING_PASS" "$LOG_DIR/macos_app_opening_verify.log" \
 		|| fail "打包 App 没有输出 OPENING_PASS（见 $LOG_DIR/macos_app_opening_verify.log）"
@@ -145,10 +145,10 @@ run_scene_verify() {
 		"$GODOT" --headless --path "$PROJECT" --resolution 1280x720 "$scene" -- --verify
 	local code=$?
 	if [ "$code" -ne 0 ]; then
-		fail "$tag 验证退出码 $code（见 $log）"
+		fail "${tag} 验证退出码 ${code}（见 ${log}）"
 		return
 	fi
-	grep -q "$marker" "$log" || fail "$tag 验证没有输出 $marker（见 $log）"
+	grep -q "$marker" "$log" || fail "${tag} 验证没有输出 ${marker}（见 ${log}）"
 }
 
 run_scene_verify opening  "res://scenes/opening/opening.tscn"          OPENING_PASS          300
@@ -164,11 +164,11 @@ run_with_timeout 300 "$ISO_LOG" \
 	"$GODOT" --headless --path "$PROJECT" res://tests/camera_unavailable_isolation_test.tscn
 ISO_CODE=$?
 if [ "$ISO_CODE" -ne 0 ]; then
-	fail "无摄像头隔离测试退出码 $ISO_CODE（见 $ISO_LOG）"
+	fail "无摄像头隔离测试退出码 ${ISO_CODE}（见 ${ISO_LOG}）"
 fi
 ISO_PASS_COUNT=$(grep -c "CAMERA_UNAVAILABLE_ISOLATION_PASS" "$ISO_LOG" | tr -d ' ')
 if [ "$ISO_PASS_COUNT" != "1" ]; then
-	fail "无摄像头隔离测试没有输出唯一的 CAMERA_UNAVAILABLE_ISOLATION_PASS（命中 $ISO_PASS_COUNT 次，见 $ISO_LOG）"
+	fail "无摄像头隔离测试没有输出唯一的 CAMERA_UNAVAILABLE_ISOLATION_PASS（命中 ${ISO_PASS_COUNT} 次，见 ${ISO_LOG}）"
 fi
 
 # -------------------------------------------------------------------- 汇总
