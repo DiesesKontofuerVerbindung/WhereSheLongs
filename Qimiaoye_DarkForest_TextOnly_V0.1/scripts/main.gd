@@ -2330,7 +2330,6 @@ func _complete_story() -> void:
 		else:
 			for issue in runtime_errors:
 				_log_runtime("COMPLETE_ERROR %s" % issue)
-		ChapterTransitionScript.begin(get_tree(), CHAPTER3_SCENE)
 
 
 ## 森林正片结束时切到最终章 章节三 · 典礼上的选择（source 916 起）。
@@ -2338,7 +2337,8 @@ func _complete_story() -> void:
 func _advance_to_chapter3() -> void:
 	var delay := 0.3 if _blink_endpoint_used else 2.0
 	await get_tree().create_timer(delay).timeout
-	get_tree().change_scene_to_file(CHAPTER3_SCENE)
+	# 只走一次统一章节过渡，避免 Chapter 3 被重复初始化。
+	ChapterTransitionScript.begin(get_tree(), CHAPTER3_SCENE)
 
 
 func _validate_module_render_contract() -> PackedStringArray:
