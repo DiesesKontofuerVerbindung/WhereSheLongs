@@ -26,24 +26,28 @@ jobs:
             tools/godot/windows
           sparse-checkout-cone-mode: false
 
-      - name: Verify source commit and project
+      - name: Verify fixed story flow
         shell: powershell
         run: |
-          git rev-parse HEAD
           $project = "Qimiaoye_DarkForest_TextOnly_V0.1"
           if (-not (Test-Path "$project/project.godot")) { throw "project.godot missing" }
           if (-not (Test-Path "$project/export_presets.cfg")) { throw "export_presets.cfg missing" }
-          Select-String -Path "$project/scripts/chapter3.gd" -Pattern 'ChapterTransitionScript.begin\(get_tree\(\), OPENING_SCENE\)' | Out-Host
-          Select-String -Path "$project/scripts/main.gd" -Pattern 'ChapterTransitionScript.begin\(get_tree\(\), CHAPTER3_SCENE\)' | Out-Host
+          $chapter3 = Get-Content "$project/scripts/chapter3.gd" -Raw
+          $main = Get-Content "$project/scripts/main.gd" -Raw
+          if ($chapter3 -notmatch 'ChapterTransitionScript\.begin\(get_tree\(\), OPENING_SCENE\)') { throw "Chapter3 does not return to opening" }
+          $count = ([regex]::Matches($main, 'ChapterTransitionScript\.begin\(get_tree\(\), CHAPTER3_SCENE\)')).Count
+          if ($count -ne 1) { throw "Expected exactly one Forest -> Chapter3 transition, got $count" }
+          Write-Host "FLOW_OK Wedding Eve -> Mystic Night -> Forest -> Chapter3 -> Opening"
 
-      - name: Extract Godot 4.7.2
+      - name: Extract Godot 4.7.2 console binary
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force -Path .godot-bin | Out-Null
           Expand-Archive -Path "tools/godot/windows/Godot_v4.7.2-stable_win64.zip" -DestinationPath .godot-bin -Force
-          $godot = Get-ChildItem .godot-bin -Filter "Godot_v4.7.2-stable_win64.exe" -Recurse | Select-Object -First 1
-          if ($null -eq $godot) { throw "Godot 4.7.2 executable not found" }
+          $godot = Get-ChildItem .godot-bin -Filter "Godot_v4.7.2-stable_win64_console.exe" -Recurse | Select-Object -First 1
+          if ($null -eq $godot) { throw "Godot 4.7.2 console executable not found" }
           & $godot.FullName --version
+          if ($LASTEXITCODE -ne 0) { throw "Godot console version check failed: $LASTEXITCODE" }
           "GODOT_EXE=$($godot.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Download and install Godot 4.7.2 export templates
