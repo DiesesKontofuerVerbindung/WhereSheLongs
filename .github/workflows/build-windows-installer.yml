@@ -1,0 +1,76 @@
+name: Build Windows Offline Installer
+
+on:
+  push:
+    branches:
+      - codex/20260901-windows-installer
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-installer:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository with Git LFS
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 1
+
+      - name: Pull game executable from Git LFS
+        shell: powershell
+        run: |
+          git lfs pull --include="releases/windows/Where She Longs.exe"
+          $exe = "releases/windows/Where She Longs.exe"
+          if (-not (Test-Path $exe)) {
+            throw "Game executable is missing: $exe"
+          }
+          $size = (Get-Item $exe).Length
+          if ($size -lt 1000000000) {
+            throw "Game executable is only $size bytes; Git LFS content was not materialized."
+          }
+          $expected = "2bf4fc1e415ef7286e890e50154078e563985b6b82976cd48b0f3016ecc1e8b5"
+          $actual = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) {
+            throw "Game executable SHA256 mismatch. Expected $expected, got $actual"
+          }
+          Write-Host "Game executable verified: $size bytes"
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: |
+          choco install innosetup -y --no-progress
+
+      - name: Compile single-file installer
+        shell: powershell
+        run: |
+          $iscc = Get-ChildItem `
+            "C:\Program Files (x86)\Inno Setup*\ISCC.exe", `
+            "C:\Program Files\Inno Setup*\ISCC.exe" `
+            -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($null -eq $iscc) {
+            throw "ISCC.exe not found after Inno Setup installation."
+          }
+          & $iscc.FullName "installer\WhereSheLongs.iss"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Inno Setup compilation failed with exit code $LASTEXITCODE"
+          }
+          $setup = "dist/windows/WhereSheLongs-Setup-1.3.17.exe"
+          if (-not (Test-Path $setup)) {
+            throw "Installer output missing: $setup"
+          }
+          Write-Host "Installer built: $setup"
+          Get-Item $setup | Format-List Name,Length,FullName
+
+      - name: Upload ready-to-run installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: WhereSheLongs-Setup-1.3.17
+          path: dist/windows/WhereSheLongs-Setup-1.3.17.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
