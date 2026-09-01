@@ -46,20 +46,45 @@ jobs:
           & $godot.FullName --version
           "GODOT_EXE=$($godot.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Install Godot 4.7.2 export templates
+      - name: Fetch only Windows x64 export templates
         shell: powershell
         run: |
-          $url = "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz"
-          Invoke-WebRequest -Uri $url -OutFile godot_export_templates.tpz
-          New-Item -ItemType Directory -Force -Path .templates-unpack | Out-Null
-          & 7z x godot_export_templates.tpz "-o.templates-unpack" -y | Out-Host
-          if (-not (Test-Path ".templates-unpack/templates/windows_release_x86_64.exe")) {
-            throw "Windows release export template missing"
-          }
-          $target = Join-Path $env:APPDATA "Godot/export_templates/4.7.2.stable"
-          New-Item -ItemType Directory -Force -Path $target | Out-Null
-          Copy-Item ".templates-unpack/templates/*" $target -Recurse -Force
-          Get-ChildItem $target | Select-Object Name,Length | Out-Host
+          py -m pip install --disable-pip-version-check --quiet remotezip
+          @'
+          import os, shutil
+          from pathlib import Path
+          from remotezip import RemoteZip
+
+          url = "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz"
+          wanted = [
+              "templates/version.txt",
+              "templates/windows_debug_x86_64.exe",
+              "templates/windows_debug_x86_64_console.exe",
+              "templates/windows_release_x86_64.exe",
+              "templates/windows_release_x86_64_console.exe",
+          ]
+          target = Path(os.environ["APPDATA"]) / "Godot" / "export_templates" / "4.7.2.stable"
+          target.mkdir(parents=True, exist_ok=True)
+
+          with RemoteZip(url) as archive:
+              available = set(archive.namelist())
+              missing = [name for name in wanted if name not in available]
+              if missing:
+                  raise SystemExit(f"Missing template entries: {missing}")
+              for name in wanted:
+                  out = target / Path(name).name
+                  print(f"Fetching {name} -> {out}")
+                  with archive.open(name) as src, out.open("wb") as dst:
+                      shutil.copyfileobj(src, dst, length=8 * 1024 * 1024)
+                  print(f"  {out.name}: {out.stat().st_size} bytes")
+
+          release = target / "windows_release_x86_64.exe"
+          if not release.exists() or release.stat().st_size < 10_000_000:
+              raise SystemExit("Windows release template missing or too small")
+          print("Windows x64 export templates ready")
+          '@ | Set-Content -Path fetch_templates.py -Encoding UTF8
+          py fetch_templates.py
+          if ($LASTEXITCODE -ne 0) { throw "Selective template fetch failed" }
 
       - name: Import project resources headlessly
         shell: powershell
@@ -77,8 +102,11 @@ jobs:
           if (-not (Test-Path $out)) { throw "Exported EXE missing" }
           $item = Get-Item $out
           if ($item.Length -lt 100000000) { throw "Exported EXE suspiciously small: $($item.Length) bytes" }
-          $header = [System.IO.File]::ReadAllBytes($out)[0..1]
-          if ($header[0] -ne 0x4D -or $header[1] -ne 0x5A) { throw "Exported file is not a Windows PE/MZ executable" }
+          $stream = [System.IO.File]::OpenRead($out)
+          try {
+            $b0 = $stream.ReadByte(); $b1 = $stream.ReadByte()
+          } finally { $stream.Dispose() }
+          if ($b0 -ne 0x4D -or $b1 -ne 0x5A) { throw "Exported file is not a Windows PE/MZ executable" }
           $hash = (Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "EXPORT_OK size=$($item.Length) sha256=$hash"
           "EXPORT_SHA256=$hash" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
@@ -135,12 +163,30 @@ jobs:
           compression-level: 0
           retention-days: 30
 
-      - name: Upload connector-sized parts
+      - name: Upload connector-sized part 1
         uses: actions/upload-artifact@v4
         with:
-          name: WhereSheLongs-Windows-Fixed-Parts
+          name: WhereSheLongs-Windows-Part1
+          path: export/WhereSheLongs-Windows.part01
+          compression-level: 0
+          retention-days: 7
+
+      - name: Upload connector-sized part 2
+        uses: actions/upload-artifact@v4
+        with:
+          name: WhereSheLongs-Windows-Part2
+          path: export/WhereSheLongs-Windows.part02
+          compression-level: 0
+          retention-days: 7
+
+      - name: Upload remaining connector-sized parts
+        uses: actions/upload-artifact@v4
+        with:
+          name: WhereSheLongs-Windows-Remaining-Parts
           path: |
-            export/WhereSheLongs-Windows.part*
+            export/WhereSheLongs-Windows.part03
+            export/WhereSheLongs-Windows.part04
             export/EXPORT-MANIFEST.txt
+          if-no-files-found: warn
           compression-level: 0
           retention-days: 7
