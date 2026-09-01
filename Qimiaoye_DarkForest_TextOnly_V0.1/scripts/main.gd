@@ -1279,27 +1279,23 @@ func _execute_event(event: Dictionary) -> void:
 			_status("[ENDPOINT] %s" % str(event.get("text", "")))
 			_log_runtime("ENDPOINT id=%s" % str(event.get("id", "")))
 		"blink_endpoint":
-			await _run_blink_endpoint(event)
+			_run_blink_endpoint(event)
 		_:
 			_preflight_errors.append("未知事件类型：%s" % kind)
 
 
-## 365 行之后的眨眼门：等 BlinkSystem 判定眨眼成功（摄像头，或按 F8），
-## 然后按 endpoint 收尾，由 _complete_story 直接切到最终章（章节三 source 916）。
+## 365 行之后的收尾：直接判定 endpoint，由 _complete_story 切到最终章
+## （章节三 source 916）。这里不再等待任何玩家输入。
+##
+## 原本这里等 BlinkSystem 的 blink_detected（摄像头眨眼，或按 F8）。那是一个无期限
+## await：没有摄像头、也不知道 F8 的玩家会永久停在森林结尾。眨眼门已按要求移除，
+## 事件类型保留为 blink_endpoint，只为让 _complete_story 走 0.3 秒的近无缝直切
+## （普通 endpoint 是 2.0 秒并弹结束面板）。
 func _run_blink_endpoint(event: Dictionary) -> void:
-	if not _verify_mode and not _dev_jump_active:
-		var blink_node = get_node_or_null("/root/BlinkSystem")
-		if blink_node != null and blink_node.has_signal("blink_detected"):
-			_status("[BLINK] 等待眨眼（或按 F8）…")
-			_log_runtime("BLINK_GATE_WAIT id=%s" % str(event.get("id", "")))
-			await blink_node.blink_detected
-			_log_runtime("BLINK_GATE_PASSED id=%s" % str(event.get("id", "")))
-		else:
-			push_warning("BlinkSystem 未启用，眨眼门直接放行。")
 	_endpoint_reached = true
 	_blink_endpoint_used = true
 	_status("[ENDPOINT] %s" % str(event.get("text", "")))
-	_log_runtime("ENDPOINT id=%s (via blink gate)" % str(event.get("id", "")))
+	_log_runtime("ENDPOINT id=%s (blink gate removed)" % str(event.get("id", "")))
 
 
 ## 处理 audio 事件。字段：

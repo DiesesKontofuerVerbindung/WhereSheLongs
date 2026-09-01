@@ -10,8 +10,10 @@ extends Node
 ## 覆盖不到真正的“没有摄像头”路径。测试会先自检这一点。
 ##
 ## 覆盖：
-##   1. BlinkSystem —— 没有 ws://127.0.0.1:8765 时不阻塞，F8 仍能发出 blink_detected
-##      （main.gd 的 blink_endpoint 门 `await blink_node.blink_detected` 只认这个信号）；
+##   1. BlinkSystem —— 它是 autoload，每帧都在轮询 WebSocket；没有检测服务时既不能
+##      报告已连接，也不能阻塞主循环，F8 调试兜底仍要能发出 blink_detected。
+##      （森林结尾 source 366 原本用这个信号做无期限门，门已移除；这条断言留作回归
+##      保护：以后谁再拿 blink_detected 当剧情门，至少兜底还在。）
 ##   2. InnerObjectsStage.arm_fan() —— 不拉起摄像头桥接器，有界发出 objects_cleared；
 ##   3. TextInput（DOCX 157）—— 普通模式下自动完成风扇清场并发出 finished；
 ##   4. WeddingChecklist —— 不启摄像头，run() 协程有界返回。
@@ -68,18 +70,18 @@ func _wait_until(predicate: Callable, deadline_seconds: float) -> bool:
 	return bool(predicate.call())
 
 
-## 1. 没有检测服务时的眨眼门。
+## 1. 没有检测服务时的 BlinkSystem。
 ##
-## 故意不 unlock()：main.gd 的门只 await `blink_detected`，而 BlinkSystem 在
-## `_on_detector_blink` 里先发信号、再交给 controller 判定，所以 LOCKED 状态下
-## F8 也必须能放行。顺带避免触发 controller 的空场景切换。
+## 故意不 unlock()：BlinkSystem 在 `_on_detector_blink` 里先发 `blink_detected`、
+## 再交给 controller 判定，所以 LOCKED 状态下 F8 也必须能发出信号。保持 LOCKED
+## 还能避免触发 controller 的空场景切换。
 func _verify_blink_gate_without_detector(failures: PackedStringArray) -> void:
 	var blink := get_node_or_null("/root/BlinkSystem")
 	if blink == null:
-		failures.append("BlinkSystem autoload 缺失：没有摄像头时眨眼门失去唯一兜底来源")
+		failures.append("BlinkSystem autoload 缺失：眨眼兜底来源不存在")
 		return
 	if not bool(blink.config.allow_debug_key_blink):
-		failures.append("allow_debug_key_blink=false：没有摄像头时 F8 兜底被关闭，眨眼门会永久阻塞")
+		failures.append("allow_debug_key_blink=false：没有摄像头时 F8 兜底被关闭")
 
 	# 检测服务不在时，WebSocket 轮询不得阻塞主循环，也不得报告已连接。
 	for _i in range(DETECTOR_SETTLE_FRAMES):
@@ -97,7 +99,7 @@ func _verify_blink_gate_without_detector(failures: PackedStringArray) -> void:
 	var fired := await _wait_until(func() -> bool: return _blink_fired, BLINK_DEADLINE)
 	blink.blink_detected.disconnect(_on_blink_detected)
 	if not fired:
-		failures.append("无摄像头时 F8 没有在 %.1fs 内发出 blink_detected，森林结尾眨眼门会永久卡死" % BLINK_DEADLINE)
+		failures.append("无摄像头时 F8 没有在 %.1fs 内发出 blink_detected，眨眼兜底已失效" % BLINK_DEADLINE)
 	blink.reset()
 
 
