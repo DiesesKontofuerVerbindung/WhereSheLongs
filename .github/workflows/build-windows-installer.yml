@@ -15,11 +15,16 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - name: Checkout repository with Git LFS
+      - name: Checkout installer inputs only
         uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
           fetch-depth: 1
+          sparse-checkout: |
+            .gitattributes
+            installer
+            releases/windows
+          sparse-checkout-cone-mode: false
 
       - name: Pull game executable from Git LFS
         shell: powershell
