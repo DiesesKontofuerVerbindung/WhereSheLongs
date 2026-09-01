@@ -1,0 +1,214 @@
+name: Rebuild Fixed Windows Fast
+
+on:
+  push:
+    branches:
+      - codex/20260901-rebuild-fixed-windows
+
+permissions:
+  contents: read
+
+jobs:
+  rebuild:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout fixed source
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+          fetch-depth: 1
+
+      - name: Pull project LFS assets but not old Windows EXE
+        shell: powershell
+        run: |
+          git lfs pull --exclude="releases/windows/Where She Longs.exe"
+          if (-not (Test-Path "Qimiaoye_DarkForest_TextOnly_V0.1/project.godot")) { throw "project.godot missing" }
+
+      - name: Fetch Godot 4.7.2 toolchain with curl
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $base = "https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable"
+          $engineZip = "$env:RUNNER_TEMP\godot.zip"
+          $templates = "$env:RUNNER_TEMP\templates.tpz"
+          curl.exe -L --fail --retry 5 --retry-delay 3 --connect-timeout 30 -o $engineZip "$base/Godot_v4.7.2-stable_win64.exe.zip"
+          if ($LASTEXITCODE -ne 0) { throw "Godot engine download failed" }
+          curl.exe -L --fail --retry 5 --retry-delay 3 --connect-timeout 30 -o $templates "$base/Godot_v4.7.2-stable_export_templates.tpz"
+          if ($LASTEXITCODE -ne 0) { throw "Godot templates download failed" }
+
+          $engineDir = "$env:RUNNER_TEMP\godot"
+          New-Item -ItemType Directory -Force $engineDir | Out-Null
+          Expand-Archive $engineZip -DestinationPath $engineDir -Force
+          $templateTmp = "$env:RUNNER_TEMP\template-extract"
+          New-Item -ItemType Directory -Force $templateTmp | Out-Null
+          tar -xf $templates -C $templateTmp
+          if ($LASTEXITCODE -ne 0) { throw "Template extraction failed" }
+          $dest = "$env:APPDATA\Godot\export_templates\4.7.2.stable"
+          New-Item -ItemType Directory -Force $dest | Out-Null
+          Copy-Item "$templateTmp\templates\*" $dest -Recurse -Force
+          if (-not (Test-Path "$dest\windows_release_x86_64.exe")) { throw "Windows release template missing" }
+
+          $godot = Get-ChildItem $engineDir -Filter "Godot_v4.7.2-stable_win64_console.exe" -Recurse -File | Select-Object -First 1
+          if (-not $godot) { $godot = Get-ChildItem $engineDir -Filter "Godot_v4.7.2-stable_win64.exe" -Recurse -File | Select-Object -First 1 }
+          if (-not $godot) { throw "Godot executable missing" }
+          "GODOT_EXE=$($godot.FullName)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          & $godot.FullName --version
+
+      - name: Verify all story chapters
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $project = (Resolve-Path "Qimiaoye_DarkForest_TextOnly_V0.1").Path
+          New-Item -ItemType Directory -Force qa-results | Out-Null
+          $checks = @(
+            @("opening","res://scenes/opening/opening.tscn","--verify"),
+            @("wedding","res://scenes/wedding/wedding_prologue.tscn","--verify"),
+            @("mystic","res://scenes/mystic_night/mystic_night.tscn","--verify"),
+            @("forest","res://main.tscn","--verify"),
+            @("chapter3-A","res://scenes/chapter3/chapter3.tscn","--verify","--choice=A"),
+            @("chapter3-B","res://scenes/chapter3/chapter3.tscn","--verify","--choice=B"),
+            @("chapter3-C","res://scenes/chapter3/chapter3.tscn","--verify","--choice=C")
+          )
+          $failed = $false
+          foreach ($c in $checks) {
+            $name = $c[0]; $scene = $c[1]; $extra = @($c[2..($c.Count-1)])
+            $stdout = "qa-results/$name.stdout.log"; $stderr = "qa-results/$name.stderr.log"
+            $args = @("--headless","--path",$project,"--scene",$scene,"--") + $extra
+            $p = Start-Process $env:GODOT_EXE -ArgumentList $args -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+            if (-not $p.WaitForExit(120000)) { try { $p.Kill() } catch {}; Write-Host "$name TIMEOUT"; $failed = $true; continue }
+            Write-Host "$name exit=$($p.ExitCode)"
+            if ($p.ExitCode -ne 0) { $failed = $true }
+          }
+          if ($failed) { throw "One or more chapter verification checks failed" }
+
+      - name: Export fresh fixed Windows EXE
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $project = (Resolve-Path "Qimiaoye_DarkForest_TextOnly_V0.1").Path
+          New-Item -ItemType Directory -Force fixed-build | Out-Null
+          $out = (Join-Path $PWD "fixed-build\Where She Longs.exe")
+          & $env:GODOT_EXE --headless --path $project --export-release "Gespielt Windows" $out
+          if ($LASTEXITCODE -ne 0) { throw "Godot export failed: $LASTEXITCODE" }
+          if (-not (Test-Path $out)) { throw "Fresh EXE missing" }
+          $size = (Get-Item $out).Length
+          if ($size -lt 100000000) { throw "Fresh EXE unexpectedly small: $size" }
+          $sha = (Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant()
+          "GAME_SIZE=$size" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          "GAME_SHA256=$sha" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Fresh EXE $size bytes SHA256=$sha"
+
+      - name: Smoke test exported EXE
+        shell: powershell
+        run: |
+          $exe = (Resolve-Path "fixed-build\Where She Longs.exe").Path
+          $p = Start-Process $exe -ArgumentList @("--headless","--verify") -PassThru -NoNewWindow -RedirectStandardOutput "qa-results/exported.stdout.log" -RedirectStandardError "qa-results/exported.stderr.log"
+          if (-not $p.WaitForExit(120000)) { try { $p.Kill() } catch {}; throw "Exported EXE smoke test timeout" }
+          if ($p.ExitCode -ne 0) { throw "Exported EXE smoke test failed: $($p.ExitCode)" }
+
+      - name: Build offline setup EXE
+        shell: powershell
+        run: |
+          choco install innosetup -y --no-progress
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup install failed" }
+          @'
+          #define MyAppName "Where She Longs"
+          #define MyAppVersion "1.3.18"
+          #define MyAppExeName "Where She Longs.exe"
+          [Setup]
+          AppId={{8D58C9D0-2874-4C5E-96A0-D8FE08E638A1}
+          AppName={#MyAppName}
+          AppVersion={#MyAppVersion}
+          DefaultDirName={autopf}\{#MyAppName}
+          DisableDirPage=no
+          DisableProgramGroupPage=yes
+          PrivilegesRequired=lowest
+          ArchitecturesAllowed=x64compatible
+          ArchitecturesInstallIn64BitMode=x64compatible
+          WizardStyle=modern
+          OutputDir=installer-output
+          OutputBaseFilename=WhereSheLongs-Setup-{#MyAppVersion}
+          Compression=lzma2
+          SolidCompression=yes
+          UseSetupLdr=yes
+          UninstallDisplayIcon={app}\{#MyAppExeName}
+          [Files]
+          Source: "fixed-build\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+          [Icons]
+          Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+          [Run]
+          Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
+          '@ | Set-Content fixed-installer.iss -Encoding UTF8
+          $iscc = Get-ChildItem "C:\Program Files (x86)\Inno Setup*\ISCC.exe", "C:\Program Files\Inno Setup*\ISCC.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $iscc) { throw "ISCC missing" }
+          & $iscc.FullName fixed-installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "Installer compile failed" }
+          $setup = "installer-output\WhereSheLongs-Setup-1.3.18.exe"
+          $size = (Get-Item $setup).Length
+          $sha = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+          "INSTALLER_SIZE=$size" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          "INSTALLER_SHA256=$sha" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Setup $size bytes SHA256=$sha"
+
+      - name: Split setup for ChatGPT handoff
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force handoff | Out-Null
+          $src = (Resolve-Path "installer-output\WhereSheLongs-Setup-1.3.18.exe").Path
+          $input = [IO.File]::OpenRead($src)
+          try {
+            $buf = New-Object byte[] 367001600
+            $i = 1
+            while (($read = $input.Read($buf,0,$buf.Length)) -gt 0) {
+              $file = "handoff\WhereSheLongs-Setup-1.3.18.part{0:D2}" -f $i
+              $o = [IO.File]::Create($file)
+              try { $o.Write($buf,0,$read) } finally { $o.Dispose() }
+              $i++
+            }
+          } finally { $input.Dispose() }
+          @("installer_size=$env:INSTALLER_SIZE","installer_sha256=$env:INSTALLER_SHA256","game_size=$env:GAME_SIZE","game_sha256=$env:GAME_SHA256","source_commit=$env:GITHUB_SHA") | Set-Content handoff\manifest.txt -Encoding UTF8
+          Get-ChildItem handoff | Format-Table Name,Length -AutoSize
+
+      - name: Upload full installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: WhereSheLongs-Setup-1.3.18-Fixed
+          path: installer-output/WhereSheLongs-Setup-1.3.18.exe
+          compression-level: 0
+          retention-days: 30
+
+      - name: Upload handoff part 1
+        uses: actions/upload-artifact@v4
+        with:
+          name: WhereSheLongs-1.3.18-Part1
+          path: |
+            handoff/WhereSheLongs-Setup-1.3.18.part01
+            handoff/manifest.txt
+          compression-level: 0
+          retention-days: 7
+
+      - name: Upload handoff part 2
+        uses: actions/upload-artifact@v4
+        with:
+          name: WhereSheLongs-1.3.18-Part2
+          path: handoff/WhereSheLongs-Setup-1.3.18.part02
+          compression-level: 0
+          retention-days: 7
+
+      - name: Upload handoff part 3
+        uses: actions/upload-artifact@v4
+        with:
+          name: WhereSheLongs-1.3.18-Part3
+          path: handoff/WhereSheLongs-Setup-1.3.18.part03
+          compression-level: 0
+          retention-days: 7
+
+      - name: Upload QA logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WhereSheLongs-1.3.18-QA
+          path: qa-results
+          if-no-files-found: warn
+          retention-days: 14
