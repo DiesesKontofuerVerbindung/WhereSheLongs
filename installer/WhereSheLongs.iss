@@ -19,7 +19,7 @@ WizardStyle=modern
 SourceDir=..
 OutputDir=dist\windows
 OutputBaseFilename=WhereSheLongs-Setup-{#MyAppVersion}
-Compression=lzma2
+Compression=lzma2/fast
 SolidCompression=yes
 UninstallDisplayIcon={app}\{#MyAppExeName}
 CloseApplications=yes
@@ -28,10 +28,9 @@ UseSetupLdr=yes
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts"; Flags: unchecked
 
 [Files]
 Source: "releases\windows\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
@@ -42,4 +41,4 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingD
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
