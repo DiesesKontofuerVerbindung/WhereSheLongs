@@ -14,7 +14,19 @@ const UI_FONT_PATH := "res://assets/fonts/uranus_pixel_11px.ttf"
 const BODY_PRIMARY_NAME := "Uranus Pixel"
 const CJK_FALLBACK_NAME := "SimSun"
 const FONT_SOURCE_META := "qimiaoye_font_source"
-const CJK_FALLBACK_NAMES := ["SimSun", "NSimSun", "宋体", "新宋体"]
+## 末端中文回退的候选族名，按平台顺序排。allow_system_fallback 关着，所以这张表
+## 必须覆盖目标平台：只写 Windows 的宋体家族时，macOS 上一个都命中不到，
+## SystemFont 渲染不出任何汉字，opening / main 的自检会直接报
+## 「中文宋体回退无法渲染中文」（CI run 33509121433 实测）。
+## SimSun 保持第一位：各章节自检和 text_input 模块测试都断言链首是它。
+const CJK_FALLBACK_NAMES := [
+	# Windows
+	"SimSun", "NSimSun", "宋体", "新宋体",
+	# macOS：系统自带，无需额外安装
+	"Songti SC", "STSong", "PingFang SC", "Heiti SC", "Hiragino Sans GB",
+	# Linux 常见 CJK 字体
+	"Noto Sans CJK SC", "Source Han Sans SC", "WenQuanYi Micro Hei",
+]
 
 var cjk_fallback: SystemFont
 var body: Font
