@@ -1,0 +1,146 @@
+name: Export Fixed Windows Build
+
+on:
+  push:
+    branches:
+      - codex/20260901-export-windows-fixed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export-windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout project and bundled Godot
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          lfs: true
+          sparse-checkout: |
+            .gitattributes
+            Qimiaoye_DarkForest_TextOnly_V0.1
+            tools/godot/windows
+          sparse-checkout-cone-mode: false
+
+      - name: Verify source commit and project
+        shell: powershell
+        run: |
+          git rev-parse HEAD
+          $project = "Qimiaoye_DarkForest_TextOnly_V0.1"
+          if (-not (Test-Path "$project/project.godot")) { throw "project.godot missing" }
+          if (-not (Test-Path "$project/export_presets.cfg")) { throw "export_presets.cfg missing" }
+          Select-String -Path "$project/scripts/chapter3.gd" -Pattern 'ChapterTransitionScript.begin\(get_tree\(\), OPENING_SCENE\)' | Out-Host
+          Select-String -Path "$project/scripts/main.gd" -Pattern 'ChapterTransitionScript.begin\(get_tree\(\), CHAPTER3_SCENE\)' | Out-Host
+
+      - name: Extract Godot 4.7.2
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path .godot-bin | Out-Null
+          Expand-Archive -Path "tools/godot/windows/Godot_v4.7.2-stable_win64.zip" -DestinationPath .godot-bin -Force
+          $godot = Get-ChildItem .godot-bin -Filter "Godot_v4.7.2-stable_win64.exe" -Recurse | Select-Object -First 1
+          if ($null -eq $godot) { throw "Godot 4.7.2 executable not found" }
+          & $godot.FullName --version
+          "GODOT_EXE=$($godot.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install Godot 4.7.2 export templates
+        shell: powershell
+        run: |
+          $url = "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz"
+          Invoke-WebRequest -Uri $url -OutFile godot_export_templates.tpz
+          New-Item -ItemType Directory -Force -Path .templates-unpack | Out-Null
+          & 7z x godot_export_templates.tpz "-o.templates-unpack" -y | Out-Host
+          if (-not (Test-Path ".templates-unpack/templates/windows_release_x86_64.exe")) {
+            throw "Windows release export template missing"
+          }
+          $target = Join-Path $env:APPDATA "Godot/export_templates/4.7.2.stable"
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          Copy-Item ".templates-unpack/templates/*" $target -Recurse -Force
+          Get-ChildItem $target | Select-Object Name,Length | Out-Host
+
+      - name: Import project resources headlessly
+        shell: powershell
+        run: |
+          & "$env:GODOT_EXE" --headless --editor --path "Qimiaoye_DarkForest_TextOnly_V0.1" --quit
+          if ($LASTEXITCODE -ne 0) { throw "Godot import failed with exit code $LASTEXITCODE" }
+
+      - name: Export Windows release
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path export | Out-Null
+          $out = Join-Path $PWD "export/Where She Longs.exe"
+          & "$env:GODOT_EXE" --headless --path "Qimiaoye_DarkForest_TextOnly_V0.1" --export-release "Gespielt Windows" "$out"
+          if ($LASTEXITCODE -ne 0) { throw "Godot export failed with exit code $LASTEXITCODE" }
+          if (-not (Test-Path $out)) { throw "Exported EXE missing" }
+          $item = Get-Item $out
+          if ($item.Length -lt 100000000) { throw "Exported EXE suspiciously small: $($item.Length) bytes" }
+          $header = [System.IO.File]::ReadAllBytes($out)[0..1]
+          if ($header[0] -ne 0x4D -or $header[1] -ne 0x5A) { throw "Exported file is not a Windows PE/MZ executable" }
+          $hash = (Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "EXPORT_OK size=$($item.Length) sha256=$hash"
+          "EXPORT_SHA256=$hash" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "EXPORT_SIZE=$($item.Length)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Split EXE for connector-safe handoff
+        shell: powershell
+        run: |
+          $input = Join-Path $PWD "export/Where She Longs.exe"
+          $chunkSize = 340MB
+          $buffer = New-Object byte[] (4MB)
+          $source = [System.IO.File]::OpenRead($input)
+          try {
+            $index = 1
+            while ($source.Position -lt $source.Length) {
+              $part = Join-Path $PWD ("export/WhereSheLongs-Windows.part{0:D2}" -f $index)
+              $dest = [System.IO.File]::Create($part)
+              try {
+                $written = 0L
+                while ($written -lt $chunkSize -and $source.Position -lt $source.Length) {
+                  $want = [Math]::Min($buffer.Length, [Math]::Min($chunkSize - $written, $source.Length - $source.Position))
+                  $read = $source.Read($buffer, 0, [int]$want)
+                  if ($read -le 0) { break }
+                  $dest.Write($buffer, 0, $read)
+                  $written += $read
+                }
+              } finally { $dest.Dispose() }
+              Write-Host "Created $part ($written bytes)"
+              $index++
+            }
+          } finally { $source.Dispose() }
+          Get-ChildItem export/WhereSheLongs-Windows.part* | Select-Object Name,Length | Out-Host
+
+      - name: Write export manifest
+        shell: powershell
+        run: |
+          @"
+          Where She Longs - Windows Export
+          Source branch: codex/20260901-export-windows-fixed
+          Source commit: $env:GITHUB_SHA
+          Godot: 4.7.2-stable
+          Preset: Gespielt Windows
+          EXE size: $env:EXPORT_SIZE bytes
+          EXE SHA256: $env:EXPORT_SHA256
+          "@ | Set-Content -Path export/EXPORT-MANIFEST.txt -Encoding UTF8
+
+      - name: Upload complete Windows EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: WhereSheLongs-Windows-Fixed
+          path: |
+            export/Where She Longs.exe
+            export/EXPORT-MANIFEST.txt
+          compression-level: 0
+          retention-days: 30
+
+      - name: Upload connector-sized parts
+        uses: actions/upload-artifact@v4
+        with:
+          name: WhereSheLongs-Windows-Fixed-Parts
+          path: |
+            export/WhereSheLongs-Windows.part*
+            export/EXPORT-MANIFEST.txt
+          compression-level: 0
+          retention-days: 7
