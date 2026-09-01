@@ -1,0 +1,164 @@
+name: Export macOS
+
+# 在真实 macOS runner 上导出 universal .app 并做可玩性验证。
+# 只在本分支和手动触发时跑；不合并 main，也不创建 Release。
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/20260901-macos-camera-isolation
+
+concurrency:
+  group: export-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: 4.7.2-stable
+  PROJECT_DIR: Qimiaoye_DarkForest_TextOnly_V0.1
+  APP_NAME: Where She Longs
+
+jobs:
+  export:
+    runs-on: macos-15
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout（跳过 LFS：仓库里的 Windows 发布物有 1.1 GB，与本次构建无关）
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: 下载并校验 Godot ${{ env.GODOT_VERSION }}
+        run: |
+          set -euo pipefail
+          base="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}"
+          mkdir -p "$RUNNER_TEMP/godot"
+          cd "$RUNNER_TEMP/godot"
+          curl -fsSL -O "$base/Godot_v${GODOT_VERSION}_macos.universal.zip"
+          curl -fsSL -O "$base/Godot_v${GODOT_VERSION}_export_templates.tpz"
+          curl -fsSL -O "$base/SHA512-SUMS.txt"
+          for f in "Godot_v${GODOT_VERSION}_macos.universal.zip" "Godot_v${GODOT_VERSION}_export_templates.tpz"; do
+            grep "  $f\$" SHA512-SUMS.txt > "$f.sha512"
+            test "$(wc -l < "$f.sha512")" -eq 1
+            shasum -a 512 -c "$f.sha512"
+          done
+          unzip -q "Godot_v${GODOT_VERSION}_macos.universal.zip"
+          test -x "Godot.app/Contents/MacOS/Godot"
+          echo "GODOT_BIN=$RUNNER_TEMP/godot/Godot.app/Contents/MacOS/Godot" >> "$GITHUB_ENV"
+
+      - name: 安装 export templates
+        run: |
+          set -euo pipefail
+          dest="$HOME/Library/Application Support/Godot/export_templates/${GODOT_VERSION/-/.}"
+          mkdir -p "$dest"
+          cd "$RUNNER_TEMP/godot"
+          unzip -q "Godot_v${GODOT_VERSION}_export_templates.tpz" -d tpz
+          mv tpz/templates/* "$dest/"
+          ls "$dest" | head -20
+          test -f "$dest/macos.zip"
+
+      - name: 校验 Godot 版本
+        run: |
+          set -euo pipefail
+          "$GODOT_BIN" --headless --version
+
+      - name: 导入资源
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/codex_logs
+          "$GODOT_BIN" --headless --editor --quit --path "$PROJECT_DIR" \
+            > tmp/codex_logs/macos_import.log 2>&1
+          tail -5 tmp/codex_logs/macos_import.log
+
+      - name: 导出前先跑关键 headless 测试
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/codex_logs
+          run_test() {
+            local tag="$1" scene="$2" marker="$3" code=0
+            "$GODOT_BIN" --headless --path "$PROJECT_DIR" "$scene" \
+              > "tmp/codex_logs/pretest_$tag.log" 2>&1 || code=$?
+            if [ "$code" -ne 0 ] || ! grep -q "$marker" "tmp/codex_logs/pretest_$tag.log"; then
+              echo "::error::$tag 失败（exit=$code，缺 $marker）"
+              tail -40 "tmp/codex_logs/pretest_$tag.log"
+              exit 1
+            fi
+            echo "$tag OK"
+          }
+          run_test story_source_lock res://tests/story_source_lock_test.tscn STORY_SOURCE_LOCK_PASS
+          run_test chapter_transition res://tests/chapter_transition_test.tscn CHAPTER_TRANSITION_TEST_PASS
+          run_test camera_isolation res://tests/camera_unavailable_isolation_test.tscn CAMERA_UNAVAILABLE_ISOLATION_PASS
+
+      - name: 导出 macOS universal .app
+        run: |
+          set -euo pipefail
+          out="$GITHUB_WORKSPACE/dist/$APP_NAME.app"
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          "$GODOT_BIN" --headless --path "$PROJECT_DIR" \
+            --export-release "Where She Longs macOS" "$out" \
+            > tmp/codex_logs/macos_export.log 2>&1 || {
+              echo "::error::导出失败"; cat tmp/codex_logs/macos_export.log; exit 1; }
+          tail -20 tmp/codex_logs/macos_export.log
+          test -d "$out"
+          echo "APP_PATH=$out" >> "$GITHUB_ENV"
+
+      - name: ad-hoc 签名（Godot 自带签名无效时才重签，避免丢掉 entitlements）
+        run: |
+          set -euo pipefail
+          if codesign --verify --deep --strict --verbose=2 "$APP_PATH" 2>&1; then
+            echo "Godot 导出的 ad-hoc 签名已有效，不重签。"
+          else
+            echo "重新做 ad-hoc 深度签名。"
+            codesign --force --deep --sign - --timestamp=none "$APP_PATH"
+            codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          fi
+
+      - name: macOS 可玩性验证
+        run: |
+          set -euo pipefail
+          chmod +x tools/test_macos_playability.sh
+          tools/test_macos_playability.sh \
+            --app "$APP_PATH" \
+            --godot "$GODOT_BIN" \
+            --project "$PROJECT_DIR" \
+            --log-dir tmp/codex_logs
+
+      - name: 打包 ZIP 并生成校验清单
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/dist"
+          # ditto 保留资源分叉与扩展属性，避免签名在压缩/解压后失效。
+          ditto -c -k --sequesterRsrc --keepParent "$APP_NAME.app" "WhereSheLongs-macOS-universal.zip"
+          shasum -a 256 "WhereSheLongs-macOS-universal.zip" > "WhereSheLongs-macOS-universal.zip.sha256"
+          {
+            echo "commit=$GITHUB_SHA"
+            echo "ref=$GITHUB_REF"
+            echo "godot=$GODOT_VERSION"
+            echo "runner=$ImageOS"
+            echo "archs=$(lipo -archs "$APP_NAME.app/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_NAME.app/Contents/Info.plist")")"
+            echo "bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_NAME.app/Contents/Info.plist")"
+            echo "version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_NAME.app/Contents/Info.plist")"
+            echo "sha256=$(cut -d' ' -f1 WhereSheLongs-macOS-universal.zip.sha256)"
+          } > manifest.txt
+          cat manifest.txt
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: WhereSheLongs-macOS-universal
+          path: |
+            dist/WhereSheLongs-macOS-universal.zip
+            dist/WhereSheLongs-macOS-universal.zip.sha256
+            dist/manifest.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: 上传测试日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-verification-logs
+          path: tmp/codex_logs
+          if-no-files-found: warn
+          retention-days: 14
