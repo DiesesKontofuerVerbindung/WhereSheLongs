@@ -14,10 +14,15 @@ jobs:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout branch
+      - name: Checkout story scripts only
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          lfs: false
+          sparse-checkout: |
+            Qimiaoye_DarkForest_TextOnly_V0.1/scripts
+            .github/workflows/apply-story-flow-fix.yml
+          sparse-checkout-cone-mode: false
 
       - name: Patch chapter flow
         shell: bash
