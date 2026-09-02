@@ -1,8 +1,5 @@
 
-<!-- IMG-04 草原 · 奇妙夜 -->
-<p align="center">
-  <img src="docs/images/cover.jpg" alt="奇妙夜草原" width="100%">
-</p>
+
 # 游戏说明 
 
 **团队名称：** 老公你说句话啊婚姻咨询所
@@ -10,6 +7,14 @@
 **作品名称：**《她所向之处》\| Where She Longs
 
 **游戏类型：** 游戏类型：叙事驱动冒险互动游戏
+
+
+<!-- IMG-04 草原 · 奇妙夜 -->
+<p align="center">
+  <img src="docs/images/cover.jpg" alt="奇妙夜草原" width="100%">
+</p>
+
+
 
 <!-- IMG-01 主视觉 / 封面 -->
 <p align="center">
