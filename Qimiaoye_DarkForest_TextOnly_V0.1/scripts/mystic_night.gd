@@ -428,7 +428,9 @@ func _apply_pending_dev_jump() -> void:
 func _restore_dev_jump_context(target_index: int) -> void:
 	var scene_name := ""
 	var cg_event: Dictionary = {}
-	for i in range(clampi(target_index, 0, _events.size())):
+	# 含目标本身：跳到一个 scene / cg 事件上时，要恢复的就是它，
+	# 用 range(target_index) 会恢复成它前面那个，第一个场景事件更是直接扫空。
+	for i in range(clampi(target_index + 1, 0, _events.size())):
 		var event: Dictionary = _events[i]
 		match str(event.get("type", "")):
 			"scene":
@@ -1218,4 +1220,13 @@ func get_debug_snapshot() -> Dictionary:
 		"mystic_night_camera_shots": _visited_camera_shots.size(),
 		"mystic_night_interactions": _interactions_done.size(),
 		"mystic_night_failures": _failures.size(),
+	}
+
+## 回溯冒烟测试用：跳转落点恢复出来的场景上下文。
+## scene 为空字符串就意味着画面上什么背景都没有 —— 玩家看到的就是黑屏。
+func rollback_probe() -> Dictionary:
+	return {
+		"chapter": DEV_JUMP_CHAPTER_ID,
+		"scene": _current_scene,
+		"dev_jump_active": _dev_jump_active,
 	}

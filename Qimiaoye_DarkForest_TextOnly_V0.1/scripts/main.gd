@@ -1193,15 +1193,20 @@ func _apply_pending_dev_jump() -> String:
 
 func _restore_dev_jump_scene_context(target_index: int) -> void:
 	var scene_context := "环境背景图0"
-	for i in range(clampi(target_index, 0, _events.size())):
+	# 含目标本身：跳到一个 scene / cg 事件上时，要恢复的就是它，
+	# 用 range(target_index) 会恢复成它前面那个，第一个场景事件更是直接扫空。
+	for i in range(clampi(target_index + 1, 0, _events.size())):
 		var event: Dictionary = _events[i]
 		match str(event.get("type", "")):
 			"scene":
 				scene_context = str(event.get("name", scene_context))
 			"transition":
 				scene_context = str(event.get("to", scene_context))
-	_current_scene = scene_context
-	_scene_label.text = scene_context
+	# 走正常的 _set_scene：舞台底图、过场序列帧、手部媒体、内心物件都由它统一贴上。
+	# 之前这里只手改 _current_scene 和标签，结果场景名对了、屏幕上一张图都没有
+	# （剧情图-手 / 剧情图-两个手松开的特写 尤其明显，它们的美术完全靠
+	# _sync_scene_cutscene 与 _sync_scene_hand_media，恢复路径根本没调）。
+	_set_scene(scene_context)
 	_scene_subtitle.text = ""
 	_scene_subtitle.visible = false
 	var target_source := int(_events[target_index].get("source", 0))
@@ -2901,3 +2906,12 @@ func _finish_verification(success: bool, issues: PackedStringArray) -> void:
 			print("FULL_FLOW_FAIL %s" % issue)
 			_log_runtime("FULL_FLOW_FAIL %s" % issue)
 		get_tree().quit(1)
+
+## 回溯冒烟测试用：跳转落点恢复出来的场景上下文。
+## scene 为空字符串就意味着画面上什么背景都没有 —— 玩家看到的就是黑屏。
+func rollback_probe() -> Dictionary:
+	return {
+		"chapter": DEV_JUMP_CHAPTER_ID,
+		"scene": _current_scene,
+		"dev_jump_active": _dev_jump_active,
+	}

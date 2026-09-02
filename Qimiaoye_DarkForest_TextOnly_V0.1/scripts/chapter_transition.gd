@@ -18,14 +18,16 @@ var _phase := 0.0
 var _black_started_msec := 0
 
 
-static func begin(tree: SceneTree, target_scene_path: String) -> void:
+## minimum_black 允许调用方指定黑屏至少停多久。章节之间用默认的 0.85s，
+## 从标题进正片这种「后面要加载一大堆资源」的场合传 GAMEPLAY_MINIMUM_BLACK_SECONDS。
+static func begin(tree: SceneTree, target_scene_path: String, minimum_black := MINIMUM_BLACK_SECONDS) -> void:
 	if target_scene_path.is_empty():
 		push_error("章节转场参数无效：%s" % target_scene_path)
 		return
 	var transition := create_overlay(tree)
 	if transition == null or transition._running:
 		return
-	transition.call_deferred("_run_transition", target_scene_path)
+	transition.call_deferred("_run_transition", target_scene_path, minimum_black)
 
 
 static func create_overlay(tree: SceneTree) -> ChapterTransition:
@@ -128,7 +130,7 @@ func fade_from_black() -> void:
 	queue_free()
 
 
-func _run_transition(target_scene_path: String) -> void:
+func _run_transition(target_scene_path: String, minimum_black := MINIMUM_BLACK_SECONDS) -> void:
 	var request_error := ResourceLoader.load_threaded_request(target_scene_path, "PackedScene")
 	var request_started := request_error == OK
 	await fade_to_black()
@@ -144,7 +146,7 @@ func _run_transition(target_scene_path: String) -> void:
 	else:
 		packed_scene = load(target_scene_path) as PackedScene
 
-	await wait_for_minimum_black(MINIMUM_BLACK_SECONDS)
+	await wait_for_minimum_black(minimum_black)
 	if packed_scene == null:
 		await _recover_from_failure("章节场景加载失败：%s（error=%d）" % [target_scene_path, request_error])
 		return

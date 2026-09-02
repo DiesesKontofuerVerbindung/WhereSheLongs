@@ -26,12 +26,16 @@ signal resumed
 signal jump_requested(payload: Dictionary)
 
 const UiTypographyScript := preload("res://scripts/ui_typography.gd")
+const ChapterTransitionScript := preload("res://scripts/chapter_transition.gd")
 const DevJumpPanelScript := preload("res://scripts/dev_jump_panel.gd")
 const ChapterIndexScript := preload("res://scripts/chapter_index.gd")
 const OPENING_SCENE := "res://scenes/opening/opening.tscn"
 
 const OVERLAY_LAYER := 128
-const DIM_COLOR := Color(0.0, 0.0, 0.0, 0.72)
+## 有了背景模糊之后遮罩可以让一点，让底下的画面还能认出来，而不是糊成一片黑。
+const DIM_COLOR := Color(0.0, 0.0, 0.0, 0.62)
+## 背景毛玻璃。复用 cutscene_player 那套盒式模糊的写法，改成采样屏幕纹理。
+const BLUR_RADIUS := 0.0055
 const TITLE_FONT_SIZE := 28
 const MENU_FONT_SIZE := 38
 const NODE_FONT_SIZE := 22
@@ -41,6 +45,16 @@ const TITLE_GAP := 26
 
 ## 与开场界面的过场时长同源（BlinkConfiguration.fade_seconds = 0.28）。
 const SLIDE_SECONDS := 0.28
+## 唤起 / 收起。收起要比唤起快，按 ESC 退出得干脆。
+const FADE_IN_SECONDS := 0.26
+const FADE_OUT_SECONDS := 0.16
+## 菜单整体从下方抬起。用 offset_top 而不是 position——
+## 这两个面板是靠 anchor 定位的，直接改 position 会在下一次布局里被覆盖。
+const MENU_RISE_PIXELS := 40.0
+## 菜单项逐条入场的间隔。标题、五个按钮依次亮起，比整块一起淡入有层次。
+## 按钮在 VBoxContainer 里，位置由容器算，所以只能动 modulate，不能动 position。
+const ITEM_STAGGER_SECONDS := 0.05
+const ITEM_FADE_SECONDS := 0.22
 
 const MENU_ANCHOR_CENTER := Vector2(0.25, 0.75)
 const MENU_ANCHOR_LEFT := Vector2(0.02, 0.40)
@@ -59,6 +73,7 @@ const OUTLINE_SIZE := 6
 
 var _typography
 var _root: Control
+var _blur_rect: ColorRect
 var _menu_pane: Control
 var _rollback_pane: Control
 var _rollback_list: VBoxContainer
@@ -69,6 +84,7 @@ var _options_button: Button
 var _home_button: Button
 var _quit_button: Button
 var _slide_tween: Tween
+var _fade_tween: Tween
 var _host_chapter_id := ""
 var _open := false
 var _rollback_open := false
@@ -100,6 +116,15 @@ func _build_ui() -> void:
 	_root.theme = _typography.theme
 	add_child(_root)
 
+	# 毛玻璃在最底下：它采样的是屏幕上已经画好的游戏画面。
+	_blur_rect = ColorRect.new()
+	_blur_rect.name = "Blur"
+	_blur_rect.color = Color(1.0, 1.0, 1.0, 1.0)
+	_blur_rect.material = _make_screen_blur_material()
+	_blur_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_blur_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(_blur_rect)
+
 	var dim := ColorRect.new()
 	dim.name = "Dim"
 	dim.color = DIM_COLOR
@@ -116,6 +141,38 @@ func _build_ui() -> void:
 	_rollback_pane.visible = false
 	_root.add_child(_rollback_pane)
 	_build_rollback(_rollback_pane)
+
+
+## 背景毛玻璃。与 cutscene_player._make_fill_blur_material 同一套盒式模糊，
+## 只是把采样源从自身贴图换成屏幕纹理——暂停时底下的画面是静止的，
+## 采一次就够，不会有性能负担。
+func _make_screen_blur_material() -> ShaderMaterial:
+	var shader := Shader.new()
+	shader.code = """
+shader_type canvas_item;
+
+uniform sampler2D screen_tex : hint_screen_texture, filter_linear_mipmap;
+uniform float blur_radius : hint_range(0.0, 0.02) = 0.0;
+
+void fragment() {
+	vec4 accum = vec4(0.0);
+	float total = 0.0;
+	for (int x = -3; x <= 3; x++) {
+		for (int y = -3; y <= 3; y++) {
+			vec2 offset = vec2(float(x), float(y)) * blur_radius / 3.0;
+			float weight = 1.0 - length(vec2(float(x), float(y))) / 5.0;
+			weight = max(weight, 0.02);
+			accum += texture(screen_tex, SCREEN_UV + offset) * weight;
+			total += weight;
+		}
+	}
+	COLOR = accum / total;
+}
+"""
+	var material := ShaderMaterial.new()
+	material.shader = shader
+	material.set_shader_parameter("blur_radius", 0.0)
+	return material
 
 
 func _make_pane(pane_name: String, anchors: Vector2) -> Control:
@@ -322,6 +379,7 @@ func snap_to_state(rollback_open: bool) -> void:
 	var rollback_anchors := ROLLBACK_ANCHOR_ON if rollback_open else ROLLBACK_ANCHOR_OFF
 	_menu_pane.anchor_left = menu_anchors.x
 	_menu_pane.anchor_right = menu_anchors.y
+	_menu_pane.offset_top = 0.0
 	_rollback_pane.anchor_left = rollback_anchors.x
 	_rollback_pane.anchor_right = rollback_anchors.y
 	_rollback_pane.modulate.a = 1.0 if rollback_open else 0.0
@@ -442,7 +500,8 @@ func _on_home_pressed() -> void:
 	_rollback_open = false
 	_root.visible = false
 	get_tree().paused = false
-	get_tree().change_scene_to_file(OPENING_SCENE)
+	# 和「开始游戏」用同一套章节转场，别再硬切回标题。
+	ChapterTransitionScript.begin(get_tree(), OPENING_SCENE)
 
 
 func _on_quit_pressed() -> void:

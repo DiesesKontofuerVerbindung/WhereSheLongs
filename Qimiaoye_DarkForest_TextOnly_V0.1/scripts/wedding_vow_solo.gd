@@ -186,9 +186,11 @@ func run(verify_mode := false) -> void:
 			_spoken += 1
 			_refresh()
 			continue
+		if not is_inside_tree():
+			return
 		await get_tree().process_frame
 	# 念完之后停一拍，让最后一句留在空场里。
-	if not verify_mode:
+	if not verify_mode and is_inside_tree():
 		await get_tree().create_timer(1.2).timeout
 
 

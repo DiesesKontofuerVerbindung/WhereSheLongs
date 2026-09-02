@@ -350,7 +350,9 @@ func _apply_pending_dev_jump() -> void:
 
 func _restore_dev_jump_scene_context(target_index: int) -> void:
 	var scene_name := ""
-	for i in range(clampi(target_index, 0, _events.size())):
+	# 含目标本身：跳到一个 scene / cg 事件上时，要恢复的就是它，
+	# 用 range(target_index) 会恢复成它前面那个，第一个场景事件更是直接扫空。
+	for i in range(clampi(target_index + 1, 0, _events.size())):
 		var event: Dictionary = _events[i]
 		if str(event.get("type", "")) == "scene":
 			scene_name = str(event.get("name", scene_name))
@@ -745,6 +747,9 @@ func _run_module(event: Dictionary) -> void:
 		await _drain_advance_input()
 
 
+## 场景回溯 / F4 跳转会在任意 await 点把当前场景换掉，本节点随之被释放，
+## 协程恢复时 get_tree() 已经是 null。每个 await 之后都要确认自己还在树上，
+## 否则会刷一串 "Parameter data.tree is null"。
 func _drain_advance_input() -> void:
 	_active_line_channel = ""
 	if _narration_ui != null:
@@ -753,11 +758,13 @@ func _drain_advance_input() -> void:
 		_dialogue_ui.set_advance_waiting(false)
 	_set_advance_hint(false)
 	for _i in range(8):
+		if not is_inside_tree():
+			return
 		await get_tree().process_frame
 
 
 func _brief_pause() -> void:
-	if _verify_mode:
+	if _verify_mode or not is_inside_tree():
 		return
 	await get_tree().create_timer(0.25).timeout
 
@@ -808,4 +815,13 @@ func get_debug_snapshot() -> Dictionary:
 		"wedding_interactions": _interactions_done.size(),
 		"wedding_shake_intensity": _shake_intensity,
 		"wedding_failures": _failures.size(),
+	}
+
+## 回溯冒烟测试用：跳转落点恢复出来的场景上下文。
+## scene 为空字符串就意味着画面上什么背景都没有 —— 玩家看到的就是黑屏。
+func rollback_probe() -> Dictionary:
+	return {
+		"chapter": DEV_JUMP_CHAPTER_ID,
+		"scene": _current_scene,
+		"dev_jump_active": _dev_jump_active,
 	}

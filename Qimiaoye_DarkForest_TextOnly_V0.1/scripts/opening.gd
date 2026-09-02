@@ -11,6 +11,7 @@ extends Control
 # 美术资产按 2560x1440 交付，视口是 1280x720，正好 2:1，全部铺满即可对齐。
 
 const UiTypographyScript := preload("res://scripts/ui_typography.gd")
+const ChapterTransitionScript := preload("res://scripts/chapter_transition.gd")
 
 const WEDDING_PROLOGUE_SCENE := "res://scenes/wedding/wedding_prologue.tscn"
 
@@ -164,8 +165,21 @@ func _make_menu_button(label: String) -> Button:
 
 func _on_start_pressed() -> void:
 	# 从头开始：清掉上一轮的运行态，再进婚礼前夜。
+	#
+	# 之前是 change_scene_to_file 硬切：婚礼场景资源不少，切过去会卡一下。
+	# 改走和「婚礼前夜 → 奇妙夜 → 森林」同一套章节转场——淡黑、后台线程加载、
+	# 右下角显示 Where She Longs、黑屏至少 1.5s 再淡入。
 	GameState.reset()
-	get_tree().change_scene_to_file(WEDDING_PROLOGUE_SCENE)
+	# 转场期间禁掉两个按钮，避免连点触发第二次。
+	if _start_button != null:
+		_start_button.disabled = true
+	if _quit_button != null:
+		_quit_button.disabled = true
+	ChapterTransitionScript.begin(
+		get_tree(),
+		WEDDING_PROLOGUE_SCENE,
+		ChapterTransitionScript.GAMEPLAY_MINIMUM_BLACK_SECONDS
+	)
 
 
 func _on_quit_pressed() -> void:

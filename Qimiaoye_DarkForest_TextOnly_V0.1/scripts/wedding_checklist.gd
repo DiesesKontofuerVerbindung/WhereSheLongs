@@ -115,6 +115,9 @@ func run(verify_mode := false) -> void:
 		# 自动完成开关：仅在能启动摄像头的环境下生效，用于试玩/联调快速通过。
 		_status.text = "Checklist %s · 即将自动完成" % _variant
 		await get_tree().create_timer(AUTO_DISMISS_SECONDS).timeout
+		# 等待期间可能被场景回溯换掉，醒来先确认自己还在。
+		if not is_inside_tree():
+			return
 		_complete("success")
 	else:
 		_start_camera()

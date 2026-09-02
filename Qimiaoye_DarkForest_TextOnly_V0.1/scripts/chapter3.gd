@@ -256,7 +256,9 @@ func _apply_pending_dev_jump() -> void:
 
 func _restore_dev_jump_context(target_index: int) -> void:
     var last_event := {}
-    for i in range(clampi(target_index, 0, _events.size())):
+    # 含目标本身：跳到一个 scene / cg 事件上时，要恢复的就是它，
+    # 用 range(target_index) 会恢复成它前面那个，第一个场景事件更是直接扫空。
+    for i in range(clampi(target_index + 1, 0, _events.size())):
         var event: Dictionary = _events[i]
         var t := str(event.get("type", ""))
         if t == "scene" or t == "video":
@@ -745,3 +747,12 @@ func _report_verification() -> void:
         GameState.ending_count(),
     ])
     get_tree().quit(0)
+
+## 回溯冒烟测试用：跳转落点恢复出来的场景上下文。
+## scene 为空字符串就意味着画面上什么背景都没有 —— 玩家看到的就是黑屏。
+func rollback_probe() -> Dictionary:
+    return {
+        "chapter": CHAPTER_ID,
+        "scene": _current_scene_name,
+        "dev_jump_active": _dev_jump_active,
+    }

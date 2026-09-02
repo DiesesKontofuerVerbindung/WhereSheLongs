@@ -79,6 +79,15 @@ func _verify_chapter_index(failures: PackedStringArray) -> void:
 			last_source = source
 			if str(node["display_name"]).strip_edges().is_empty():
 				failures.append("%s:%d 显示名为空" % [chapter_id, source])
+			# 面板是给玩家看的，不许漏英文。module / endpoint 事件没有 name 字段，
+			# 回落到 id 就会显示成 WeddingVowSolo / MYSTIC_NIGHT_END 这种，
+			# 必须在 rollback_names.gd 里补中文覆盖。
+			var shown := str(node["display_name"])
+			for index in shown.length():
+				var code := shown.unicode_at(index)
+				if (code >= 65 and code <= 90) or (code >= 97 and code <= 122):
+					failures.append("%s:%d 显示名里有英文，需要中文覆盖：%s" % [chapter_id, source, shown])
+					break
 			if not str(node["kind"]) in ChapterIndexScript.ANCHOR_KINDS:
 				failures.append("%s:%d 的 kind 不在锚点白名单：%s" % [chapter_id, source, node["kind"]])
 		total += nodes.size()
