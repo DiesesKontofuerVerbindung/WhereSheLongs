@@ -3,6 +3,7 @@ extends Node
 signal changed
 
 const SAVE_PATH := "user://river_jump.json"
+const SECTION := "endings"
 const StoryDB := preload("res://data/story.gd")
 const VersionDB := preload("res://data/version.gd")
 
@@ -13,6 +14,13 @@ var guide_present: bool = true
 var unlocked_endings: Array[String] = []
 var last_ending: String = ""
 var best_ending: String = ""
+
+
+## 既有缺陷：try_load() 之前没有任何调用者，每次启动都从空的开始，
+## 结局解锁永远累积不起来（跑完 A 再跑 B，存档里只剩 B）。
+## SaveStore 在 autoload 顺序里排在前面，这里读到的一定是已经载入的档。
+func _ready() -> void:
+	try_load()
 
 
 func reset() -> void:
@@ -81,22 +89,17 @@ func from_dict(data: Dictionary) -> void:
 	changed.emit()
 
 
+## 存档统一走 SaveStore：原子写、防抖、损坏恢复都在那一层。
+## 这里只负责把自己的数据塞进对应的段，不再单独开一个文件——
+## 之前 river_jump.json / chapter3_endings.json / save.json 三份并存，
+## 结局写在旧文件里、进度写在新文件里，读出来必然对不上。
 func save_game() -> void:
-	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
-	if file == null:
-		push_error("Save failed: %s" % FileAccess.get_open_error())
-		return
-	file.store_string(JSON.stringify(to_dict(), "\t"))
+	SaveStore.set_section(SECTION, to_dict())
 
 
 func try_load() -> bool:
-	if not FileAccess.file_exists(SAVE_PATH):
+	var section := SaveStore.get_section(SECTION)
+	if section.is_empty():
 		return false
-	var file := FileAccess.open(SAVE_PATH, FileAccess.READ)
-	if file == null:
-		return false
-	var parsed: Variant = JSON.parse_string(file.get_as_text())
-	if typeof(parsed) != TYPE_DICTIONARY:
-		return false
-	from_dict(parsed)
+	from_dict(section)
 	return true

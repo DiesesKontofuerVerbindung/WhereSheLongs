@@ -11,6 +11,8 @@ const Chapter3DataScript := preload("res://scripts/chapter3_data.gd")
 const Chapter3StageScript := preload("res://scenes/chapter3/chapter3_stage.gd")
 const MysticNightDataScript := preload("res://scripts/mystic_night_data.gd")
 const DevJumpPanelScript := preload("res://scripts/dev_jump_panel.gd")
+const ChapterIndexScript := preload("res://scripts/chapter_index.gd")
+const PauseMenuScript := preload("res://scripts/pause_menu.gd")
 const ChapterTransitionScript := preload("res://scripts/chapter_transition.gd")
 const UiTypographyScript := preload("res://scripts/ui_typography.gd")
 
@@ -39,6 +41,7 @@ var _event_index := 0
 var _current_scene_name := ""
 var _current_source := 0
 var _verify_mode := false
+var _record_progress := false
 var _choice_arg := ""
 var _endpoint_reached := false
 ## 集成模式：作为主游戏场景的一部分运行，章节结束后不退出进程，
@@ -52,6 +55,7 @@ var _watchdog_accum := 0.0
 var _pending_dev_jump: Dictionary = {}
 var _dev_jump_active := false
 var _dev_jump_overlay
+var _pause_menu
 ## 当前正在等待玩家推进的通道："" / "NARRATION" / "DIALOGUE"。
 var _active_line_channel := ""
 
@@ -73,6 +77,10 @@ func _ready() -> void:
     process_mode = Node.PROCESS_MODE_ALWAYS
     _pending_dev_jump = DevJumpPanelScript.take_pending_jump(get_tree().root, CHAPTER_ID)
     _verify_mode = "--verify" in OS.get_cmdline_user_args() or "--verify" in OS.get_cmdline_args()
+    ## --record-progress：允许 verify 跑把走过的节点写进存档。
+    ## 默认关着——headless 验证瞬间跑完全流程，默认打点会把整张回溯图点亮。
+    ## 打开它是为了用一次真实遍历生成「全进度存档」，节点确实被走到了，只是快进。
+    _record_progress = "--record-progress" in OS.get_cmdline_user_args() or "--record-progress" in OS.get_cmdline_args()
     _trace_mode = "--trace" in OS.get_cmdline_user_args() or "--trace" in OS.get_cmdline_args()
     _auto_mode = "--auto" in OS.get_cmdline_user_args() or "--auto" in OS.get_cmdline_args()
     _choice_arg = _parse_choice_arg()
@@ -160,6 +168,15 @@ func _build_ui() -> void:
     add_child(_dev_jump_overlay)
     _dev_jump_overlay.jump_requested.connect(_on_dev_jump_requested)
 
+    # ESC 暂停菜单。verify 模式不建：headless 验证不需要它，
+    # 也免得它出现在各章的自检节点扫描里。
+    if not _verify_mode:
+        _pause_menu = PauseMenuScript.new()
+        add_child(_pause_menu)
+        _pause_menu.setup(CHAPTER_ID)
+        # 回溯跳转复用开发者跳转那条已经在跑的通路，不再写第二套切场景逻辑。
+        _pause_menu.jump_requested.connect(_on_dev_jump_requested)
+
 
 func _setup_dev_jump_chapters() -> void:
     if _dev_jump_overlay == null:
@@ -230,7 +247,9 @@ func _apply_pending_dev_jump() -> void:
     if target_index < 0 or target_index >= _events.size():
         push_warning("章节三开发跳转事件索引越界：%d" % target_index)
         return
-    _dev_jump_active = true
+    # 回溯跳转不是开发者跳转：玩家是在正常重玩，结尾要照常切下一章、
+    # 沿途也要照常打点。只有 F4 面板发来的 payload 才算 dev jump。
+    _dev_jump_active = not bool(_pending_dev_jump.get("rollback", false))
     _event_index = target_index
     _restore_dev_jump_context(target_index)
 
@@ -275,6 +294,10 @@ func _input(event: InputEvent) -> void:
     if key_event.keycode == KEY_ESCAPE and _dev_jump_overlay != null and _dev_jump_overlay.is_open():
         _dev_jump_overlay.close_panel()
         get_viewport().set_input_as_handled()
+    if key_event.keycode == KEY_ESCAPE and _pause_menu != null:
+        _pause_menu.toggle()
+        get_viewport().set_input_as_handled()
+        return
         return
 
 
@@ -345,6 +368,10 @@ func _run_events() -> void:
 
 
 func _run_event(event: Dictionary) -> void:
+    # 回溯打点：只有真正在玩的时候才记。verify 会瞬间跑完全流程，
+    # 开发者跳转一次就能把整张图点亮，两者都不能算数。
+    if (not _verify_mode or _record_progress) and not _dev_jump_active and ChapterIndexScript.is_anchor(event):
+        ChapterProgress.visit(CHAPTER_ID, int(event.get("source", 0)))
     var source := int(event.get("source", 0))
     if source > 0:
         _current_source = source
@@ -570,7 +597,7 @@ func _jump_to_choice(choice_id: String, options: Array) -> void:
 
 func _apply_ending(event: Dictionary) -> void:
     var ending_id := str(event.get("ending_id", ""))
-    GameState.unlock_ending(ending_id, not _verify_mode)
+    GameState.unlock_ending(ending_id, not _verify_mode or _record_progress)
     _endpoint_reached = true
     # 结束本章，防止串到其它分支。
     _event_index = _events.size()

@@ -13,9 +13,12 @@ config/custom_user_dir_name="Qimiaoye_DarkForest_TextOnly_V0.1"
 
 [autoload]
 
+; SaveStore 必须排在 GameState / Chapter3State 前面：那两个的存档现在走 SaveStore。
+SaveStore="*res://scripts/save_store.gd"
 GameState="*res://autoload/game_state.gd"
 Chapter3State="*res://autoload/chapter3_state.gd"
 BlinkSystem="*res://addons/blink_trigger_scene_switch/blink_system.gd"
+ChapterProgress="*res://scripts/chapter_progress.gd"
 
 [editor_plugins]
 

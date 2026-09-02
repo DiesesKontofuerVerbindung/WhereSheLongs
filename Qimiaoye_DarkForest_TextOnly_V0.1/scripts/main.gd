@@ -10,6 +10,8 @@ const DialogueUIScript := preload("res://scripts/dialogue_ui.gd")
 const StoryStageScript := preload("res://scripts/story_stage.gd")
 const CutscenePlayerScript := preload("res://scripts/cutscene_player.gd")
 const DevJumpPanelScript := preload("res://scripts/dev_jump_panel.gd")
+const ChapterIndexScript := preload("res://scripts/chapter_index.gd")
+const PauseMenuScript := preload("res://scripts/pause_menu.gd")
 const WeddingDataScript := preload("res://scripts/wedding_data.gd")
 const MysticNightDataScript := preload("res://scripts/mystic_night_data.gd")
 const Chapter3DataScript := preload("res://scripts/chapter3_data.gd")
@@ -92,6 +94,7 @@ var _current_event_index := -1
 var _current_event: Dictionary = {}
 var _current_scene := ""
 var _verify_mode := false
+var _record_progress := false
 var _endpoint_reached := false
 ## 眨眼门收尾时置真：跳过终点结算面板，直接切最终章。
 var _blink_endpoint_used := false
@@ -158,6 +161,7 @@ var _diagnostic_panel: PanelContainer
 var _diagnostic_label: Label
 var _advance_hint_label: Label
 var _dev_jump_overlay
+var _pause_menu
 var _module_host: Control
 var _module_texture_rect: TextureRect
 var _module_viewport: SubViewport
@@ -235,6 +239,10 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_pending_dev_jump = _take_pending_dev_jump()
 	_verify_mode = OS.get_cmdline_user_args().has("--verify")
+	## --record-progress：允许 verify 跑把走过的节点写进存档。
+	## 默认关着——headless 验证瞬间跑完全流程，默认打点会把整张回溯图点亮。
+	## 打开它是为了用一次真实遍历生成「全进度存档」，节点确实被走到了，只是快进。
+	_record_progress = "--record-progress" in OS.get_cmdline_user_args() or "--record-progress" in OS.get_cmdline_args()
 	_configure_typography()
 	_build_ui()
 	_story_shake_base_position = position
@@ -375,6 +383,15 @@ func _build_ui() -> void:
 	_build_advance_hint()
 	_build_module_host()
 	_build_dev_jump_panel()
+
+	# ESC 暂停菜单。verify 模式不建：headless 验证不需要它，也免得它出现在各章的
+	# 自检节点扫描里。
+	if not _verify_mode:
+		_pause_menu = PauseMenuScript.new()
+		add_child(_pause_menu)
+		_pause_menu.setup(DEV_JUMP_CHAPTER_ID)
+		# 回溯跳转复用开发者跳转那条已经在跑的通路，不再写第二套切场景逻辑。
+		_pause_menu.jump_requested.connect(_on_dev_jump_requested)
 
 
 func _build_story_stage() -> void:
@@ -1007,6 +1024,10 @@ func _input(event: InputEvent) -> void:
 				_close_dev_jump_panel()
 				get_viewport().set_input_as_handled()
 				return
+			if key_event.keycode == KEY_ESCAPE and _pause_menu != null:
+				_pause_menu.toggle()
+				get_viewport().set_input_as_handled()
+				return
 	if _dev_jump_overlay != null and _dev_jump_overlay.visible:
 		return
 	if _module_active:
@@ -1137,7 +1158,9 @@ func _apply_pending_dev_jump() -> String:
 	var target_index := int(resolved.get("index", -1))
 	if target_index < 0 or target_index >= _events.size():
 		return "开发跳转事件索引越界：%d" % target_index
-	_dev_jump_active = true
+	# 回溯跳转不是开发者跳转：玩家是在正常重玩，结尾要照常切下一章、
+	# 沿途也要照常打点。只有 F4 面板发来的 payload 才算 dev jump。
+	_dev_jump_active = not bool(_pending_dev_jump.get("rollback", false))
 	_dev_jump_requested_source = requested_source
 	_dev_jump_actual_source = int(resolved.get("source", 0))
 	_event_index = target_index
@@ -1242,6 +1265,10 @@ func _execute_event(event: Dictionary) -> void:
 	# DOCX 310–315 每推进一行，主观内心多浮现一件物件。
 	if event_source > 0 and _inner_objects_stage != null:
 		_inner_objects_stage.sync_for_source(event_source)
+	# 回溯打点：只有真正在玩的时候才记。verify 会瞬间跑完全流程，
+	# 开发者跳转一次就能把整张图点亮，两者都不能算数。
+	if (not _verify_mode or _record_progress) and not _dev_jump_active and ChapterIndexScript.is_anchor(event):
+		ChapterProgress.visit(DEV_JUMP_CHAPTER_ID, int(event.get("source", 0)))
 	var kind := str(event.get("type", ""))
 	match kind:
 		"scene":
